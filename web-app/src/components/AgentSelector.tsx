@@ -1,13 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-
-// Agent configuration - maps agent name to working directory
-const AGENTS_ROOT = 'agents'
-const AVAILABLE_AGENTS = [
-    { id: 'universal-agent', name: 'Universal Agent' },
-    { id: 'kb-agent', name: 'KB Agent' },
-    { id: 'report-agent', name: 'Report Agent' },
-]
-const DEFAULT_AGENT = 'universal-agent'
+import { useGoosed } from '../contexts/GoosedContext'
 
 interface AgentSelectorProps {
     selectedAgent: string
@@ -15,16 +7,9 @@ interface AgentSelectorProps {
     disabled?: boolean
 }
 
-export function getAgentWorkingDir(agentId: string): string {
-    return `${AGENTS_ROOT}/${agentId}`
-}
-
-export function getDefaultAgent(): string {
-    return DEFAULT_AGENT
-}
-
-export function getAvailableAgents() {
-    return AVAILABLE_AGENTS
+export function getAgentWorkingDir(agentId: string, agents: Array<{ id: string; working_dir: string }>): string {
+    const agent = agents.find(a => a.id === agentId)
+    return agent?.working_dir || `agents/${agentId}`
 }
 
 export default function AgentSelector({
@@ -32,22 +17,21 @@ export default function AgentSelector({
     onAgentChange,
     disabled = false
 }: AgentSelectorProps) {
+    const { agents } = useGoosed()
     const [isOpen, setIsOpen] = useState(false)
     const dropdownRef = useRef<HTMLDivElement>(null)
 
-    // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setIsOpen(false)
             }
         }
-
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
-    const selectedAgentInfo = AVAILABLE_AGENTS.find(a => a.id === selectedAgent) || AVAILABLE_AGENTS[0]
+    const selectedAgentInfo = agents.find(a => a.id === selectedAgent) || agents[0]
 
     return (
         <div className="agent-selector" ref={dropdownRef}>
@@ -69,7 +53,7 @@ export default function AgentSelector({
                     <circle cx="12" cy="12" r="3" />
                     <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
                 </svg>
-                <span className="agent-name">{selectedAgentInfo.name}</span>
+                <span className="agent-name">{selectedAgentInfo?.name || selectedAgent}</span>
                 <svg
                     viewBox="0 0 24 24"
                     fill="none"
@@ -86,7 +70,7 @@ export default function AgentSelector({
             {isOpen && (
                 <div className="agent-dropdown">
                     <div className="agent-dropdown-header">Agent</div>
-                    {AVAILABLE_AGENTS.map(agent => (
+                    {agents.map(agent => (
                         <button
                             key={agent.id}
                             type="button"
@@ -95,8 +79,14 @@ export default function AgentSelector({
                                 onAgentChange(agent.id)
                                 setIsOpen(false)
                             }}
+                            disabled={agent.status !== 'running'}
                         >
                             {agent.name}
+                            {agent.status !== 'running' && (
+                                <span style={{ fontSize: '0.75em', opacity: 0.6, marginLeft: '4px' }}>
+                                    ({agent.status})
+                                </span>
+                            )}
                             {agent.id === selectedAgent && (
                                 <svg
                                     viewBox="0 0 24 24"

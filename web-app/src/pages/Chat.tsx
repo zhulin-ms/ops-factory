@@ -4,7 +4,7 @@ import { useGoosed } from '../contexts/GoosedContext'
 import { useChat, convertBackendMessage } from '../hooks/useChat'
 import MessageList from '../components/MessageList'
 import ChatInput from '../components/ChatInput'
-import { getDefaultAgent, getAgentWorkingDir, getAvailableAgents } from '../components/AgentSelector'
+import { getAgentWorkingDir } from '../components/AgentSelector'
 import type { Session } from '@goosed/sdk'
 
 interface LocationState {
@@ -16,50 +16,56 @@ interface ModelInfo {
     model: string
 }
 
-// Helper to detect agent from working directory
-function detectAgentFromWorkingDir(workingDir: string): string {
-    const agents = getAvailableAgents()
+function detectAgentFromWorkingDir(workingDir: string, agents: Array<{ id: string }>): string {
     for (const agent of agents) {
         if (workingDir.includes(agent.id)) {
             return agent.id
         }
     }
-    return getDefaultAgent()
+    return agents[0]?.id || ''
 }
 
 export default function Chat() {
     const [searchParams] = useSearchParams()
     const location = useLocation()
     const navigate = useNavigate()
-    const { client, isConnected } = useGoosed()
+    const { getClient, agents, isConnected } = useGoosed()
 
     const sessionId = searchParams.get('sessionId')
+    const agentParam = searchParams.get('agent')
+
+    const [selectedAgent, setSelectedAgent] = useState(agentParam || agents[0]?.id || '')
     const [session, setSession] = useState<Session | null>(null)
     const [isInitializing, setIsInitializing] = useState(true)
     const [initError, setInitError] = useState<string | null>(null)
-    const [selectedAgent, setSelectedAgent] = useState(getDefaultAgent())
     const [isCreatingSession, setIsCreatingSession] = useState(false)
     const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
 
+    const client = selectedAgent ? getClient(selectedAgent) : null
+
     const { messages, isLoading, error, sendMessage, clearMessages, setInitialMessages } = useChat({
-        sessionId
+        sessionId,
+        client: client!,
     })
 
-    // Get initial message from navigation state
+    useEffect(() => {
+        if (agentParam) {
+            setSelectedAgent(agentParam)
+        } else if (agents.length > 0 && !selectedAgent) {
+            setSelectedAgent(agents[0].id)
+        }
+    }, [agentParam, agents, selectedAgent])
+
     const locationState = location.state as LocationState | null
     const initialMessage = locationState?.initialMessage
 
-    // Fetch model info from system_info
     useEffect(() => {
         const fetchModelInfo = async () => {
-            if (!isConnected) return
+            if (!isConnected || !client) return
             try {
                 const systemInfo = await client.systemInfo()
                 if (systemInfo.provider && systemInfo.model) {
-                    setModelInfo({
-                        provider: systemInfo.provider,
-                        model: systemInfo.model
-                    })
+                    setModelInfo({ provider: systemInfo.provider, model: systemInfo.model })
                 }
             } catch (err) {
                 console.error('Failed to fetch model info:', err)
@@ -68,17 +74,17 @@ export default function Chat() {
         fetchModelInfo()
     }, [client, isConnected])
 
-    // Create session with specified agent's working directory
     const createSessionWithAgent = useCallback(async (agentId: string) => {
         setIsCreatingSession(true)
         try {
-            const workingDir = getAgentWorkingDir(agentId)
-            const newSession = await client.startSession(workingDir)
-            await client.resumeSession(newSession.id)
+            const agentClient = getClient(agentId)
+            const workingDir = getAgentWorkingDir(agentId, agents)
+            const newSession = await agentClient.startSession(workingDir)
+            await agentClient.resumeSession(newSession.id)
             setSession(newSession)
             setSelectedAgent(agentId)
             clearMessages()
-            navigate(`/chat?sessionId=${newSession.id}`, { replace: true })
+            navigate(`/chat?sessionId=${newSession.id}&agent=${agentId}`, { replace: true })
             return newSession
         } catch (err) {
             console.error('Failed to create session:', err)
@@ -87,23 +93,20 @@ export default function Chat() {
         } finally {
             setIsCreatingSession(false)
         }
-    }, [client, clearMessages, navigate])
+    }, [getClient, clearMessages, navigate])
 
-    // Handle agent change - create new session
     const handleAgentChange = useCallback(async (agentId: string) => {
         if (agentId === selectedAgent) return
         await createSessionWithAgent(agentId)
     }, [selectedAgent, createSessionWithAgent])
 
-    // Initialize session
     useEffect(() => {
         const initSession = async () => {
-            if (!isConnected) return
+            if (!isConnected || !selectedAgent) return
 
             if (!sessionId) {
-                // No session ID, create new session with default working dir
                 setIsInitializing(true)
-                await createSessionWithAgent(getDefaultAgent())
+                await createSessionWithAgent(selectedAgent)
                 setIsInitializing(false)
                 return
             }
@@ -112,20 +115,19 @@ export default function Chat() {
             setInitError(null)
 
             try {
-                // Get session details
-                const sessionDetails = await client.getSession(sessionId)
+                const agentClient = getClient(selectedAgent)
+                const sessionDetails = await agentClient.getSession(sessionId)
                 setSession(sessionDetails)
 
-                // Detect agent from working directory
-                if (sessionDetails.working_dir) {
-                    const detectedAgent = detectAgentFromWorkingDir(sessionDetails.working_dir)
-                    setSelectedAgent(detectedAgent)
+                if (!agentParam && sessionDetails.working_dir) {
+                    const detected = detectAgentFromWorkingDir(sessionDetails.working_dir, agents)
+                    if (detected !== selectedAgent) {
+                        setSelectedAgent(detected)
+                    }
                 }
 
-                // Resume session to load model and extensions
-                await client.resumeSession(sessionId)
+                await agentClient.resumeSession(sessionId)
 
-                // Load existing messages from session conversation
                 if (sessionDetails.conversation && Array.isArray(sessionDetails.conversation)) {
                     const historyMessages = sessionDetails.conversation.map(msg =>
                         convertBackendMessage(msg as Record<string, unknown>)
@@ -139,15 +141,12 @@ export default function Chat() {
                 setIsInitializing(false)
             }
         }
-
         initSession()
-    }, [client, isConnected, sessionId, setInitialMessages, createSessionWithAgent])
+    }, [getClient, isConnected, sessionId, selectedAgent, agentParam, agents, setInitialMessages, createSessionWithAgent])
 
-    // Send initial message if provided
     useEffect(() => {
         if (initialMessage && sessionId && !isInitializing && messages.length === 0) {
             sendMessage(initialMessage)
-            // Clear the state so it doesn't resend on refresh
             window.history.replaceState({}, document.title)
         }
     }, [initialMessage, sessionId, isInitializing, messages.length, sendMessage])
@@ -156,16 +155,10 @@ export default function Chat() {
         sendMessage(text)
     }, [sendMessage])
 
-
     if (isInitializing) {
         return (
             <div className="chat-container">
-                <div style={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{ textAlign: 'center' }}>
                         <div className="loading-spinner" style={{ margin: '0 auto var(--spacing-4)' }} />
                         <p style={{ color: 'var(--color-text-secondary)' }}>Loading session...</p>
@@ -178,31 +171,16 @@ export default function Chat() {
     if (initError) {
         return (
             <div className="chat-container">
-                <div style={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div className="empty-state">
-                        <svg
-                            className="empty-state-icon"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                        >
+                        <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                             <circle cx="12" cy="12" r="10" />
                             <line x1="12" y1="8" x2="12" y2="12" />
                             <line x1="12" y1="16" x2="12.01" y2="16" />
                         </svg>
                         <h3 className="empty-state-title">Failed to load session</h3>
                         <p className="empty-state-description">{initError}</p>
-                        <button
-                            className="btn btn-primary"
-                            style={{ marginTop: 'var(--spacing-4)' }}
-                            onClick={() => navigate('/')}
-                        >
+                        <button className="btn btn-primary" style={{ marginTop: 'var(--spacing-4)' }} onClick={() => navigate('/')}>
                             Back to Home
                         </button>
                     </div>
@@ -213,50 +191,41 @@ export default function Chat() {
 
     return (
         <div className="chat-container">
-            <header className="chat-header">
-                <div>
-                    <h1 className="chat-title">{session?.name || 'Chat'}</h1>
-                    {session?.working_dir && (
-                        <p style={{
-                            fontSize: 'var(--font-size-xs)',
-                            color: 'var(--color-text-muted)',
-                            marginTop: 'var(--spacing-1)'
-                        }}>
-                            {session.working_dir}
-                        </p>
-                    )}
+            {/* Session header */}
+            {session?.name && (
+                <div className="chat-session-header">
+                    <span className="chat-session-title">{session.name}</span>
                 </div>
-            </header>
+            )}
 
-            <div className="chat-messages-wrapper">
+            {/* Messages area - scrollable */}
+            <div className="chat-messages-area">
                 <div className="chat-messages-scroll">
-                    <MessageList messages={messages} isLoading={isLoading} />
+                    <MessageList messages={messages} isLoading={isLoading} agentId={selectedAgent} />
                 </div>
-
-                {error && (
-                    <div style={{
-                        padding: 'var(--spacing-3) var(--spacing-6)',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        borderTop: '1px solid rgba(239, 68, 68, 0.3)',
-                        color: 'var(--color-error)',
-                        fontSize: 'var(--font-size-sm)'
-                    }}>
-                        {error}
-                    </div>
-                )}
             </div>
 
-            <div className="chat-input-area-sticky">
-                <ChatInput
-                    onSubmit={handleSendMessage}
-                    disabled={isLoading || !isConnected || isCreatingSession}
-                    placeholder={isCreatingSession ? "Switching agent..." : isLoading ? "Waiting for response..." : "Type a message..."}
-                    autoFocus
-                    selectedAgent={selectedAgent}
-                    onAgentChange={handleAgentChange}
-                    showAgentSelector={true}
-                    modelInfo={modelInfo}
-                />
+            {/* Error display */}
+            {error && (
+                <div className="chat-error">
+                    {error}
+                </div>
+            )}
+
+            {/* Input at bottom - floating */}
+            <div className="chat-input-area-bottom">
+                <div className="chat-input-area-inner">
+                    <ChatInput
+                        onSubmit={handleSendMessage}
+                        disabled={isLoading || !isConnected || isCreatingSession}
+                        placeholder={isCreatingSession ? "Switching agent..." : isLoading ? "Waiting for response..." : "Type a message..."}
+                        autoFocus
+                        selectedAgent={selectedAgent}
+                        onAgentChange={handleAgentChange}
+                        showAgentSelector={true}
+                        modelInfo={modelInfo}
+                    />
+                </div>
             </div>
         </div>
     )

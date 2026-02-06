@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent, ChangeEvent, DragEvent } from 'react'
-import AgentSelector, { getDefaultAgent, getAgentWorkingDir } from './AgentSelector'
+import AgentSelector from './AgentSelector'
 
 // File handling constants
 const MAX_FILES_PER_MESSAGE = 10
@@ -48,7 +48,7 @@ export default function ChatInput({
     disabled = false,
     placeholder = "Type a message...",
     autoFocus = false,
-    selectedAgent = getDefaultAgent(),
+    selectedAgent = '',
     onAgentChange,
     showAgentSelector = true,
     modelInfo
@@ -282,7 +282,6 @@ export default function ChatInput({
         fileInputRef.current?.click()
     }
 
-    const workingDir = getAgentWorkingDir(selectedAgent)
     const hasContent = value.trim() || uploadedFiles.some(f => !f.error && !f.isLoading)
     const isAnyFileLoading = uploadedFiles.some(f => f.isLoading)
 
@@ -380,22 +379,11 @@ export default function ChatInput({
                         <line x1="22" y1="2" x2="11" y2="13" />
                         <polygon points="22 2 15 22 11 13 2 9 22 2" />
                     </svg>
-                    <span>Send</span>
                 </button>
             </div>
 
             {/* Toolbar */}
             <div className="chat-input-toolbar">
-                {/* Working directory */}
-                <div className="toolbar-item toolbar-working-dir">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                    </svg>
-                    <span className="toolbar-text">{workingDir}</span>
-                </div>
-
-                <div className="toolbar-divider" />
-
                 {/* Attach button */}
                 <button
                     className="toolbar-btn"

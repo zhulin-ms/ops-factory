@@ -1,13 +1,16 @@
 import type { MouseEvent } from 'react'
 import type { Session } from '@goosed/sdk'
 
+type SessionWithAgent = Session & { agentId?: string }
+
 interface SessionItemProps {
-    session: Session
-    onResume: (sessionId: string) => void
-    onDelete: (sessionId: string) => void
+    session: SessionWithAgent
+    onResume: (session: SessionWithAgent) => void
+    onDelete: (session: SessionWithAgent) => void
+    isDeleting?: boolean
 }
 
-export default function SessionItem({ session, onResume, onDelete }: SessionItemProps) {
+export default function SessionItem({ session, onResume, onDelete, isDeleting = false }: SessionItemProps) {
     const formattedDate = new Date(session.updated_at || session.created_at).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -18,12 +21,16 @@ export default function SessionItem({ session, onResume, onDelete }: SessionItem
     const handleDeleteClick = (e: MouseEvent) => {
         e.preventDefault()
         e.stopPropagation()
-        onDelete(session.id)
+        onDelete(session)
     }
 
     return (
         <div className="session-item animate-slide-in">
-            <div className="session-info" onClick={() => onResume(session.id)} style={{ cursor: 'pointer', flex: 1 }}>
+            <div
+                className="session-info"
+                onClick={() => onResume(session)}
+                style={{ cursor: 'pointer', flex: 1 }}
+            >
                 <div className="session-name">{session.name || 'Untitled Session'}</div>
                 <div className="session-meta">
                     <span>{formattedDate}</span>
@@ -41,6 +48,8 @@ export default function SessionItem({ session, onResume, onDelete }: SessionItem
                     type="button"
                     className="session-action-btn delete"
                     onClick={handleDeleteClick}
+                    disabled={isDeleting}
+                    aria-busy={isDeleting}
                     title="Delete"
                     aria-label="Delete session"
                 >

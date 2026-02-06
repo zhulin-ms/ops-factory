@@ -1,18 +1,24 @@
 import type { Session } from '@goosed/sdk'
 import SessionItem from './SessionItem'
 
+export type SessionWithAgent = Session & { agentId?: string }
+
 interface SessionListProps {
-    sessions: Session[]
+    sessions: SessionWithAgent[]
     isLoading?: boolean
-    onResume: (sessionId: string) => void
-    onDelete: (sessionId: string) => void
+    onResume: (session: SessionWithAgent) => void
+    onDelete: (session: SessionWithAgent) => void
+    deletingSessionKeys?: Set<string>
+    getSessionKey?: (session: SessionWithAgent) => string
 }
 
 export default function SessionList({
     sessions,
     isLoading = false,
     onResume,
-    onDelete
+    onDelete,
+    deletingSessionKeys,
+    getSessionKey
 }: SessionListProps) {
     if (isLoading) {
         return (
@@ -76,6 +82,7 @@ export default function SessionList({
                     session={session}
                     onResume={onResume}
                     onDelete={onDelete}
+                    isDeleting={deletingSessionKeys?.has(getSessionKey ? getSessionKey(session) : session.id)}
                 />
             ))}
         </div>

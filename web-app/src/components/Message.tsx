@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ToolCallDisplay from './ToolCallDisplay'
+import { usePreview } from '../contexts/PreviewContext'
 
 export interface MessageContent {
     type: string
@@ -39,6 +40,7 @@ export interface ChatMessage {
 interface MessageProps {
     message: ChatMessage
     toolResponses?: ToolResponseMap
+    agentId?: string
 }
 
 export type ToolResponseMap = Map<string, { result?: unknown; isError: boolean }>
@@ -53,8 +55,12 @@ interface ToolCallPair {
     isError: boolean
 }
 
-export default function Message({ message, toolResponses = new Map() }: MessageProps) {
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://127.0.0.1:3000'
+const GATEWAY_SECRET_KEY = import.meta.env.VITE_GATEWAY_SECRET_KEY || 'test'
+
+export default function Message({ message, toolResponses = new Map(), agentId }: MessageProps) {
     const isUser = message.role === 'user'
+    const { openPreview, isPreviewable } = usePreview()
 
     // Extract text content and tool calls
     const textContent: string[] = []
@@ -111,7 +117,61 @@ export default function Message({ message, toolResponses = new Map() }: MessageP
             <div className="message-content">
                 {fullText && (
                     <div className="message-text">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                                a: ({ href, children, ...props }) => {
+                                    if (href && !href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:') && agentId) {
+                                        const downloadUrl = `${GATEWAY_URL}/agents/${agentId}/files/${encodeURIComponent(href)}?key=${GATEWAY_SECRET_KEY}`
+                                        const fileName = href.split('/').pop() || href
+                                        const fileExt = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() || '' : ''
+                                        const canPreview = isPreviewable(fileExt)
+
+                                        const handlePreview = (e: React.MouseEvent) => {
+                                            e.preventDefault()
+                                            openPreview({
+                                                name: fileName,
+                                                path: href,
+                                                type: fileExt,
+                                                agentId: agentId,
+                                            })
+                                        }
+
+                                        return (
+                                            <span className="file-link-group" {...props}>
+                                                <span className="file-link-name">{children}</span>
+                                                {canPreview && (
+                                                    <button
+                                                        className="file-link-btn file-preview-trigger"
+                                                        onClick={handlePreview}
+                                                        title="Preview"
+                                                    >
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                            <circle cx="12" cy="12" r="3" />
+                                                        </svg>
+                                                    </button>
+                                                )}
+                                                <a
+                                                    href={downloadUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="file-link-btn"
+                                                    title="Download"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                        <polyline points="7 10 12 15 17 10" />
+                                                        <line x1="12" y1="15" x2="12" y2="3" />
+                                                    </svg>
+                                                </a>
+                                            </span>
+                                        )
+                                    }
+                                    return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>
+                                }
+                            }}
+                        >
                             {fullText}
                         </ReactMarkdown>
                     </div>

@@ -1,42 +1,71 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGoosed } from '../contexts/GoosedContext'
-import SessionList from '../components/SessionList'
+import SessionList, { type SessionWithAgent } from '../components/SessionList'
 import type { Session } from '@goosed/sdk'
+
+interface AgentSession extends Session {
+    agentId: string
+}
 
 export default function History() {
     const navigate = useNavigate()
-    const { client, isConnected } = useGoosed()
-    const [sessions, setSessions] = useState<Session[]>([])
+    const { getClient, agents, isConnected } = useGoosed()
+    const [sessions, setSessions] = useState<AgentSession[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [error, setError] = useState<string | null>(null)
+    const [deletingSessionKeys, setDeletingSessionKeys] = useState<Set<string>>(new Set())
+    const [lastDeletedSessionId, setLastDeletedSessionId] = useState<string | null>(null)
+    const [lastDeletedAt, setLastDeletedAt] = useState<number | null>(null)
 
-    // Load all sessions
+    const getSessionKey = (session: SessionWithAgent) =>
+        `${session.agentId || 'unknown'}:${session.id}`
+
+    // Load all sessions from all agents
     useEffect(() => {
+        let cancelled = false
         const loadSessions = async () => {
-            if (!isConnected) return
+            if (!isConnected || agents.length === 0) return
 
             setIsLoading(true)
             setError(null)
 
             try {
-                const allSessions = await client.listSessions()
+                const allSessions: AgentSession[] = []
+                for (const agent of agents) {
+                    try {
+                        const client = getClient(agent.id)
+                        const agentSessions = await client.listSessions()
+                        allSessions.push(...agentSessions.map((s: Session) => ({ ...s, agentId: agent.id })))
+                    } catch {
+                        // agent might not be running
+                    }
+                }
                 // Sort by updated_at descending
-                const sorted = allSessions.sort((a, b) =>
+                const sorted = allSessions.sort((a: AgentSession, b: AgentSession) =>
                     new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
                 )
-                setSessions(sorted)
+                if (!cancelled) {
+                    setSessions(sorted)
+                }
             } catch (err) {
                 console.error('Failed to load sessions:', err)
-                setError(err instanceof Error ? err.message : 'Failed to load sessions')
+                if (!cancelled) {
+                    setError(err instanceof Error ? err.message : 'Failed to load sessions')
+                }
             } finally {
-                setIsLoading(false)
+                if (!cancelled) {
+                    setIsLoading(false)
+                }
             }
         }
 
         loadSessions()
-    }, [client, isConnected])
+        return () => {
+            cancelled = true
+        }
+    }, [getClient, agents, isConnected])
 
     // Filter sessions by search term
     const filteredSessions = useMemo(() => {
@@ -49,17 +78,46 @@ export default function History() {
         )
     }, [sessions, searchTerm])
 
-    const handleResumeSession = (sessionId: string) => {
-        navigate(`/chat?sessionId=${sessionId}`)
+    const handleResumeSession = (session: SessionWithAgent) => {
+        const resolvedAgentId = session.agentId || agents[0]?.id || ''
+        navigate(`/chat?sessionId=${session.id}&agent=${resolvedAgentId}`)
     }
 
-    const handleDeleteSession = async (sessionId: string) => {
+    const handleDeleteSession = async (session: SessionWithAgent) => {
+        const resolvedAgentId = session.agentId || agents[0]?.id
+        const sessionKey = getSessionKey({ ...session, agentId: resolvedAgentId })
+        if (deletingSessionKeys.has(sessionKey)) return
         try {
-            await client.deleteSession(sessionId)
-            setSessions(prev => prev.filter(s => s.id !== sessionId))
+            setDeletingSessionKeys(prev => new Set(prev).add(sessionKey))
+            if (resolvedAgentId) {
+                const client = getClient(resolvedAgentId)
+                await client.deleteSession(session.id)
+            } else {
+                for (const agent of agents) {
+                    const client = getClient(agent.id)
+                    await client.deleteSession(session.id)
+                    break
+                }
+            }
+            setSessions(prev => prev.filter(s => s.id !== session.id))
+            setLastDeletedSessionId(session.id)
+            setLastDeletedAt(Date.now())
         } catch (err) {
             console.error('Failed to delete session:', err)
-            alert('Failed to delete session: ' + (err instanceof Error ? err.message : 'Unknown error'))
+            const message = err instanceof Error ? err.message : 'Unknown error'
+            if (message.includes('Resource not found')) {
+                setSessions(prev => prev.filter(s => s.id !== session.id))
+                setLastDeletedSessionId(session.id)
+                setLastDeletedAt(Date.now())
+                return
+            }
+            alert('Failed to delete session: ' + message)
+        } finally {
+            setDeletingSessionKeys(prev => {
+                const next = new Set(prev)
+                next.delete(sessionKey)
+                return next
+            })
         }
     }
 
@@ -118,6 +176,18 @@ export default function History() {
                 </div>
             )}
 
+            {lastDeletedSessionId && lastDeletedAt && (
+                <div style={{
+                    padding: 'var(--spacing-3)',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    borderRadius: 'var(--radius-lg)',
+                    color: 'var(--color-text-secondary)',
+                    marginBottom: 'var(--spacing-6)'
+                }}>
+                    Session deleted • {new Date(lastDeletedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+            )}
+
             {searchTerm && filteredSessions.length === 0 && !isLoading && (
                 <div className="empty-state">
                     <svg
@@ -154,6 +224,8 @@ export default function History() {
                         isLoading={isLoading}
                         onResume={handleResumeSession}
                         onDelete={handleDeleteSession}
+                        deletingSessionKeys={deletingSessionKeys}
+                        getSessionKey={getSessionKey}
                     />
                 </>
             )}

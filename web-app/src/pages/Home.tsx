@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGoosed } from '../contexts/GoosedContext'
 import ChatInput from '../components/ChatInput'
-import SessionList from '../components/SessionList'
-import { getDefaultAgent, getAgentWorkingDir } from '../components/AgentSelector'
+import SessionList, { type SessionWithAgent } from '../components/SessionList'
+import { getAgentWorkingDir } from '../components/AgentSelector'
 import type { Session } from '@goosed/sdk'
 
 interface ModelInfo {
@@ -11,66 +11,83 @@ interface ModelInfo {
     model: string
 }
 
+interface AgentSession extends Session {
+    agentId: string
+}
+
 export default function Home() {
     const navigate = useNavigate()
-    const { client, isConnected, error: connectionError } = useGoosed()
-    const [recentSessions, setRecentSessions] = useState<Session[]>([])
+    const { getClient, agents, isConnected, error: connectionError } = useGoosed()
+    const [recentSessions, setRecentSessions] = useState<AgentSession[]>([])
     const [isLoadingSessions, setIsLoadingSessions] = useState(true)
     const [isCreatingSession, setIsCreatingSession] = useState(false)
-    const [selectedAgent, setSelectedAgent] = useState(getDefaultAgent())
+    const [selectedAgent, setSelectedAgent] = useState('')
     const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
+    const [deletingSessionKeys, setDeletingSessionKeys] = useState<Set<string>>(new Set())
 
-    // Fetch model info from system_info
+    const getSessionKey = (session: SessionWithAgent) =>
+        `${session.agentId || 'unknown'}:${session.id}`
+
+    // Set default agent when agents load
+    useEffect(() => {
+        if (agents.length > 0 && !selectedAgent) {
+            setSelectedAgent(agents[0].id)
+        }
+    }, [agents, selectedAgent])
+
+    // Fetch model info from selected agent
     useEffect(() => {
         const fetchModelInfo = async () => {
-            if (!isConnected) return
+            if (!isConnected || !selectedAgent) return
             try {
+                const client = getClient(selectedAgent)
                 const systemInfo = await client.systemInfo()
                 if (systemInfo.provider && systemInfo.model) {
-                    setModelInfo({
-                        provider: systemInfo.provider,
-                        model: systemInfo.model
-                    })
+                    setModelInfo({ provider: systemInfo.provider, model: systemInfo.model })
                 }
             } catch (err) {
                 console.error('Failed to fetch model info:', err)
             }
         }
         fetchModelInfo()
-    }, [client, isConnected])
+    }, [getClient, selectedAgent, isConnected])
 
-    // Load recent sessions
+    // Load recent sessions from all agents
     useEffect(() => {
         const loadSessions = async () => {
-            if (!isConnected) return
+            if (!isConnected || agents.length === 0) return
 
-            try {
-                const sessions = await client.listSessions()
-                // Sort by updated_at descending and take first 5
-                const sorted = sessions
-                    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-                    .slice(0, 5)
-                setRecentSessions(sorted)
-            } catch (err) {
-                console.error('Failed to load sessions:', err)
-            } finally {
-                setIsLoadingSessions(false)
+            const allSessions: AgentSession[] = []
+            for (const agent of agents) {
+                try {
+                    const client = getClient(agent.id)
+                    const sessions = await client.listSessions()
+                    allSessions.push(...sessions.map(s => ({ ...s, agentId: agent.id })))
+                } catch {
+                    // agent might not be running
+                }
             }
-        }
 
+            allSessions.sort((a, b) =>
+                new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+            )
+            setRecentSessions(allSessions.slice(0, 5))
+            setIsLoadingSessions(false)
+        }
         loadSessions()
-    }, [client, isConnected])
+    }, [getClient, agents, isConnected])
 
     const handleInputSubmit = async (message: string) => {
-        if (isCreatingSession) return
+        if (isCreatingSession || !selectedAgent) return
 
         setIsCreatingSession(true)
         try {
-            const workingDir = getAgentWorkingDir(selectedAgent)
+            const client = getClient(selectedAgent)
+            const workingDir = getAgentWorkingDir(selectedAgent, agents)
             const session = await client.startSession(workingDir)
             await client.resumeSession(session.id)
 
-            navigate(`/chat?sessionId=${session.id}`, {
+            navigate(`/chat?sessionId=${session.id}&agent=${selectedAgent}`, {
                 state: { initialMessage: message }
             })
         } catch (err) {
@@ -81,16 +98,36 @@ export default function Home() {
         }
     }
 
-    const handleResumeSession = (sessionId: string) => {
-        navigate(`/chat?sessionId=${sessionId}`)
+    const handleResumeSession = (session: SessionWithAgent) => {
+        const resolvedAgentId = session.agentId || selectedAgent
+        navigate(`/chat?sessionId=${session.id}&agent=${resolvedAgentId}`)
     }
 
-    const handleDeleteSession = async (sessionId: string) => {
+    const handleDeleteSession = async (session: SessionWithAgent) => {
+        const resolvedAgentId = session.agentId || selectedAgent
+        const sessionKey = getSessionKey({ ...session, agentId: resolvedAgentId })
+        if (deletingSessionKeys.has(sessionKey)) return
         try {
-            await client.deleteSession(sessionId)
-            setRecentSessions(prev => prev.filter(s => s.id !== sessionId))
+            setDeletingSessionKeys(prev => new Set(prev).add(sessionKey))
+            if (resolvedAgentId) {
+                const client = getClient(resolvedAgentId)
+                await client.deleteSession(session.id)
+            } else {
+                for (const agent of agents) {
+                    const client = getClient(agent.id)
+                    await client.deleteSession(session.id)
+                    break
+                }
+            }
+            setRecentSessions(prev => prev.filter(s => s.id !== session.id))
         } catch (err) {
             console.error('Failed to delete session:', err)
+        } finally {
+            setDeletingSessionKeys(prev => {
+                const next = new Set(prev)
+                next.delete(sessionKey)
+                return next
+            })
         }
     }
 
@@ -123,7 +160,7 @@ export default function Home() {
                         color: 'var(--color-warning)',
                         marginBottom: 'var(--spacing-6)'
                     }}>
-                        Connecting to goosed server...
+                        Connecting to gateway...
                     </div>
                 )}
             </div>
@@ -131,7 +168,7 @@ export default function Home() {
             <div className="home-input-container">
                 <ChatInput
                     onSubmit={handleInputSubmit}
-                    disabled={!isConnected || isCreatingSession}
+                    disabled={!isConnected || isCreatingSession || !selectedAgent}
                     placeholder={isCreatingSession ? "Creating session..." : "Ask me anything..."}
                     autoFocus
                     selectedAgent={selectedAgent}
@@ -161,6 +198,8 @@ export default function Home() {
                         isLoading={isLoadingSessions}
                         onResume={handleResumeSession}
                         onDelete={handleDeleteSession}
+                        deletingSessionKeys={deletingSessionKeys}
+                        getSessionKey={getSessionKey}
                     />
                 </div>
             )}

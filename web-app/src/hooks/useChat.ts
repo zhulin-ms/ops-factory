@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useGoosed } from '../contexts/GoosedContext'
+import { GoosedClient } from '@goosed/sdk'
 import { ChatMessage, MessageContent } from '../components/Message'
 
 interface UseChatOptions {
     sessionId: string | null
-    onSessionCreated?: (sessionId: string) => void
+    client: GoosedClient
 }
 
 interface UseChatReturn {
@@ -66,8 +66,7 @@ function convertBackendMessage(msg: Record<string, unknown>): ChatMessage {
     }
 }
 
-export function useChat({ sessionId }: UseChatOptions): UseChatReturn {
-    const { client } = useGoosed()
+export function useChat({ sessionId, client }: UseChatOptions): UseChatReturn {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const messagesRef = useRef<ChatMessage[]>([])
     const [isLoading, setIsLoading] = useState(false)

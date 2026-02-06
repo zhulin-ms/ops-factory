@@ -4,11 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 WEB_DIR="${ROOT_DIR}/web-app"
+GATEWAY_DIR="${ROOT_DIR}/gateway"
 
-# Configuration
-GOOSE_HOST="${GOOSE_HOST:-127.0.0.1}"
-GOOSE_PORT="${GOOSE_PORT:-3000}"
-GOOSE_SECRET_KEY="${GOOSE_SECRET_KEY:-test}"
+# Configuration (all have defaults)
+export GATEWAY_HOST="${GATEWAY_HOST:-127.0.0.1}"
+export GATEWAY_PORT="${GATEWAY_PORT:-3000}"
+export GATEWAY_SECRET_KEY="${GATEWAY_SECRET_KEY:-test}"
+export GOOSED_BIN="${GOOSED_BIN:-goosed}"
+export PROJECT_ROOT="${ROOT_DIR}"
 VITE_PORT="${VITE_PORT:-5173}"
 
 # Colors
@@ -23,10 +26,10 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Cleanup on exit
 cleanup() {
-    if [[ -n "${GOOSED_PID:-}" ]] && kill -0 "${GOOSED_PID}" 2>/dev/null; then
-        log_info "Stopping goosed..."
-        kill "${GOOSED_PID}" 2>/dev/null || true
-        wait "${GOOSED_PID}" 2>/dev/null || true
+    if [[ -n "${GATEWAY_PID:-}" ]] && kill -0 "${GATEWAY_PID}" 2>/dev/null; then
+        log_info "Stopping gateway (PID: ${GATEWAY_PID})..."
+        kill "${GATEWAY_PID}" 2>/dev/null || true
+        wait "${GATEWAY_PID}" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT INT TERM
@@ -35,23 +38,21 @@ trap cleanup EXIT INT TERM
 log_info "Shutting down existing services..."
 "${SCRIPT_DIR}/shutdown.sh"
 
-# 2. Start goosed
-log_info "Starting goosed at http://${GOOSE_HOST}:${GOOSE_PORT}"
-GOOSE_HOST="${GOOSE_HOST}" \
-GOOSE_PORT="${GOOSE_PORT}" \
-GOOSE_SERVER__SECRET_KEY="${GOOSE_SECRET_KEY}" \
-/Users/buyangnie/.local/bin/goosed agent &
-GOOSED_PID=$!
+# 2. Start gateway (which spawns all goosed instances)
+log_info "Starting gateway at http://${GATEWAY_HOST}:${GATEWAY_PORT}"
+cd "${GATEWAY_DIR}"
+npx tsx src/index.ts &
+GATEWAY_PID=$!
 
-# Wait for goosed to be ready
-sleep 2
-if ! kill -0 "${GOOSED_PID}" 2>/dev/null; then
-    log_error "Failed to start goosed"
+# Wait for gateway to be ready
+sleep 5
+if ! kill -0 "${GATEWAY_PID}" 2>/dev/null; then
+    log_error "Failed to start gateway"
     exit 1
 fi
-log_info "goosed started (PID: ${GOOSED_PID})"
+log_info "Gateway started (PID: ${GATEWAY_PID})"
 
 # 3. Start webapp
-log_info "Starting webapp at http://${GOOSE_HOST}:${VITE_PORT}"
+log_info "Starting webapp at http://${GATEWAY_HOST}:${VITE_PORT}"
 cd "${WEB_DIR}"
-npm run dev -- --host "${GOOSE_HOST}"
+npm run dev -- --host "${GATEWAY_HOST}"

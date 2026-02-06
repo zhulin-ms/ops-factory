@@ -5,9 +5,10 @@ import type { ToolResponseMap } from './Message'
 interface MessageListProps {
     messages: ChatMessage[]
     isLoading?: boolean
+    agentId?: string
 }
 
-export default function MessageList({ messages, isLoading = false }: MessageListProps) {
+export default function MessageList({ messages, isLoading = false, agentId }: MessageListProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -26,6 +27,22 @@ export default function MessageList({ messages, isLoading = false }: MessageList
         // Check userVisible flag
         return msg.metadata.userVisible !== false
     })
+
+    const toolResponses = useMemo<ToolResponseMap>(() => {
+        const map: ToolResponseMap = new Map()
+        for (const msg of visibleMessages) {
+            for (const content of msg.content) {
+                if (content.type === 'toolResponse' && content.id) {
+                    const toolResult = content.toolResult
+                    map.set(content.id, {
+                        result: toolResult?.status === 'success' ? toolResult.value : toolResult,
+                        isError: toolResult?.status === 'error'
+                    })
+                }
+            }
+        }
+        return map
+    }, [visibleMessages])
 
     if (visibleMessages.length === 0 && !isLoading) {
         return (
@@ -47,22 +64,6 @@ export default function MessageList({ messages, isLoading = false }: MessageList
         )
     }
 
-    const toolResponses = useMemo<ToolResponseMap>(() => {
-        const map: ToolResponseMap = new Map()
-        for (const msg of visibleMessages) {
-            for (const content of msg.content) {
-                if (content.type === 'toolResponse' && content.id) {
-                    const toolResult = content.toolResult
-                    map.set(content.id, {
-                        result: toolResult?.status === 'success' ? toolResult.value : toolResult,
-                        isError: toolResult?.status === 'error'
-                    })
-                }
-            }
-        }
-        return map
-    }, [visibleMessages])
-
     return (
         <div className="chat-messages" ref={containerRef}>
             {visibleMessages.map((message, index) => (
@@ -70,6 +71,7 @@ export default function MessageList({ messages, isLoading = false }: MessageList
                     key={message.id || index}
                     message={message}
                     toolResponses={toolResponses}
+                    agentId={agentId}
                 />
             ))}
 

@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Configuration
-GOOSE_PORT="${GOOSE_PORT:-3000}"
+GATEWAY_PORT="${GATEWAY_PORT:-3000}"
 VITE_PORT="${VITE_PORT:-5173}"
 
-# Colors
-RED='\033[0;31m'
+# Also check common goosed ports
+GOOSED_PORTS="3001 3002 3003 3004 3005"
+
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
 NC='\033[0m'
 
-log_info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
-log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 
 stop_port() {
     local port=$1
@@ -24,8 +22,10 @@ stop_port() {
     fi
 }
 
-# Stop services
 stop_port "${VITE_PORT}" "webapp"
-stop_port "${GOOSE_PORT}" "goosed"
+stop_port "${GATEWAY_PORT}" "gateway"
+for port in ${GOOSED_PORTS}; do
+    stop_port "${port}" "goosed"
+done
 
 log_info "All services stopped"
