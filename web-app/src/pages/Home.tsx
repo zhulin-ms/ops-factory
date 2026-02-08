@@ -1,41 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGoosed } from '../contexts/GoosedContext'
 import ChatInput from '../components/ChatInput'
-import SessionList, { type SessionWithAgent } from '../components/SessionList'
 import { getAgentWorkingDir } from '../components/AgentSelector'
-import type { Session } from '@goosed/sdk'
+import { PROMPT_TEMPLATES } from '../config/prompts'
+import { PromptTemplate } from '../types/prompt'
 
 interface ModelInfo {
     provider: string
     model: string
 }
 
-interface AgentSession extends Session {
-    agentId: string
-}
+const AGENT_TAB_ORDER = ['all', 'universal-agent', 'report-agent', 'kb-agent', 'contract-agent'] as const
 
 export default function Home() {
     const navigate = useNavigate()
     const { getClient, agents, isConnected, error: connectionError } = useGoosed()
-    const [recentSessions, setRecentSessions] = useState<AgentSession[]>([])
-    const [isLoadingSessions, setIsLoadingSessions] = useState(true)
     const [isCreatingSession, setIsCreatingSession] = useState(false)
     const [selectedAgent, setSelectedAgent] = useState('')
     const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
-    const [deletingSessionKeys, setDeletingSessionKeys] = useState<Set<string>>(new Set())
+    const [presetMessage, setPresetMessage] = useState('')
+    const [presetToken, setPresetToken] = useState(0)
+    const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
+    const [activeAgentTab, setActiveAgentTab] = useState<string>('all')
 
-    const getSessionKey = (session: SessionWithAgent) =>
-        `${session.agentId || 'unknown'}:${session.id}`
-
-    // Set default agent when agents load
     useEffect(() => {
         if (agents.length > 0 && !selectedAgent) {
             setSelectedAgent(agents[0].id)
         }
     }, [agents, selectedAgent])
 
-    // Fetch model info from selected agent
     useEffect(() => {
         const fetchModelInfo = async () => {
             if (!isConnected || !selectedAgent) return
@@ -51,31 +45,6 @@ export default function Home() {
         }
         fetchModelInfo()
     }, [getClient, selectedAgent, isConnected])
-
-    // Load recent sessions from all agents
-    useEffect(() => {
-        const loadSessions = async () => {
-            if (!isConnected || agents.length === 0) return
-
-            const allSessions: AgentSession[] = []
-            for (const agent of agents) {
-                try {
-                    const client = getClient(agent.id)
-                    const sessions = await client.listSessions()
-                    allSessions.push(...sessions.map(s => ({ ...s, agentId: agent.id })))
-                } catch {
-                    // agent might not be running
-                }
-            }
-
-            allSessions.sort((a, b) =>
-                new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-            )
-            setRecentSessions(allSessions.slice(0, 5))
-            setIsLoadingSessions(false)
-        }
-        loadSessions()
-    }, [getClient, agents, isConnected])
 
     const handleInputSubmit = async (message: string) => {
         if (isCreatingSession || !selectedAgent) return
@@ -98,43 +67,52 @@ export default function Home() {
         }
     }
 
-    const handleResumeSession = (session: SessionWithAgent) => {
-        const resolvedAgentId = session.agentId || selectedAgent
-        navigate(`/chat?sessionId=${session.id}&agent=${resolvedAgentId}`)
+    const availableAgentTabs = useMemo(() => {
+        const fromTemplates = Array.from(new Set(PROMPT_TEMPLATES.map(template => template.agentId)))
+        // Ensure 'all' is always first
+        const ordered = AGENT_TAB_ORDER.filter(id => id === 'all' || fromTemplates.includes(id)) as string[]
+        const remaining = fromTemplates.filter(id => !AGENT_TAB_ORDER.includes(id as any))
+        return ordered.concat(remaining)
+    }, [])
+
+    useEffect(() => {
+        if (!availableAgentTabs.includes(activeAgentTab)) {
+            setActiveAgentTab(availableAgentTabs[0] || 'all')
+        }
+    }, [activeAgentTab, availableAgentTabs])
+
+    const filteredTemplates = useMemo(
+        () => activeAgentTab === 'all'
+            ? PROMPT_TEMPLATES
+            : PROMPT_TEMPLATES.filter(template => template.agentId === activeAgentTab),
+        [activeAgentTab]
+    )
+
+    const getAgentLabel = (agentId: string) => {
+        if (agentId === 'all') return 'All Agents'
+
+        const fromConfig = agents.find(agent => agent.id === agentId)?.name
+        if (fromConfig) return fromConfig
+
+        if (agentId === 'report-agent') return 'Report Agent'
+        if (agentId === 'kb-agent') return 'KB Agent'
+        if (agentId === 'contract-agent') return 'Contract Agent'
+        if (agentId === 'universal-agent') return 'Universal Agent'
+        return agentId
     }
 
-    const handleDeleteSession = async (session: SessionWithAgent) => {
-        const resolvedAgentId = session.agentId || selectedAgent
-        const sessionKey = getSessionKey({ ...session, agentId: resolvedAgentId })
-        if (deletingSessionKeys.has(sessionKey)) return
-        try {
-            setDeletingSessionKeys(prev => new Set(prev).add(sessionKey))
-            if (resolvedAgentId) {
-                const client = getClient(resolvedAgentId)
-                await client.deleteSession(session.id)
-            } else {
-                for (const agent of agents) {
-                    const client = getClient(agent.id)
-                    await client.deleteSession(session.id)
-                    break
-                }
-            }
-            setRecentSessions(prev => prev.filter(s => s.id !== session.id))
-        } catch (err) {
-            console.error('Failed to delete session:', err)
-        } finally {
-            setDeletingSessionKeys(prev => {
-                const next = new Set(prev)
-                next.delete(sessionKey)
-                return next
-            })
-        }
+    const handleTemplateSelect = (template: PromptTemplate) => {
+        const targetAgentId = agents.find(agent => agent.id === template.agentId)?.id || template.agentId
+        setSelectedAgent(targetAgentId)
+        setPresetMessage(template.prompt)
+        setPresetToken(prev => prev + 1)
+        setActiveTemplateId(template.id)
     }
 
     return (
         <div className="home-container">
             <div className="home-hero">
-                <h1 className="home-title">Hello, I'm Goose</h1>
+                <h1 className="home-title">Hello, I'm Ops Agent</h1>
                 <p className="home-description">
                     Your AI-powered coding assistant. Ask me anything about your codebase,
                     let me help you write, debug, or explain code.
@@ -169,40 +147,52 @@ export default function Home() {
                 <ChatInput
                     onSubmit={handleInputSubmit}
                     disabled={!isConnected || isCreatingSession || !selectedAgent}
-                    placeholder={isCreatingSession ? "Creating session..." : "Ask me anything..."}
+                    placeholder={isCreatingSession ? 'Creating session...' : 'Ask me anything...'}
                     autoFocus
                     selectedAgent={selectedAgent}
                     onAgentChange={setSelectedAgent}
                     modelInfo={modelInfo}
+                    presetMessage={presetMessage}
+                    presetToken={presetToken}
                 />
             </div>
 
-            {recentSessions.length > 0 && (
-                <div style={{
-                    width: '100%',
-                    maxWidth: '600px',
-                    marginTop: 'var(--spacing-10)'
-                }}>
-                    <h3 style={{
-                        fontSize: 'var(--font-size-sm)',
-                        fontWeight: 600,
-                        color: 'var(--color-text-secondary)',
-                        marginBottom: 'var(--spacing-4)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                    }}>
-                        Recent Chats
-                    </h3>
-                    <SessionList
-                        sessions={recentSessions}
-                        isLoading={isLoadingSessions}
-                        onResume={handleResumeSession}
-                        onDelete={handleDeleteSession}
-                        deletingSessionKeys={deletingSessionKeys}
-                        getSessionKey={getSessionKey}
-                    />
+            <div className="home-template-section">
+                <div className="home-template-tabs" role="tablist" aria-label="Agent template tabs">
+                    {availableAgentTabs.map(tabAgentId => (
+                        <button
+                            key={tabAgentId}
+                            type="button"
+                            role="tab"
+                            aria-selected={activeAgentTab === tabAgentId}
+                            className={`home-template-tab ${activeAgentTab === tabAgentId ? 'is-active' : ''}`}
+                            onClick={() => setActiveAgentTab(tabAgentId)}
+                        >
+                            {getAgentLabel(tabAgentId)}
+                        </button>
+                    ))}
                 </div>
-            )}
+
+                <div className="home-template-grid">
+                    {filteredTemplates.map(template => {
+                        const Icon = template.icon
+                        return (
+                            <button
+                                key={template.id}
+                                type="button"
+                                className={`prompt-template-card ${activeTemplateId === template.id ? 'is-active' : ''}`}
+                                onClick={() => handleTemplateSelect(template)}
+                            >
+                                <div className="prompt-template-icon-container">
+                                    <Icon size={20} />
+                                </div>
+                                <h4 className="prompt-template-name">{template.title}</h4>
+                                <p className="prompt-template-desc">{template.description}</p>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
         </div>
     )
 }

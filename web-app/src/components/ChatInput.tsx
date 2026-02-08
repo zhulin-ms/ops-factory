@@ -43,6 +43,8 @@ interface ChatInputProps {
     onAgentChange?: (agentId: string) => void
     showAgentSelector?: boolean
     modelInfo?: { provider: string; model: string } | null
+    presetMessage?: string
+    presetToken?: number
 }
 
 export default function ChatInput({
@@ -55,11 +57,14 @@ export default function ChatInput({
     selectedAgent = '',
     onAgentChange,
     showAgentSelector = true,
-    modelInfo
+    modelInfo,
+    presetMessage,
+    presetToken
 }: ChatInputProps) {
     const [value, setValue] = useState('')
     const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
     const [isDragging, setIsDragging] = useState(false)
+    const [isTemplateAppliedFlash, setIsTemplateAppliedFlash] = useState(false)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -78,6 +83,22 @@ export default function ChatInput({
             textareaRef.current.focus()
         }
     }, [autoFocus])
+
+    // Fill input from external template selection without submitting.
+    useEffect(() => {
+        if (typeof presetToken !== 'number') return
+        setValue(presetMessage || '')
+        setIsTemplateAppliedFlash(true)
+        if (textareaRef.current) {
+            textareaRef.current.focus()
+        }
+
+        const timer = window.setTimeout(() => {
+            setIsTemplateAppliedFlash(false)
+        }, 1200)
+
+        return () => window.clearTimeout(timer)
+    }, [presetToken, presetMessage])
 
     const isFileTypeSupported = (file: File): boolean => {
         const extension = '.' + file.name.split('.').pop()?.toLowerCase()
@@ -296,7 +317,7 @@ export default function ChatInput({
 
     return (
         <div
-            className={`chat-input-container ${isDragging ? 'dragging' : ''}`}
+            className={`chat-input-container ${isDragging ? 'dragging' : ''} ${isTemplateAppliedFlash ? 'template-applied' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}

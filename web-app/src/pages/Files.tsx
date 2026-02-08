@@ -18,14 +18,15 @@ interface AgentFile extends FileInfo {
     agentName: string
 }
 
-type FileCategory = 'all' | 'documents' | 'spreadsheets' | 'images' | 'code' | 'other'
+type FileCategory = 'all' | 'doc' | 'sheet' | 'slide' | 'markdown' | 'html' | 'others'
 
 const FILE_CATEGORIES: { key: FileCategory; label: string; types: string[] }[] = [
     { key: 'all', label: 'All', types: [] },
-    { key: 'documents', label: 'Documents', types: ['pdf', 'doc', 'docx', 'txt', 'rtf', 'odt'] },
-    { key: 'spreadsheets', label: 'Spreadsheets', types: ['xlsx', 'xls', 'csv', 'tsv', 'ods'] },
-    { key: 'images', label: 'Images', types: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'] },
-    { key: 'code', label: 'Code', types: ['html', 'htm', 'css', 'js', 'ts', 'jsx', 'tsx', 'json', 'xml', 'yaml', 'yml', 'md'] },
+    { key: 'doc', label: 'Doc', types: ['docx', 'doc'] },
+    { key: 'sheet', label: 'Sheet', types: ['xlsx', 'xls', 'csv', 'tsv'] },
+    { key: 'slide', label: 'Slide', types: ['pptx', 'ppt'] },
+    { key: 'markdown', label: 'Markdown', types: ['md', 'markdown'] },
+    { key: 'html', label: 'HTML', types: ['html', 'htm'] },
 ]
 
 function getFileCategory(type: string): FileCategory {
@@ -35,7 +36,7 @@ function getFileCategory(type: string): FileCategory {
             return cat.key
         }
     }
-    return 'other'
+    return 'others'
 }
 
 function formatFileSize(bytes: number): string {
@@ -168,11 +169,12 @@ export default function Files() {
     const categoryCounts = useMemo(() => {
         const counts: Record<FileCategory, number> = {
             all: files.length,
-            documents: 0,
-            spreadsheets: 0,
-            images: 0,
-            code: 0,
-            other: 0,
+            doc: 0,
+            sheet: 0,
+            slide: 0,
+            markdown: 0,
+            html: 0,
+            others: 0,
         }
         for (const file of files) {
             const cat = getFileCategory(file.type)
@@ -258,15 +260,6 @@ export default function Files() {
                         )}
                     </button>
                 ))}
-                {categoryCounts.other > 0 && (
-                    <button
-                        className={`file-tab ${activeCategory === 'other' ? 'active' : ''}`}
-                        onClick={() => setActiveCategory('other')}
-                    >
-                        Other
-                        <span className="file-tab-count">{categoryCounts.other}</span>
-                    </button>
-                )}
             </div>
 
             {error && (

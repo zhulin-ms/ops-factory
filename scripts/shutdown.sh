@@ -28,4 +28,10 @@ for port in ${GOOSED_PORTS}; do
     stop_port "${port}" "goosed"
 done
 
+# Stop OnlyOffice container if running
+if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^onlyoffice$'; then
+    log_info "Stopping OnlyOffice container..."
+    docker stop onlyoffice 2>/dev/null || true
+fi
+
 log_info "All services stopped"

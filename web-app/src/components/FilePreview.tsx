@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import { inferFileType } from '../utils/filePreview'
+import OnlyOfficePreview from './OnlyOfficePreview'
 
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://127.0.0.1:3000'
 const GATEWAY_SECRET_KEY = import.meta.env.VITE_GATEWAY_SECRET_KEY || 'test'
@@ -90,7 +91,11 @@ function getLanguageName(type: string): string {
         webm: 'Video',
         mov: 'Video',
         docx: 'DOCX',
+        doc: 'DOC',
         xlsx: 'XLSX',
+        xls: 'XLS',
+        pptx: 'PPTX',
+        ppt: 'PPT',
     }
     return map[type.toLowerCase()] || type.toUpperCase()
 }
@@ -288,10 +293,15 @@ export default function FilePreview() {
                                     </div>
                                 )}
 
-                                {previewKind === 'docx' && previewFile.content !== undefined && (
-                                    <pre className="file-preview-code">
-                                        <code>{previewFile.content}</code>
-                                    </pre>
+                                {previewKind === 'office' && previewFile.onlyofficeUrl && previewFile.fileBaseUrl && (
+                                    <OnlyOfficePreview
+                                        name={previewFile.name}
+                                        path={previewFile.path}
+                                        agentId={previewFile.agentId}
+                                        type={previewFile.type}
+                                        onlyofficeUrl={previewFile.onlyofficeUrl}
+                                        fileBaseUrl={previewFile.fileBaseUrl}
+                                    />
                                 )}
 
                                 {previewKind === 'spreadsheet' && previewFile.tableData && (
@@ -315,7 +325,7 @@ export default function FilePreview() {
                                     <iframe
                                         className="file-preview-iframe"
                                         srcDoc={previewFile.content}
-                                        sandbox="allow-same-origin"
+                                        sandbox="allow-same-origin allow-scripts"
                                         title={previewFile.name}
                                     />
                                 )}

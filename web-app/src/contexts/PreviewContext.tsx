@@ -1,9 +1,15 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-import { getPreviewKind, inferFileType, isPreviewableFile, needsTextContent, PreviewKind } from '../utils/filePreview'
-import { extractDocxText, extractXlsxTable, parseCsvTable } from '../utils/officePreview'
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
+import { getPreviewKind, inferFileType, needsTextContent, PreviewKind } from '../utils/filePreview'
+import { parseCsvTable } from '../utils/officePreview'
 
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://127.0.0.1:3000'
 const GATEWAY_SECRET_KEY = import.meta.env.VITE_GATEWAY_SECRET_KEY || 'test'
+
+interface OfficePreviewConfig {
+    enabled: boolean
+    onlyofficeUrl: string
+    fileBaseUrl: string
+}
 
 export interface PreviewFile {
     name: string
@@ -13,6 +19,8 @@ export interface PreviewFile {
     previewKind: PreviewKind
     content?: string
     tableData?: string[][]
+    onlyofficeUrl?: string
+    fileBaseUrl?: string
 }
 
 interface PreviewRequest {
@@ -37,10 +45,31 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [officePreview, setOfficePreview] = useState<OfficePreviewConfig>({
+        enabled: false,
+        onlyofficeUrl: '',
+        fileBaseUrl: '',
+    })
+
+    // Fetch gateway config on mount
+    useEffect(() => {
+        fetch(`${GATEWAY_URL}/config`, {
+            headers: { 'x-secret-key': GATEWAY_SECRET_KEY },
+        })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data?.officePreview) {
+                    setOfficePreview(data.officePreview)
+                }
+            })
+            .catch(() => { /* gateway not reachable — office preview stays disabled */ })
+    }, [])
 
     const isPreviewable = useCallback((type: string, name?: string, path?: string) => {
-        return isPreviewableFile({ type, name, path })
-    }, [])
+        const kind = getPreviewKind({ type, name, path })
+        if (kind === 'office') return officePreview.enabled
+        return kind !== 'unsupported'
+    }, [officePreview.enabled])
 
     const openPreview = useCallback(async (file: PreviewRequest) => {
         setIsLoading(true)
@@ -56,13 +85,12 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
             const normalizedFile = { ...file, type: normalizedType, previewKind }
 
             if (!needsTextContent(previewKind)) {
-                if (previewKind === 'docx') {
-                    const url = `${GATEWAY_URL}/agents/${file.agentId}/files/${encodeURIComponent(file.path)}?key=${GATEWAY_SECRET_KEY}`
-                    const res = await fetch(url)
-                    if (!res.ok) throw new Error(`Failed to fetch DOCX: ${res.status}`)
-                    const buffer = await res.arrayBuffer()
-                    const content = await extractDocxText(buffer)
-                    setPreviewFile({ ...normalizedFile, content })
+                if (previewKind === 'office') {
+                    setPreviewFile({
+                        ...normalizedFile,
+                        onlyofficeUrl: officePreview.onlyofficeUrl,
+                        fileBaseUrl: officePreview.fileBaseUrl,
+                    })
                     return
                 }
 
@@ -71,10 +99,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
                     const res = await fetch(url)
                     if (!res.ok) throw new Error(`Failed to fetch spreadsheet: ${res.status}`)
 
-                    const tableData = normalizedType === 'xlsx'
-                        ? await extractXlsxTable(await res.arrayBuffer())
-                        : parseCsvTable(await res.text(), normalizedType === 'tsv' ? '\t' : ',')
-
+                    const tableData = parseCsvTable(await res.text(), normalizedType === 'tsv' ? '\t' : ',')
                     const content = tableData.map(row => row.join('\t')).join('\n')
                     setPreviewFile({ ...normalizedFile, content, tableData })
                     return
@@ -100,7 +125,7 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
         } finally {
             setIsLoading(false)
         }
-    }, [])
+    }, [officePreview])
 
     const closePreview = useCallback(() => {
         setPreviewFile(null)

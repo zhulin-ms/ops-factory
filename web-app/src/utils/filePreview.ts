@@ -1,4 +1,4 @@
-export type PreviewKind = 'code' | 'markdown' | 'html' | 'image' | 'pdf' | 'audio' | 'video' | 'docx' | 'spreadsheet' | 'unsupported'
+export type PreviewKind = 'code' | 'markdown' | 'html' | 'image' | 'pdf' | 'audio' | 'video' | 'office' | 'spreadsheet' | 'unsupported'
 
 interface FileIdentity {
     type?: string
@@ -12,8 +12,8 @@ const IMAGE_TYPES = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 
 const PDF_TYPES = new Set(['pdf'])
 const AUDIO_TYPES = new Set(['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'])
 const VIDEO_TYPES = new Set(['mp4', 'webm', 'mov', 'm4v', 'ogv'])
-const DOCX_TYPES = new Set(['docx'])
-const SPREADSHEET_TYPES = new Set(['xlsx', 'csv', 'tsv'])
+const OFFICE_TYPES = new Set(['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'])
+const SPREADSHEET_TYPES = new Set(['csv', 'tsv'])
 
 const CODE_AND_TEXT_TYPES = new Set([
     'txt', 'log', 'ini', 'conf',
@@ -55,7 +55,7 @@ export function getPreviewKind(file: FileIdentity): PreviewKind {
     if (PDF_TYPES.has(type)) return 'pdf'
     if (AUDIO_TYPES.has(type)) return 'audio'
     if (VIDEO_TYPES.has(type)) return 'video'
-    if (DOCX_TYPES.has(type)) return 'docx'
+    if (OFFICE_TYPES.has(type)) return 'office'
     if (SPREADSHEET_TYPES.has(type)) return 'spreadsheet'
     if (CODE_AND_TEXT_TYPES.has(type)) return 'code'
     return 'unsupported'

@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
 
 export default function Sidebar() {
+
     return (
         <aside className="sidebar">
             <div className="sidebar-header">
                 <div className="sidebar-logo">
-                    <span style={{ fontSize: '28px' }}>🪿</span>
-                    <span>Goose</span>
+                    <span>OpsFactory</span>
                 </div>
             </div>
 

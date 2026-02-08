@@ -137,6 +137,15 @@ async function main() {
       return
     }
 
+    // GET /config — gateway configuration (office preview, etc.)
+    if (pathname === '/config' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        officePreview: config.officePreview,
+      }))
+      return
+    }
+
     // GET /agents — list agents
     if (pathname === '/agents' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' })

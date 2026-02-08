@@ -11,12 +11,23 @@ export interface AgentConfig {
   secret_key: string
 }
 
-export interface GatewayAgentsConfig {
+export interface GatewayYamlConfig {
   agents: Array<{
     id: string
     name: string
     port: number
   }>
+  officePreview?: {
+    enabled?: boolean
+    onlyofficeUrl?: string
+    fileBaseUrl?: string
+  }
+}
+
+export interface OfficePreviewConfig {
+  enabled: boolean
+  onlyofficeUrl: string
+  fileBaseUrl: string
 }
 
 export interface GatewayConfig {
@@ -27,13 +38,14 @@ export interface GatewayConfig {
   agentsDir: string
   goosedBin: string
   agents: AgentConfig[]
+  officePreview: OfficePreviewConfig
 }
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 export function loadGatewayConfig(): GatewayConfig {
-  const host = process.env.GATEWAY_HOST || '127.0.0.1'
+  const host = process.env.GATEWAY_HOST || '0.0.0.0'
   const port = parseInt(process.env.GATEWAY_PORT || '3000', 10)
   const secretKey = process.env.GATEWAY_SECRET_KEY || 'test'
   const projectRoot = resolve(process.env.PROJECT_ROOT || process.cwd())
@@ -44,25 +56,35 @@ export function loadGatewayConfig(): GatewayConfig {
   const gatewayConfigDir = resolve(__dirname, '../config')
   const agentsConfigPath = join(gatewayConfigDir, 'agents.yaml')
 
-  let gatewayAgentsConfig: GatewayAgentsConfig = {
+  let yamlConfig: GatewayYamlConfig = {
     agents: []
   }
 
   if (existsSync(agentsConfigPath)) {
     const raw = readFileSync(agentsConfigPath, 'utf-8')
-    gatewayAgentsConfig = parse(raw) as GatewayAgentsConfig
+    yamlConfig = parse(raw) as GatewayYamlConfig
   } else {
     console.warn(`Warning: Gateway agents config not found at ${agentsConfigPath}`)
   }
 
   // Convert to AgentConfig array with host and secret_key
-  const agents: AgentConfig[] = (gatewayAgentsConfig.agents || []).map(agent => ({
+  const agents: AgentConfig[] = (yamlConfig.agents || []).map(agent => ({
     id: agent.id,
     name: agent.name,
     port: agent.port,
     host,
     secret_key: secretKey,
   }))
+
+  // Office preview (OnlyOffice) configuration — YAML first, env vars override
+  const yamlOp = yamlConfig.officePreview || {}
+  const officePreview: OfficePreviewConfig = {
+    enabled: process.env.OFFICE_PREVIEW_ENABLED
+      ? process.env.OFFICE_PREVIEW_ENABLED === 'true'
+      : yamlOp.enabled ?? false,
+    onlyofficeUrl: process.env.ONLYOFFICE_URL || yamlOp.onlyofficeUrl || 'http://localhost:8080',
+    fileBaseUrl: process.env.ONLYOFFICE_FILE_BASE_URL || yamlOp.fileBaseUrl || `http://host.docker.internal:${port}`,
+  }
 
   return {
     host,
@@ -72,5 +94,6 @@ export function loadGatewayConfig(): GatewayConfig {
     agentsDir,
     goosedBin,
     agents,
+    officePreview,
   }
 }
