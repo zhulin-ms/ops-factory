@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ToolCallDisplay from './ToolCallDisplay'
@@ -128,30 +127,6 @@ export default function Message({
             isPending: !response && request.status === 'pending',
             isError: response?.isError || request.status === 'error'
         })
-    }
-
-    const parseTodoContent = (content: string) => {
-        const lines = content.split('\n').map(line => line.trim()).filter(Boolean)
-        let title = '任务计划'
-        const tasks: Array<{ done: boolean; text: string }> = []
-
-        for (const line of lines) {
-            if (line.startsWith('#')) {
-                title = line.replace(/^#+\s*/, '').trim() || title
-                continue
-            }
-            const checked = line.match(/^- \[(x|X)\]\s+(.+)$/)
-            if (checked) {
-                tasks.push({ done: true, text: checked[2].trim() })
-                continue
-            }
-            const unchecked = line.match(/^- \[\s\]\s+(.+)$/)
-            if (unchecked) {
-                tasks.push({ done: false, text: unchecked[1].trim() })
-            }
-        }
-
-        return { title, tasks }
     }
 
 
@@ -321,66 +296,6 @@ export default function Message({
         )
     }
 
-    const TodoUpdateCard = ({ toolCall }: { toolCall: ToolCallPair }) => {
-        const [expanded, setExpanded] = useState(false)
-        const raw = typeof toolCall.args?.content === 'string' ? toolCall.args.content : ''
-        const { title, tasks } = parseTodoContent(raw)
-        const doneCount = tasks.filter(t => t.done).length
-        const totalCount = tasks.length
-        const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0
-        const indicatorTone = (() => {
-            if (toolCall.isError) return 'error'
-            if (toolCall.isPending) return 'pending'
-            if (totalCount > 0 && doneCount === totalCount) return 'success'
-            return 'active'
-        })()
-
-        return (
-            <div className={`todo-inline ${expanded ? 'expanded' : ''}`} onClick={() => setExpanded(prev => !prev)}>
-                <div className="todo-inline-summary">
-                    <span className={`tool-call-indicator ${indicatorTone}`} aria-hidden="true" />
-                    <span className="todo-inline-label">Todo</span>
-                    <span className="todo-inline-title">{title}</span>
-                    {totalCount > 0 && (
-                        <span className="todo-inline-progress">{doneCount}/{totalCount}</span>
-                    )}
-                    <span className={`todo-inline-chevron ${expanded ? 'open' : ''}`} aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                            <polyline points="6 9 12 15 18 9" />
-                        </svg>
-                    </span>
-                </div>
-                {expanded && totalCount > 0 && (
-                    <div className="todo-inline-details" onClick={e => e.stopPropagation()}>
-                        <div className="todo-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-                            <div className="todo-progress-fill" style={{ width: `${progress}%` }} />
-                        </div>
-                        <div className="todo-list">
-                            {tasks.map((task, idx) => (
-                                <div key={idx} className={`todo-item ${task.done ? 'done' : ''}`}>
-                                    <span className="todo-checkmark" aria-hidden="true">{task.done ? '✓' : '○'}</span>
-                                    <span className="todo-item-text">{task.text}</span>
-                                </div>
-                            ))}
-                        </div>
-                        {toolCall.isError && (
-                            <div className="todo-updated-text error">Todo 更新失败，请稍后重试</div>
-                        )}
-                    </div>
-                )}
-                {toolCall.isPending && (
-                    <div className="tool-call-running" onClick={e => e.stopPropagation()}>
-                        <span className="loading-dots">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                        </span>
-                        <span>正在更新 Todo...</span>
-                    </div>
-                )}
-            </div>
-        )
-    }
     return (
         <div className={`message ${isUser ? 'user' : 'assistant'} animate-slide-in`}>
             <div className="message-avatar">
@@ -470,20 +385,14 @@ export default function Message({
 
                 {/* Tool calls */}
                 {toolCalls.map(toolCall => (
-                    toolCall.name.startsWith('todo__')
-                        ? (
-                            <TodoUpdateCard key={toolCall.id} toolCall={toolCall} />
-                        )
-                        : (
-                            <ToolCallDisplay
-                                key={toolCall.id}
-                                name={toolCall.name}
-                                args={toolCall.args}
-                                result={toolCall.result}
-                                isPending={toolCall.isPending}
-                                isError={toolCall.isError}
-                            />
-                        )
+                    <ToolCallDisplay
+                        key={toolCall.id}
+                        name={toolCall.name}
+                        args={toolCall.args}
+                        result={toolCall.result}
+                        isPending={toolCall.isPending}
+                        isError={toolCall.isError}
+                    />
                 ))}
 
                 {/* Streaming indicator on last assistant message */}
