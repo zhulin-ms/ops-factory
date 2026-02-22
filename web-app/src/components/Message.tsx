@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ToolCallDisplay from './ToolCallDisplay'
@@ -47,9 +48,17 @@ interface MessageProps {
     isStreaming?: boolean
     onRetry?: () => void
     sourceDocuments?: Citation[]
+    outputFiles?: DetectedFile[]
+    showFileCapsules?: boolean
 }
 
 export type ToolResponseMap = Map<string, { result?: unknown; isError: boolean }>
+
+export interface DetectedFile {
+    path: string
+    name: string
+    ext: string
+}
 
 // Represents a paired tool call with its request and response
 interface ToolCallPair {
@@ -64,7 +73,16 @@ interface ToolCallPair {
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://127.0.0.1:3000'
 const GATEWAY_SECRET_KEY = import.meta.env.VITE_GATEWAY_SECRET_KEY || 'test'
 
-export default function Message({ message, toolResponses = new Map(), agentId, isStreaming = false, onRetry, sourceDocuments }: MessageProps) {
+export default function Message({
+    message,
+    toolResponses = new Map(),
+    agentId,
+    isStreaming = false,
+    onRetry,
+    sourceDocuments,
+    outputFiles = [],
+    showFileCapsules = true
+}: MessageProps) {
     const isUser = message.role === 'user'
     const { openPreview, isPreviewable } = usePreview()
 
@@ -112,6 +130,31 @@ export default function Message({ message, toolResponses = new Map(), agentId, i
         })
     }
 
+    const parseTodoContent = (content: string) => {
+        const lines = content.split('\n').map(line => line.trim()).filter(Boolean)
+        let title = '任务计划'
+        const tasks: Array<{ done: boolean; text: string }> = []
+
+        for (const line of lines) {
+            if (line.startsWith('#')) {
+                title = line.replace(/^#+\s*/, '').trim() || title
+                continue
+            }
+            const checked = line.match(/^- \[(x|X)\]\s+(.+)$/)
+            if (checked) {
+                tasks.push({ done: true, text: checked[2].trim() })
+                continue
+            }
+            const unchecked = line.match(/^- \[\s\]\s+(.+)$/)
+            if (unchecked) {
+                tasks.push({ done: false, text: unchecked[1].trim() })
+            }
+        }
+
+        return { title, tasks }
+    }
+
+
     const fullText = textContent.join('\n')
 
     // Split thinking blocks from visible text
@@ -128,42 +171,85 @@ export default function Message({ message, toolResponses = new Map(), agentId, i
     const isThinking = !!unclosedThinkMatch
     const unclosedThinkingText = unclosedThinkMatch ? unclosedThinkMatch[1].trim() : ''
 
-    // Detect file paths from multiple sources
-    const detectedFiles: { path: string; name: string; ext: string }[] = []
-    const seenNames = new Set<string>()
+    // Detect file paths from message text, tool arguments and tool results.
+    // This is a best-effort fallback. Stable file rendering primarily comes from
+    // outputFiles passed by MessageList based on /agents/:id/files snapshots.
+    const detectedFiles: DetectedFile[] = []
+    const seenFiles = new Set<string>()
 
-    const addFile = (filePath: string) => {
-        const fileName = filePath.split('/').pop() || filePath
-        if (seenNames.has(fileName)) return
-        seenNames.add(fileName)
+    const addFile = (rawPath: string) => {
+        if (!rawPath) return
+        const trimmed = rawPath.trim().replace(/^["'`]+|["'`]+$/g, '')
+        if (!trimmed) return
+
+        // Never pass absolute filesystem paths to download/preview route.
+        // Keep only a safe relative-looking path or basename fallback.
+        const normalizedPath = trimmed.startsWith('/') ? (trimmed.split('/').pop() || trimmed) : trimmed
+        const fileName = normalizedPath.split('/').pop() || normalizedPath
         const fileExt = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() || '' : ''
         if (!fileExt) return
-        detectedFiles.push({ path: fileName, name: fileName, ext: fileExt })
+
+        const dedupeKey = `${normalizedPath}::${fileName}`
+        if (seenFiles.has(dedupeKey)) return
+        seenFiles.add(dedupeKey)
+        detectedFiles.push({ path: normalizedPath, name: fileName, ext: fileExt })
     }
 
-    // 1. Detect absolute paths containing /artifacts/ in message text
-    const filePathRegex = /(\/[^\s\n]+\/artifacts\/[^\s\n,，。)）\]】]+\.[a-zA-Z0-9]+)/g
-    let match
-    const searchText = visibleText || fullText
-    while ((match = filePathRegex.exec(searchText)) !== null) {
-        addFile(match[1])
-    }
-
-    // 2. Detect file links from markdown syntax [text](path.ext) in message text
-    const KNOWN_EXTS = 'md|txt|html|htm|pdf|docx|xlsx|pptx|csv|json|yaml|yml|py|js|ts|sh|png|jpg|jpeg|gif|svg|mp3|wav|mp4'
-    const mdLinkRegex = new RegExp(`\\[([^\\]]*)\\]\\(([^)]+\\.(?:${KNOWN_EXTS}))\\)`, 'gi')
-    while ((match = mdLinkRegex.exec(searchText)) !== null) {
-        addFile(match[2])
-    }
-
-    // 3. Detect file paths from tool call arguments (e.g., write_file, save_file tools)
-    for (const tc of toolCalls) {
-        if (!tc.args) continue
-        for (const [key, value] of Object.entries(tc.args)) {
-            if (typeof value === 'string' && (key === 'path' || key === 'file_path' || key === 'filename' || key === 'file_name')) {
-                addFile(value)
-            }
+    const scanStringForFiles = (value: string) => {
+        // 1) absolute artifacts paths
+        const filePathRegex = /(\/[^\s\n]+\/artifacts\/[^\s\n,，。)）\]】"']+\.[a-zA-Z0-9]+)/g
+        let match
+        while ((match = filePathRegex.exec(value)) !== null) {
+            addFile(match[1])
         }
+
+        // 2) markdown links to local files
+        const KNOWN_EXTS = 'md|txt|html|htm|pdf|docx|xlsx|pptx|csv|json|yaml|yml|py|js|ts|sh|png|jpg|jpeg|gif|svg|mp3|wav|mp4'
+        const mdLinkRegex = new RegExp(`\\[([^\\]]*)\\]\\(([^)]+\\.(?:${KNOWN_EXTS}))\\)`, 'gi')
+        while ((match = mdLinkRegex.exec(value)) !== null) {
+            addFile(match[2])
+        }
+
+        // 3) shell redirection targets in scripts: > file.ext or >> file.ext
+        const redirectionRegex = /(?:^|\s)>>?\s*([^\s"'`<>|]+\.[a-zA-Z0-9]+)/g
+        while ((match = redirectionRegex.exec(value)) !== null) {
+            addFile(match[1])
+        }
+
+        // 4) generic file-like tokens
+        const genericFileRegex = /(?:^|[\s("'`])((?:[./~\\\w-]+\/)?[\w.-]+\.[a-zA-Z0-9]{1,10})(?=$|[\s)"'`,;])/g
+        while ((match = genericFileRegex.exec(value)) !== null) {
+            const candidate = match[1]
+            if (/^(https?:|mailto:)/i.test(candidate)) continue
+            addFile(candidate)
+        }
+    }
+
+    const scanUnknown = (value: unknown) => {
+        if (typeof value === 'string') {
+            scanStringForFiles(value)
+            return
+        }
+        if (!value || typeof value !== 'object') return
+        if (Array.isArray(value)) {
+            for (const item of value) scanUnknown(item)
+            return
+        }
+        for (const field of Object.values(value as Record<string, unknown>)) {
+            scanUnknown(field)
+        }
+    }
+
+    const searchText = visibleText || fullText
+    scanStringForFiles(searchText)
+
+    for (const toolCall of toolCalls) {
+        if (toolCall.args) scanUnknown(toolCall.args)
+        if (toolCall.result !== undefined) scanUnknown(toolCall.result)
+    }
+
+    for (const file of outputFiles) {
+        addFile(file.path || file.name)
     }
 
     // Detect empty assistant response (model returned nothing)
@@ -197,14 +283,14 @@ export default function Message({ message, toolResponses = new Map(), agentId, i
 
     // File capsule component
     const FileCapsule = ({ filePath, fileName, fileExt }: { filePath: string; fileName: string; fileExt: string }) => {
-        const downloadUrl = `${GATEWAY_URL}/agents/${agentId}/files/${encodeURIComponent(fileName)}?key=${GATEWAY_SECRET_KEY}`
+        const downloadUrl = `${GATEWAY_URL}/agents/${agentId}/files/${encodeURIComponent(filePath)}?key=${GATEWAY_SECRET_KEY}`
         const canPreview = isPreviewable(fileExt, fileName, filePath)
 
         const handlePreview = (e: React.MouseEvent) => {
             e.preventDefault()
             openPreview({
                 name: fileName,
-                path: fileName,
+                path: filePath,
                 type: fileExt,
                 agentId: agentId || '',
             })
@@ -235,6 +321,67 @@ export default function Message({ message, toolResponses = new Map(), agentId, i
         )
     }
 
+    const TodoUpdateCard = ({ toolCall }: { toolCall: ToolCallPair }) => {
+        const [expanded, setExpanded] = useState(false)
+        const raw = typeof toolCall.args?.content === 'string' ? toolCall.args.content : ''
+        const { title, tasks } = parseTodoContent(raw)
+        const doneCount = tasks.filter(t => t.done).length
+        const totalCount = tasks.length
+        const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0
+        const status = (() => {
+            if (toolCall.isError) return { label: '更新失败', tone: 'error' as const }
+            if (toolCall.isPending) return { label: '更新中', tone: 'pending' as const }
+            if (totalCount > 0 && doneCount === totalCount) return { label: '已完成', tone: 'success' as const }
+            return { label: '进行中', tone: 'active' as const }
+        })()
+
+        return (
+            <div className={`todo-inline ${expanded ? 'expanded' : ''}`} onClick={() => setExpanded(prev => !prev)}>
+                <div className="todo-inline-summary">
+                    <span className={`tool-call-indicator ${toolCall.isPending ? 'pending' : toolCall.isError ? 'error' : 'success'}`} aria-hidden="true" />
+                    <span className="todo-inline-label">Todo</span>
+                    <span className="todo-inline-title">{title}</span>
+                    {totalCount > 0 && (
+                        <span className="todo-inline-progress">{doneCount}/{totalCount}</span>
+                    )}
+                    <span className={`todo-status-badge ${status.tone}`}>{status.label}</span>
+                    <span className={`todo-inline-chevron ${expanded ? 'open' : ''}`} aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </span>
+                </div>
+                {expanded && totalCount > 0 && (
+                    <div className="todo-inline-details" onClick={e => e.stopPropagation()}>
+                        <div className="todo-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+                            <div className="todo-progress-fill" style={{ width: `${progress}%` }} />
+                        </div>
+                        <div className="todo-list">
+                            {tasks.map((task, idx) => (
+                                <div key={idx} className={`todo-item ${task.done ? 'done' : ''}`}>
+                                    <span className="todo-checkmark" aria-hidden="true">{task.done ? '✓' : '○'}</span>
+                                    <span className="todo-item-text">{task.text}</span>
+                                </div>
+                            ))}
+                        </div>
+                        {toolCall.isError && (
+                            <div className="todo-updated-text error">Todo 更新失败，请稍后重试</div>
+                        )}
+                    </div>
+                )}
+                {toolCall.isPending && (
+                    <div className="tool-call-running" onClick={e => e.stopPropagation()}>
+                        <span className="loading-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </span>
+                        <span>正在更新 Todo...</span>
+                    </div>
+                )}
+            </div>
+        )
+    }
     return (
         <div className={`message ${isUser ? 'user' : 'assistant'} animate-slide-in`}>
             <div className="message-avatar">
@@ -304,7 +451,7 @@ export default function Message({ message, toolResponses = new Map(), agentId, i
                 )}
 
                 {/* File capsules — right after text content, before tool calls */}
-                {!isUser && detectedFiles.length > 0 && (
+                {!isUser && showFileCapsules && detectedFiles.length > 0 && (
                     <div className="file-capsules-container">
                         {detectedFiles.map((file, idx) => (
                             <FileCapsule
@@ -324,14 +471,20 @@ export default function Message({ message, toolResponses = new Map(), agentId, i
 
                 {/* Tool calls */}
                 {toolCalls.map(toolCall => (
-                    <ToolCallDisplay
-                        key={toolCall.id}
-                        name={toolCall.name}
-                        args={toolCall.args}
-                        result={toolCall.result}
-                        isPending={toolCall.isPending}
-                        isError={toolCall.isError}
-                    />
+                    toolCall.name.startsWith('todo__')
+                        ? (
+                            <TodoUpdateCard key={toolCall.id} toolCall={toolCall} />
+                        )
+                        : (
+                            <ToolCallDisplay
+                                key={toolCall.id}
+                                name={toolCall.name}
+                                args={toolCall.args}
+                                result={toolCall.result}
+                                isPending={toolCall.isPending}
+                                isError={toolCall.isError}
+                            />
+                        )
                 ))}
 
                 {/* Streaming indicator on last assistant message */}

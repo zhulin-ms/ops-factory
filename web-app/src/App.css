@@ -1607,11 +1607,11 @@ textarea {
    ======================================== */
 .tool-call {
     margin: var(--spacing-3) 0;
-    border: none;
+    border: 1px solid rgba(0, 0, 0, 0.04);
     border-radius: 12px;
     overflow: hidden;
     background: var(--surface-1);
-    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .tool-call-header {
@@ -1886,9 +1886,69 @@ textarea {
     color: #b42318;
 }
 
-.todo-association-text {
-    color: #667085;
-    font-size: 0.78rem;
+/* Inline collapsible Todo card */
+.todo-inline {
+    margin: var(--spacing-3) 0;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    border-radius: 10px;
+    background: var(--surface-1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+    transition: box-shadow var(--transition-fast);
+    overflow: hidden;
+}
+
+.todo-inline:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.todo-inline-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: var(--font-size-sm);
+    user-select: none;
+}
+
+.todo-inline-label {
+    font-weight: 600;
+    color: var(--text-strong);
+    flex-shrink: 0;
+}
+
+.todo-inline-title {
+    color: var(--text-body);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.todo-inline-progress {
+    flex-shrink: 0;
+    color: var(--text-soft);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.todo-inline-chevron {
+    flex-shrink: 0;
+    margin-left: auto;
+    color: var(--text-soft);
+    transition: transform var(--transition-fast);
+    display: flex;
+    align-items: center;
+}
+
+.todo-inline-chevron.open {
+    transform: rotate(180deg);
+}
+
+.todo-inline-details {
+    padding: 0 14px 12px;
+    display: grid;
+    gap: 10px;
 }
 
 /* ========================================
