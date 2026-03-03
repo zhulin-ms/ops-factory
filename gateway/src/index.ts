@@ -1,8 +1,9 @@
 import http from 'node:http'
+import https from 'node:https'
 import { PassThrough } from 'node:stream'
 import { join } from 'node:path'
 import { mkdir, rename, readdir, rm } from 'node:fs/promises'
-import { existsSync, mkdirSync, writeFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'node:fs'
 import httpProxy from 'http-proxy'
 import { loadGatewayConfig } from './config.js'
 import { InstanceManager, SYSTEM_USER } from './instance-manager.js'
@@ -146,11 +147,11 @@ async function main() {
 
   // ===== HTTP Server =====
 
-  const server = http.createServer(async (req, res) => {
+  const requestHandler = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     const url = req.url || '/'
 
     // CORS
-    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Origin', config.corsOrigin)
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-secret-key, x-user-id')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     if (req.method === 'OPTIONS') {
@@ -921,7 +922,11 @@ async function main() {
 
     res.writeHead(404, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: 'Not found. Use /agents/:id/* to reach a goosed instance.' }))
-  })
+  }
+
+  const server = config.tls.enabled
+    ? https.createServer({ cert: readFileSync(config.tls.cert), key: readFileSync(config.tls.key) }, requestHandler)
+    : http.createServer(requestHandler)
 
   // ===== Helper: probe session across user + sys instances =====
 
@@ -965,7 +970,8 @@ async function main() {
   process.on('SIGTERM', shutdown)
 
   server.listen(config.port, config.host, () => {
-    console.log(`Gateway listening on http://${config.host}:${config.port}`)
+    const proto = config.tls.enabled ? 'https' : 'http'
+    console.log(`Gateway listening on ${proto}://${config.host}:${config.port}`)
     console.log(`  Idle timeout: ${config.idleTimeoutMs / 1000}s`)
     for (const a of config.agents) {
       console.log(`  Agent: ${a.id} (instances spawn on demand)`)

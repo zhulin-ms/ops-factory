@@ -7,6 +7,7 @@ import net from 'node:net'
 
 const PROJECT_ROOT = resolve(import.meta.dirname, '..')
 const GATEWAY_DIR = join(PROJECT_ROOT, 'gateway')
+const MOCK_GATEWAY_DIR = join(PROJECT_ROOT, 'gateway-mock')
 const SECRET_KEY = 'test-secret'
 
 export interface GatewayHandle {
@@ -128,6 +129,92 @@ export async function startGateway(): Promise<GatewayHandle> {
       await sleep(2000)
       if (!child.killed) child.kill('SIGKILL')
       await sleep(500)
+    },
+  }
+}
+
+/**
+ * Start the lightweight mock gateway used by webapp-only testing.
+ */
+export async function startMockGateway(): Promise<GatewayHandle> {
+  const port = await freePort()
+  const baseUrl = `http://127.0.0.1:${port}`
+
+  const child = spawn('npx', ['tsx', 'src/index.ts'], {
+    cwd: MOCK_GATEWAY_DIR,
+    env: {
+      ...process.env,
+      GATEWAY_HOST: '127.0.0.1',
+      GATEWAY_PORT: String(port),
+      GATEWAY_SECRET_KEY: SECRET_KEY,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  const logs: string[] = []
+  child.stdout?.on('data', (d: Buffer) => {
+    const line = d.toString().trim()
+    if (line) logs.push(`[mock:out] ${line}`)
+  })
+  child.stderr?.on('data', (d: Buffer) => {
+    const line = d.toString().trim()
+    if (line) logs.push(`[mock:err] ${line}`)
+  })
+
+  const maxWait = 15_000
+  const start = Date.now()
+  while (Date.now() - start < maxWait) {
+    try {
+      const res = await fetch(`${baseUrl}/status`, {
+        headers: { 'x-secret-key': SECRET_KEY },
+        signal: AbortSignal.timeout(1500),
+      })
+      if (res.ok) break
+    } catch {
+      // not ready yet
+    }
+    await sleep(250)
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/status`, {
+      headers: { 'x-secret-key': SECRET_KEY },
+      signal: AbortSignal.timeout(3000),
+    })
+    if (!res.ok) {
+      console.error('Mock gateway logs:', logs.join('\n'))
+      throw new Error(`Mock gateway failed to start (HTTP ${res.status})`)
+    }
+  } catch (err) {
+    console.error('Mock gateway logs:', logs.join('\n'))
+    child.kill('SIGKILL')
+    throw new Error(`Mock gateway failed to start: ${err}`)
+  }
+
+  const headers = (userId?: string) => {
+    const h: Record<string, string> = {
+      'x-secret-key': SECRET_KEY,
+      'Content-Type': 'application/json',
+    }
+    if (userId) h['x-user-id'] = userId
+    return h
+  }
+
+  return {
+    port,
+    baseUrl,
+    secretKey: SECRET_KEY,
+    process: child,
+    logs,
+    fetch: (path, init) =>
+      fetch(`${baseUrl}${path}`, { ...init, headers: { ...headers(), ...init?.headers } }),
+    fetchAs: (userId, path, init) =>
+      fetch(`${baseUrl}${path}`, { ...init, headers: { ...headers(userId), ...init?.headers } }),
+    stop: async () => {
+      child.kill('SIGTERM')
+      await sleep(1000)
+      if (!child.killed) child.kill('SIGKILL')
+      await sleep(250)
     },
   }
 }

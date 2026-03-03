@@ -51,10 +51,18 @@ export interface LangfuseConfig {
   secretKey: string
 }
 
+export interface TlsConfig {
+  enabled: boolean
+  cert: string
+  key: string
+}
+
 export interface GatewayConfig {
   host: string
   port: number
   secretKey: string
+  corsOrigin: string
+  tls: TlsConfig
   projectRoot: string
   agentsDir: string
   usersDir: string
@@ -75,6 +83,17 @@ export function loadGatewayConfig(): GatewayConfig {
   const host = process.env.GATEWAY_HOST || '0.0.0.0'
   const port = parseInt(process.env.GATEWAY_PORT || '3000', 10)
   const secretKey = process.env.GATEWAY_SECRET_KEY || 'test'
+  const corsOrigin = process.env.CORS_ORIGIN || '*'
+
+  // Optional TLS — set TLS_CERT and TLS_KEY to enable HTTPS directly on Gateway
+  const tlsCert = process.env.TLS_CERT || ''
+  const tlsKey = process.env.TLS_KEY || ''
+  const tls: TlsConfig = {
+    enabled: !!(tlsCert && tlsKey),
+    cert: tlsCert,
+    key: tlsKey,
+  }
+
   // Default to repository root regardless of current working directory.
   const projectRoot = resolve(process.env.PROJECT_ROOT || join(__dirname, '../..'))
   const agentsDir = resolve(process.env.AGENTS_DIR || join(projectRoot, 'agents'))
@@ -177,6 +196,8 @@ Be precise and factual.`
     host,
     port,
     secretKey,
+    corsOrigin,
+    tls,
     projectRoot,
     agentsDir,
     usersDir,
