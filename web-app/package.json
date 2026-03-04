@@ -5,8 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "startup": "../scripts/startup.sh",
-    "shutdown": "../scripts/shutdown.sh",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest"

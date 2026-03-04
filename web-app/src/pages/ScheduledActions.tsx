@@ -403,7 +403,7 @@ export default function ScheduledActions() {
                                 </button>
                                 <button type="button" className="btn btn-secondary" onClick={() => handleRunNow(job)}>{t('scheduler.runNow')}</button>
                                 <button type="button" className="btn btn-secondary" onClick={() => handleViewRuns(job)}>{t('scheduler.viewRuns')}</button>
-                                <button type="button" className="btn btn-danger" onClick={() => handleDelete(job)}>{t('common.delete')}</button>
+                                <button type="button" className="btn btn-secondary agent-delete-button" onClick={() => handleDelete(job)}>{t('common.delete')}</button>
                             </div>
                         </div>
                     ))}
