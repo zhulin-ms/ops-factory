@@ -3,9 +3,8 @@
  *
  * Verifies:
  * - config.yaml is loaded and values are used
- * - Environment variables override config.yaml values
  * - Missing required fields cause startup/build failure
- * - Missing config.yaml falls back to env vars gracefully
+ * - CONFIG_PATH env var selects config file location
  * - Docker components generate .env from config.yaml
  * - config.yaml.example files exist for all components
  */
@@ -168,14 +167,6 @@ describe('Gateway config loading', () => {
   it('loads values from config.yaml', async () => {
     const { stdout, code } = await runNode(configScript(), {
       cwd: GATEWAY_DIR,
-      env: {
-        // Clear env vars so config.yaml is the sole source
-        GATEWAY_HOST: '',
-        GATEWAY_PORT: '',
-        GATEWAY_SECRET_KEY: '',
-        CORS_ORIGIN: '',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
@@ -186,32 +177,39 @@ describe('Gateway config loading', () => {
     expect(cfg.corsOrigin).toBe('*')
   })
 
-  it('env vars override config.yaml values', async () => {
+  it('CONFIG_PATH overrides default config file location', async () => {
+    const tmpDir = await prepareTmpDir('gw-config-path', GATEWAY_DIR, {
+      subdirs: ['src', 'config'],
+    })
+    await copyFile(join(GATEWAY_DIR, 'src', 'config.ts'), join(tmpDir, 'src', 'config.ts'))
+    await writeFile(join(tmpDir, 'config', 'agents.yaml'), 'agents: []\n')
+
+    const customConfigPath = join(tmpDir, 'custom-config.yaml')
+    await writeFile(customConfigPath, [
+      'server:',
+      '  host: "192.168.1.100"',
+      '  port: 4000',
+      '  secretKey: "custom-key"',
+      '  corsOrigin: "https://example.com"',
+      'paths:',
+      `  goosedBin: "goosed"`,
+    ].join('\n'))
+
     const { stdout, code } = await runNode(configScript(), {
-      cwd: GATEWAY_DIR,
-      env: {
-        GATEWAY_HOST: '192.168.1.100',
-        GATEWAY_PORT: '4000',
-        GATEWAY_SECRET_KEY: 'env-override-key',
-        CORS_ORIGIN: 'https://example.com',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
+      cwd: tmpDir,
+      env: { CONFIG_PATH: customConfigPath },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
     expect(cfg.host).toBe('192.168.1.100')
     expect(cfg.port).toBe(4000)
-    expect(cfg.secretKey).toBe('env-override-key')
+    expect(cfg.secretKey).toBe('custom-key')
     expect(cfg.corsOrigin).toBe('https://example.com')
   })
 
   it('loads idle config from config.yaml', async () => {
     const { stdout, code } = await runNode(configScript(), {
       cwd: GATEWAY_DIR,
-      env: {
-        GATEWAY_SECRET_KEY: 'test',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
@@ -220,27 +218,9 @@ describe('Gateway config loading', () => {
     expect(cfg.idleCheckIntervalMs).toBe(60_000)
   })
 
-  it('env IDLE_TIMEOUT_MS overrides config.yaml idleTimeoutMinutes', async () => {
-    const { stdout, code } = await runNode(configScript(), {
-      cwd: GATEWAY_DIR,
-      env: {
-        GATEWAY_SECRET_KEY: 'test',
-        IDLE_TIMEOUT_MS: '30000',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
-    })
-    expect(code).toBe(0)
-    const cfg = JSON.parse(stdout.trim())
-    expect(cfg.idleTimeoutMs).toBe(30_000)
-  })
-
   it('loads upload config from config.yaml', async () => {
     const { stdout, code } = await runNode(configScript(), {
       cwd: GATEWAY_DIR,
-      env: {
-        GATEWAY_SECRET_KEY: 'test',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
@@ -252,10 +232,6 @@ describe('Gateway config loading', () => {
   it('loads officePreview config from config.yaml (not agents.yaml)', async () => {
     const { stdout, code } = await runNode(configScript(), {
       cwd: GATEWAY_DIR,
-      env: {
-        GATEWAY_SECRET_KEY: 'test',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
@@ -263,48 +239,56 @@ describe('Gateway config loading', () => {
     expect(cfg.officePreview.onlyofficeUrl).toBe('http://localhost:8080')
   })
 
-  it('throws error when secretKey is missing from both sources', async () => {
+  it('throws error when secretKey is missing', async () => {
     const tmpDir = await prepareTmpDir('gw-no-secret', GATEWAY_DIR, {
       subdirs: ['src', 'config'],
     })
     await copyFile(join(GATEWAY_DIR, 'src', 'config.ts'), join(tmpDir, 'src', 'config.ts'))
-    await writeFile(join(tmpDir, 'config.yaml'), 'server:\n  host: "0.0.0.0"\n  port: 3000\n')
+    await writeFile(join(tmpDir, 'config.yaml'), 'server:\n  host: "0.0.0.0"\n  port: 3000\npaths:\n  goosedBin: "goosed"\n')
     await writeFile(join(tmpDir, 'config', 'agents.yaml'), 'agents: []\n')
 
     const { stderr, code } = await runNode(configScript(), {
       cwd: tmpDir,
-      env: {
-        GATEWAY_SECRET_KEY: '',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
     })
     expect(code).not.toBe(0)
     expect(stderr).toContain('CONFIG_ERROR')
     expect(stderr).toContain('secretKey')
   })
 
-  it('works without config.yaml (falls back to env vars)', async () => {
-    const tmpDir = await prepareTmpDir('gw-no-yaml', GATEWAY_DIR, {
+  it('throws error when goosedBin is missing', async () => {
+    const tmpDir = await prepareTmpDir('gw-no-goosed', GATEWAY_DIR, {
       subdirs: ['src', 'config'],
     })
     await copyFile(join(GATEWAY_DIR, 'src', 'config.ts'), join(tmpDir, 'src', 'config.ts'))
+    await writeFile(join(tmpDir, 'config.yaml'), 'server:\n  secretKey: "test"\n')
     await writeFile(join(tmpDir, 'config', 'agents.yaml'), 'agents: []\n')
-    // No config.yaml
+
+    const { stderr, code } = await runNode(configScript(), {
+      cwd: tmpDir,
+    })
+    expect(code).not.toBe(0)
+    expect(stderr).toContain('CONFIG_ERROR')
+    expect(stderr).toContain('goosedBin')
+  })
+
+  it('uses defaults for optional fields when config.yaml is minimal', async () => {
+    const tmpDir = await prepareTmpDir('gw-minimal', GATEWAY_DIR, {
+      subdirs: ['src', 'config'],
+    })
+    await copyFile(join(GATEWAY_DIR, 'src', 'config.ts'), join(tmpDir, 'src', 'config.ts'))
+    await writeFile(join(tmpDir, 'config.yaml'), 'server:\n  secretKey: "test"\npaths:\n  goosedBin: "goosed"\n')
+    await writeFile(join(tmpDir, 'config', 'agents.yaml'), 'agents: []\n')
 
     const { stdout, code } = await runNode(configScript(), {
       cwd: tmpDir,
-      env: {
-        GATEWAY_HOST: '127.0.0.1',
-        GATEWAY_PORT: '5555',
-        GATEWAY_SECRET_KEY: 'env-only-key',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
-    expect(cfg.host).toBe('127.0.0.1')
-    expect(cfg.port).toBe(5555)
-    expect(cfg.secretKey).toBe('env-only-key')
+    expect(cfg.host).toBe('0.0.0.0')
+    expect(cfg.port).toBe(3000)
+    expect(cfg.corsOrigin).toBe('*')
+    expect(cfg.idleTimeoutMs).toBe(900_000)
+    expect(cfg.upload.maxFileSizeMb).toBe(10)
   })
 
   it('agents.yaml no longer contains officePreview or idleTimeoutMinutes', async () => {
@@ -317,15 +301,51 @@ describe('Gateway config loading', () => {
   it('loads agents list from agents.yaml', async () => {
     const { stdout, code } = await runNode(configScript(), {
       cwd: GATEWAY_DIR,
-      env: {
-        GATEWAY_SECRET_KEY: 'test',
-        PROJECT_ROOT: PROJECT_ROOT,
-      },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
     expect(cfg.agents.length).toBeGreaterThan(0)
     expect(cfg.agents[0].id).toBe('universal-agent')
+  })
+
+  it('ignores env vars — they do NOT override config.yaml', async () => {
+    // Pass env vars that would have overridden config.yaml in the old system
+    const { stdout, code } = await runNode(configScript(), {
+      cwd: GATEWAY_DIR,
+      env: {
+        GATEWAY_HOST: '192.168.99.99',
+        GATEWAY_PORT: '9999',
+        GATEWAY_SECRET_KEY: 'env-should-be-ignored',
+        CORS_ORIGIN: 'https://evil.com',
+        IDLE_TIMEOUT_MS: '1',
+        VISION_MODE: 'off',
+      },
+    })
+    expect(code).toBe(0)
+    const cfg = JSON.parse(stdout.trim())
+    // Values should come from config.yaml, not env vars
+    expect(cfg.host).toBe('0.0.0.0')
+    expect(cfg.port).toBe(3000)
+    expect(cfg.secretKey).toBe('test')
+    expect(cfg.corsOrigin).toBe('*')
+    expect(cfg.idleTimeoutMs).toBe(900_000)
+    expect(cfg.vision.mode).toBe('passthrough')
+  })
+
+  it('fails without config.yaml and without env vars', async () => {
+    const tmpDir = await prepareTmpDir('gw-no-yaml-no-env', GATEWAY_DIR, {
+      subdirs: ['src', 'config'],
+    })
+    await copyFile(join(GATEWAY_DIR, 'src', 'config.ts'), join(tmpDir, 'src', 'config.ts'))
+    await writeFile(join(tmpDir, 'config', 'agents.yaml'), 'agents: []\n')
+    // No config.yaml at all
+
+    const { stderr, code } = await runNode(configScript(), {
+      cwd: tmpDir,
+    })
+    // Should fail because secretKey is required and there's no env var fallback
+    expect(code).not.toBe(0)
+    expect(stderr).toContain('CONFIG_ERROR')
   })
 })
 
@@ -348,12 +368,6 @@ describe('Prometheus Exporter config loading', () => {
   it('loads values from config.yaml', async () => {
     const { stdout, code } = await runNode(configScript(), {
       cwd: EXPORTER_DIR,
-      env: {
-        EXPORTER_PORT: '',
-        GATEWAY_URL: '',
-        GATEWAY_SECRET_KEY: '',
-        COLLECT_TIMEOUT_MS: '',
-      },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
@@ -363,38 +377,22 @@ describe('Prometheus Exporter config loading', () => {
     expect(cfg.collectTimeoutMs).toBe(5000)
   })
 
-  it('env vars override config.yaml values', async () => {
-    const { stdout, code } = await runNode(configScript(), {
-      cwd: EXPORTER_DIR,
-      env: {
-        EXPORTER_PORT: '9999',
-        GATEWAY_URL: 'http://custom-gw:4000',
-        GATEWAY_SECRET_KEY: 'custom-key',
-        COLLECT_TIMEOUT_MS: '10000',
-      },
-    })
-    expect(code).toBe(0)
-    const cfg = JSON.parse(stdout.trim())
-    expect(cfg.port).toBe(9999)
-    expect(cfg.gatewayUrl).toBe('http://custom-gw:4000')
-    expect(cfg.gatewaySecretKey).toBe('custom-key')
-    expect(cfg.collectTimeoutMs).toBe(10_000)
-  })
-
   it('strips trailing slash from gatewayUrl', async () => {
+    const tmpDir = await prepareTmpDir('exp-trailing-slash', EXPORTER_DIR, {
+      subdirs: ['src'],
+    })
+    await copyFile(join(EXPORTER_DIR, 'src', 'config.ts'), join(tmpDir, 'src', 'config.ts'))
+    await writeFile(join(tmpDir, 'config.yaml'), 'gatewayUrl: "http://gw:3000/"\ngatewaySecretKey: "key"\n')
+
     const { stdout, code } = await runNode(configScript(), {
-      cwd: EXPORTER_DIR,
-      env: {
-        GATEWAY_URL: 'http://gw:3000/',
-        GATEWAY_SECRET_KEY: 'key',
-      },
+      cwd: tmpDir,
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
     expect(cfg.gatewayUrl).toBe('http://gw:3000')
   })
 
-  it('throws error when gatewayUrl is missing from both sources', async () => {
+  it('throws error when gatewayUrl is missing', async () => {
     const tmpDir = await prepareTmpDir('exp-no-url', EXPORTER_DIR, {
       subdirs: ['src'],
     })
@@ -403,14 +401,13 @@ describe('Prometheus Exporter config loading', () => {
 
     const { stderr, code } = await runNode(configScript(), {
       cwd: tmpDir,
-      env: { GATEWAY_URL: '', GATEWAY_SECRET_KEY: 'key' },
     })
     expect(code).not.toBe(0)
     expect(stderr).toContain('CONFIG_ERROR')
     expect(stderr).toContain('gatewayUrl')
   })
 
-  it('throws error when gatewaySecretKey is missing from both sources', async () => {
+  it('throws error when gatewaySecretKey is missing', async () => {
     const tmpDir = await prepareTmpDir('exp-no-key', EXPORTER_DIR, {
       subdirs: ['src'],
     })
@@ -419,33 +416,66 @@ describe('Prometheus Exporter config loading', () => {
 
     const { stderr, code } = await runNode(configScript(), {
       cwd: tmpDir,
-      env: { GATEWAY_URL: 'http://x:3000', GATEWAY_SECRET_KEY: '' },
     })
     expect(code).not.toBe(0)
     expect(stderr).toContain('CONFIG_ERROR')
     expect(stderr).toContain('gatewaySecretKey')
   })
 
-  it('works without config.yaml (falls back to env vars)', async () => {
-    const tmpDir = await prepareTmpDir('exp-no-yaml', EXPORTER_DIR, {
+  it('uses defaults for optional fields when config.yaml is minimal', async () => {
+    const tmpDir = await prepareTmpDir('exp-minimal', EXPORTER_DIR, {
       subdirs: ['src'],
     })
     await copyFile(join(EXPORTER_DIR, 'src', 'config.ts'), join(tmpDir, 'src', 'config.ts'))
-    // No config.yaml
+    await writeFile(join(tmpDir, 'config.yaml'), 'gatewayUrl: "http://gw:3000"\ngatewaySecretKey: "key"\n')
 
     const { stdout, code } = await runNode(configScript(), {
       cwd: tmpDir,
+    })
+    expect(code).toBe(0)
+    const cfg = JSON.parse(stdout.trim())
+    expect(cfg.port).toBe(9091)
+    expect(cfg.collectTimeoutMs).toBe(5000)
+  })
+
+  it('ignores env vars — they do NOT override config.yaml', async () => {
+    const { stdout, code } = await runNode(configScript(), {
+      cwd: EXPORTER_DIR,
       env: {
         EXPORTER_PORT: '7777',
-        GATEWAY_URL: 'http://env-gw:3000',
-        GATEWAY_SECRET_KEY: 'env-key',
+        GATEWAY_URL: 'http://env-should-be-ignored:9999',
+        GATEWAY_SECRET_KEY: 'env-ignored-key',
+        COLLECT_TIMEOUT_MS: '99999',
       },
     })
     expect(code).toBe(0)
     const cfg = JSON.parse(stdout.trim())
-    expect(cfg.port).toBe(7777)
-    expect(cfg.gatewayUrl).toBe('http://env-gw:3000')
-    expect(cfg.gatewaySecretKey).toBe('env-key')
+    // Values should come from config.yaml, not env vars
+    expect(cfg.port).toBe(9091)
+    expect(cfg.gatewayUrl).toBe('http://127.0.0.1:3000')
+    expect(cfg.gatewaySecretKey).toBe('test')
+    expect(cfg.collectTimeoutMs).toBe(5000)
+  })
+
+  it('CONFIG_PATH overrides default config file location', async () => {
+    const tmpDir = await prepareTmpDir('exp-config-path', EXPORTER_DIR, {
+      subdirs: ['src'],
+    })
+    await copyFile(join(EXPORTER_DIR, 'src', 'config.ts'), join(tmpDir, 'src', 'config.ts'))
+
+    const customConfigPath = join(tmpDir, 'custom-exporter.yaml')
+    await writeFile(customConfigPath, 'port: 8888\ngatewayUrl: "http://custom:4000"\ngatewaySecretKey: "custom-key"\ncollectTimeoutMs: 2000\n')
+
+    const { stdout, code } = await runNode(configScript(), {
+      cwd: tmpDir,
+      env: { CONFIG_PATH: customConfigPath },
+    })
+    expect(code).toBe(0)
+    const cfg = JSON.parse(stdout.trim())
+    expect(cfg.port).toBe(8888)
+    expect(cfg.gatewayUrl).toBe('http://custom:4000')
+    expect(cfg.gatewaySecretKey).toBe('custom-key')
+    expect(cfg.collectTimeoutMs).toBe(2000)
   })
 })
 
@@ -468,8 +498,8 @@ describe('Web App config loading', () => {
     expect(content).toContain('gatewaySecretKey')
   })
 
-  it('vite build fails when config is missing from both sources', async () => {
-    // Create a temp webapp dir with no config.yaml and no .env
+  it('vite build fails when config is missing', async () => {
+    // Create a temp webapp dir with no config.yaml
     const tmpDir = join(TMP_DIR, 'webapp-no-config')
     await mkdir(tmpDir, { recursive: true })
 
@@ -502,29 +532,10 @@ describe('Web App config loading', () => {
         }
         console.log('OK');
       `],
-      {
-        cwd: WEBAPP_DIR,
-        env: {
-          GATEWAY_URL: '',
-          GATEWAY_SECRET_KEY: '',
-        },
-      },
+      { cwd: WEBAPP_DIR },
     )
     expect(code).not.toBe(0)
     expect(stderr).toContain('MISSING')
-  })
-
-  it('env vars override config.yaml for vite', async () => {
-    // Build with env var overrides — should succeed
-    const { code } = await run('npx', ['vite', 'build'], {
-      cwd: WEBAPP_DIR,
-      env: {
-        GATEWAY_URL: 'http://override:9000',
-        GATEWAY_SECRET_KEY: 'override-key',
-      },
-      timeout: 30_000,
-    })
-    expect(code).toBe(0)
   })
 })
 
@@ -802,22 +813,24 @@ describe('Langfuse ctl.sh has config.yaml support', () => {
 })
 
 // =============================================================================
-// 11. Orchestrator updated comments
+// 11. Orchestrator documentation
 // =============================================================================
 describe('Orchestrator config documentation', () => {
-  it('scripts/ctl.sh documents config.yaml as primary source', async () => {
+  it('scripts/ctl.sh documents service toggles', async () => {
     const content = await readFile(join(PROJECT_ROOT, 'scripts', 'ctl.sh'), 'utf-8')
-    expect(content).toContain('config.yaml')
-    expect(content).toMatch(/override/i)
+    expect(content).toContain('ENABLE_ONLYOFFICE')
+    expect(content).toContain('ENABLE_LANGFUSE')
+    expect(content).toContain('ENABLE_EXPORTER')
   })
 })
 
 // =============================================================================
-// 12. Integration: Gateway starts with config.yaml
+// 12. Integration: Gateway starts with config.yaml via CONFIG_PATH
 // =============================================================================
 describe('Gateway starts with config.yaml', () => {
   let child: ChildProcess | null = null
   let port: number
+  let tmpConfigPath: string
 
   afterAll(async () => {
     if (child) {
@@ -825,19 +838,33 @@ describe('Gateway starts with config.yaml', () => {
       await sleep(1000)
       if (!child.killed) child.kill('SIGKILL')
     }
+    try { await rm(tmpConfigPath) } catch { /* ignore */ }
   })
 
   it('gateway process starts and responds on /status', async () => {
     port = await freePort()
 
+    // Write a temp config.yaml for this test
+    tmpConfigPath = join(TMP_DIR, `gateway-integration-${port}.yaml`)
+    const configContent = [
+      'server:',
+      '  host: "127.0.0.1"',
+      `  port: ${port}`,
+      '  secretKey: "config-test-key"',
+      'paths:',
+      `  projectRoot: "${PROJECT_ROOT}"`,
+      `  goosedBin: "${process.env.GOOSED_BIN || 'goosed'}"`,
+      'idle:',
+      '  timeoutMinutes: 0.5',
+      '  checkIntervalMs: 5000',
+    ].join('\n')
+    await writeFile(tmpConfigPath, configContent)
+
     child = spawn('npx', ['tsx', 'src/index.ts'], {
       cwd: GATEWAY_DIR,
       env: {
         ...process.env,
-        GATEWAY_HOST: '127.0.0.1',
-        GATEWAY_PORT: String(port),
-        GATEWAY_SECRET_KEY: 'config-test-key',
-        PROJECT_ROOT,
+        CONFIG_PATH: tmpConfigPath,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -871,11 +898,12 @@ describe('Gateway starts with config.yaml', () => {
 })
 
 // =============================================================================
-// 13. Integration: Exporter starts with config.yaml
+// 13. Integration: Exporter starts with config.yaml via CONFIG_PATH
 // =============================================================================
 describe('Exporter starts with config.yaml', () => {
   let child: ChildProcess | null = null
   let port: number
+  let tmpConfigPath: string
 
   afterAll(async () => {
     if (child) {
@@ -883,17 +911,27 @@ describe('Exporter starts with config.yaml', () => {
       await sleep(500)
       if (!child.killed) child.kill('SIGKILL')
     }
+    try { await rm(tmpConfigPath) } catch { /* ignore */ }
   })
 
   it('exporter process starts and responds on /health', async () => {
     port = await freePort()
 
+    // Write a temp config.yaml for this test
+    tmpConfigPath = join(TMP_DIR, `exporter-integration-${port}.yaml`)
+    const configContent = [
+      `port: ${port}`,
+      'gatewayUrl: "http://127.0.0.1:3000"',
+      'gatewaySecretKey: "test"',
+      'collectTimeoutMs: 3000',
+    ].join('\n')
+    await writeFile(tmpConfigPath, configContent)
+
     child = spawn('npx', ['tsx', 'src/index.ts'], {
       cwd: EXPORTER_DIR,
       env: {
         ...process.env,
-        EXPORTER_PORT: String(port),
-        // Use config.yaml defaults for gatewayUrl/key
+        CONFIG_PATH: tmpConfigPath,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -923,4 +961,104 @@ describe('Exporter starts with config.yaml', () => {
 
     expect(ready).toBe(true)
   }, 30_000)
+})
+
+// =============================================================================
+// 14. E2E: Gateway ignores env vars, responds with config.yaml values
+// =============================================================================
+describe('E2E: Gateway uses config.yaml exclusively', () => {
+  let child: ChildProcess | null = null
+  let port: number
+  let tmpConfigPath: string
+
+  afterAll(async () => {
+    if (child) {
+      child.kill('SIGTERM')
+      await sleep(1000)
+      if (!child.killed) child.kill('SIGKILL')
+    }
+    try { await rm(tmpConfigPath) } catch { /* ignore */ }
+  })
+
+  it('gateway starts on config.yaml port, ignoring GATEWAY_PORT env var', async () => {
+    port = await freePort()
+    const wrongPort = port + 1
+
+    tmpConfigPath = join(TMP_DIR, `gateway-e2e-${port}.yaml`)
+    const configContent = [
+      'server:',
+      '  host: "127.0.0.1"',
+      `  port: ${port}`,
+      '  secretKey: "e2e-secret"',
+      'paths:',
+      `  projectRoot: "${PROJECT_ROOT}"`,
+      `  goosedBin: "${process.env.GOOSED_BIN || 'goosed'}"`,
+      'idle:',
+      '  timeoutMinutes: 0.5',
+      '  checkIntervalMs: 5000',
+    ].join('\n')
+    await writeFile(tmpConfigPath, configContent)
+
+    child = spawn('npx', ['tsx', 'src/index.ts'], {
+      cwd: GATEWAY_DIR,
+      env: {
+        ...process.env,
+        CONFIG_PATH: tmpConfigPath,
+        // These env vars should be completely ignored
+        GATEWAY_PORT: String(wrongPort),
+        GATEWAY_HOST: '0.0.0.0',
+        GATEWAY_SECRET_KEY: 'wrong-secret',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    const logs: string[] = []
+    child.stdout?.on('data', (d: Buffer) => logs.push(d.toString().trim()))
+    child.stderr?.on('data', (d: Buffer) => logs.push(d.toString().trim()))
+
+    // Wait for gateway on the CORRECT port (from config.yaml)
+    const maxWait = 30_000
+    const start = Date.now()
+    let ready = false
+    while (Date.now() - start < maxWait) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/status`, {
+          headers: { 'x-secret-key': 'e2e-secret' },
+          signal: AbortSignal.timeout(2000),
+        })
+        if (res.ok) {
+          ready = true
+          break
+        }
+      } catch {
+        // not ready
+      }
+      await sleep(500)
+    }
+    expect(ready).toBe(true)
+
+    // Verify the WRONG port has nothing (env var was ignored)
+    try {
+      const res = await fetch(`http://127.0.0.1:${wrongPort}/status`, {
+        headers: { 'x-secret-key': 'wrong-secret' },
+        signal: AbortSignal.timeout(1000),
+      })
+      // If we get here, something is listening on the wrong port — fail
+      expect(res.ok).toBe(false)
+    } catch {
+      // Expected — nothing listening on wrongPort
+    }
+
+    // Verify the config.yaml secret key works (not the env var one)
+    const res = await fetch(`http://127.0.0.1:${port}/status`, {
+      headers: { 'x-secret-key': 'e2e-secret' },
+    })
+    expect(res.ok).toBe(true)
+
+    // Verify the env var secret key does NOT work
+    const badRes = await fetch(`http://127.0.0.1:${port}/status`, {
+      headers: { 'x-secret-key': 'wrong-secret' },
+    })
+    expect(badRes.status).toBe(401)
+  }, 60_000)
 })

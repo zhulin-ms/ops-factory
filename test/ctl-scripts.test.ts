@@ -163,32 +163,25 @@ describe('no args', () => {
 // 6. Status when services are not running
 // =============================================================================
 describe('status when not running', () => {
-  // Use unusual ports so we don't collide with any running services
-  const unusedEnv = {
-    GATEWAY_PORT: '19876',
-    VITE_PORT: '19877',
-    EXPORTER_PORT: '19878',
-    ONLYOFFICE_PORT: '19879',
-    LANGFUSE_PORT: '19880',
-    GATEWAY_SECRET_KEY: 'test-unused',
-  }
+  // Scripts now read port from their own config.yaml
+  // These tests work as long as the real services aren't running during test execution
 
   it('gateway status reports not running', async () => {
-    const { stdout, stderr, code } = await runCtl('gateway', ['status'], unusedEnv)
+    const { stdout, stderr, code } = await runCtl('gateway', ['status'])
     const output = stdout + stderr
     expect(code).not.toBe(0)
     expect(output).toMatch(/not running|FAIL/)
   })
 
   it('webapp status reports not running', async () => {
-    const { stdout, stderr, code } = await runCtl('webapp', ['status'], unusedEnv)
+    const { stdout, stderr, code } = await runCtl('webapp', ['status'])
     const output = stdout + stderr
     expect(code).not.toBe(0)
     expect(output).toMatch(/not running|FAIL/)
   })
 
   it('exporter status reports not running', async () => {
-    const { stdout, stderr, code } = await runCtl('exporter', ['status'], unusedEnv)
+    const { stdout, stderr, code } = await runCtl('exporter', ['status'])
     const output = stdout + stderr
     expect(code).not.toBe(0)
     expect(output).toMatch(/not running|FAIL/)
@@ -199,25 +192,18 @@ describe('status when not running', () => {
 // 7. Shutdown when nothing is running (should be graceful)
 // =============================================================================
 describe('shutdown when nothing running', () => {
-  const unusedEnv = {
-    GATEWAY_PORT: '19876',
-    VITE_PORT: '19877',
-    EXPORTER_PORT: '19878',
-    GATEWAY_SECRET_KEY: 'test-unused',
-  }
-
   it('gateway shutdown is graceful', async () => {
-    const { code } = await runCtl('gateway', ['shutdown'], unusedEnv)
+    const { code } = await runCtl('gateway', ['shutdown'])
     expect(code).toBe(0)
   })
 
   it('webapp shutdown is graceful', async () => {
-    const { code } = await runCtl('webapp', ['shutdown'], unusedEnv)
+    const { code } = await runCtl('webapp', ['shutdown'])
     expect(code).toBe(0)
   })
 
   it('exporter shutdown is graceful', async () => {
-    const { code } = await runCtl('exporter', ['shutdown'], unusedEnv)
+    const { code } = await runCtl('exporter', ['shutdown'])
     expect(code).toBe(0)
   })
 })
@@ -237,11 +223,9 @@ describe('orchestrator component routing', () => {
   })
 
   it('status for single component works', async () => {
-    const env = { GATEWAY_PORT: '19876', GATEWAY_SECRET_KEY: 'test-unused' }
     const { stdout, stderr, code } = await runCtl(
       'orchestrator',
       ['status', 'gateway'],
-      env,
     )
     const output = stdout + stderr
     // Should fail (not running) but not crash
@@ -254,18 +238,8 @@ describe('orchestrator component routing', () => {
 // 9. Service toggles
 // =============================================================================
 describe('service toggles', () => {
-  const baseEnv = {
-    GATEWAY_PORT: '19876',
-    VITE_PORT: '19877',
-    EXPORTER_PORT: '19878',
-    ONLYOFFICE_PORT: '19879',
-    LANGFUSE_PORT: '19880',
-    GATEWAY_SECRET_KEY: 'test-unused',
-  }
-
   it('status all skips disabled onlyoffice', async () => {
     const { stdout, stderr } = await runCtl('orchestrator', ['status'], {
-      ...baseEnv,
       ENABLE_ONLYOFFICE: 'false',
       ENABLE_LANGFUSE: 'false',
       ENABLE_EXPORTER: 'false',

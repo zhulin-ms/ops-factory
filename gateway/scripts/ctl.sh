@@ -11,14 +11,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_DIR="$(dirname "${SCRIPT_DIR}")"
 
-# --- Configuration (overridable via env) ---
-GATEWAY_HOST="${GATEWAY_HOST:-0.0.0.0}"
-GATEWAY_PORT="${GATEWAY_PORT:-3000}"
-GATEWAY_SECRET_KEY="${GATEWAY_SECRET_KEY:-test}"
-GOOSED_BIN="${GOOSED_BIN:-${SERVICE_DIR}/goosed}"
+# --- Configuration (read from config.yaml) ---
+yaml_val() {
+    local key="$1" file="${SERVICE_DIR}/config.yaml"
+    [ -f "${file}" ] || return 0
+    node -e "const y=require('yaml');const f=require('fs').readFileSync('${file}','utf-8');const c=y.parse(f);const keys='${key}'.split('.');let v=c;for(const k of keys){v=v?.[k]};if(v!=null)process.stdout.write(String(v))" 2>/dev/null || true
+}
 
-export GATEWAY_HOST GATEWAY_PORT GATEWAY_SECRET_KEY GOOSED_BIN
-export PROJECT_ROOT="${PROJECT_ROOT:-$(dirname "${SERVICE_DIR}")}"
+GATEWAY_HOST="$(yaml_val server.host)"
+GATEWAY_HOST="${GATEWAY_HOST:-0.0.0.0}"
+GATEWAY_PORT="$(yaml_val server.port)"
+GATEWAY_PORT="${GATEWAY_PORT:-3000}"
+GATEWAY_SECRET_KEY="$(yaml_val server.secretKey)"
+GATEWAY_SECRET_KEY="${GATEWAY_SECRET_KEY:-test}"
 
 # --- Logging ---
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'

@@ -11,12 +11,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_DIR="$(dirname "${SCRIPT_DIR}")"
 
-# --- Configuration (overridable via env) ---
-EXPORTER_PORT="${EXPORTER_PORT:-9091}"
-GATEWAY_URL="${GATEWAY_URL:-http://127.0.0.1:3000}"
-GATEWAY_SECRET_KEY="${GATEWAY_SECRET_KEY:-test}"
+# --- Configuration (read from config.yaml) ---
+yaml_val() {
+    local key="$1" file="${SERVICE_DIR}/config.yaml"
+    [ -f "${file}" ] || return 0
+    node -e "const y=require('yaml');const f=require('fs').readFileSync('${file}','utf-8');const c=y.parse(f);const keys='${key}'.split('.');let v=c;for(const k of keys){v=v?.[k]};if(v!=null)process.stdout.write(String(v))" 2>/dev/null || true
+}
 
-export EXPORTER_PORT GATEWAY_URL GATEWAY_SECRET_KEY
+EXPORTER_PORT="$(yaml_val port)"
+EXPORTER_PORT="${EXPORTER_PORT:-9091}"
 
 # --- Logging ---
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'

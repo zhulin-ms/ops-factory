@@ -3,6 +3,9 @@
  */
 import { ChildProcess, spawn } from 'node:child_process'
 import { resolve, join } from 'node:path'
+import { writeFileSync, unlinkSync } from 'node:fs'
+import { stringify } from 'yaml'
+import { tmpdir } from 'node:os'
 import net from 'node:net'
 
 const PROJECT_ROOT = resolve(import.meta.dirname, '..')
@@ -44,20 +47,33 @@ export async function startGateway(): Promise<GatewayHandle> {
   const port = await freePort()
   const baseUrl = `http://127.0.0.1:${port}`
 
+  // Write a temp config.yaml for this test run
+  const testConfigPath = join(tmpdir(), `ops-factory-test-config-${port}.yaml`)
+  const testConfig = {
+    server: {
+      host: '127.0.0.1',
+      port,
+      secretKey: SECRET_KEY,
+      corsOrigin: '*',
+    },
+    paths: {
+      projectRoot: PROJECT_ROOT,
+      agentsDir: join(PROJECT_ROOT, 'gateway', 'agents'),
+      usersDir: join(PROJECT_ROOT, 'gateway', 'users'),
+      goosedBin: process.env.GOOSED_BIN || 'goosed',
+    },
+    idle: {
+      timeoutMinutes: 0.5,       // 30s for testing
+      checkIntervalMs: 5000,
+    },
+  }
+  writeFileSync(testConfigPath, stringify(testConfig), 'utf-8')
+
   const child = spawn('npx', ['tsx', 'src/index.ts'], {
     cwd: GATEWAY_DIR,
     env: {
       ...process.env,
-      GATEWAY_HOST: '127.0.0.1',
-      GATEWAY_PORT: String(port),
-      GATEWAY_SECRET_KEY: SECRET_KEY,
-      PROJECT_ROOT,
-      AGENTS_DIR: join(PROJECT_ROOT, 'gateway', 'agents'),
-      USERS_DIR: join(PROJECT_ROOT, 'gateway', 'users'),
-      GOOSED_BIN: process.env.GOOSED_BIN || 'goosed',
-      // Short idle timeout for testing (30s)
-      IDLE_TIMEOUT_MS: '30000',
-      IDLE_CHECK_INTERVAL_MS: '5000',
+      CONFIG_PATH: testConfigPath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -129,6 +145,7 @@ export async function startGateway(): Promise<GatewayHandle> {
       await sleep(2000)
       if (!child.killed) child.kill('SIGKILL')
       await sleep(500)
+      try { unlinkSync(testConfigPath) } catch { /* ignore */ }
     },
   }
 }

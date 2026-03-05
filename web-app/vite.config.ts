@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -16,23 +16,21 @@ function loadYamlConfig(): ConfigYaml {
     return (parse(readFileSync(configPath, 'utf-8')) as ConfigYaml) || {}
 }
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, process.cwd(), '')
+export default defineConfig(() => {
     const yaml = loadYamlConfig()
 
-    // Priority: env var > config.yaml > error (required fields)
-    const gatewayUrl = env.GATEWAY_URL || yaml.gatewayUrl
-    const gatewaySecretKey = env.GATEWAY_SECRET_KEY || yaml.gatewaySecretKey
-    const port = parseInt(env.VITE_PORT || String(yaml.port ?? 5173), 10)
+    const gatewayUrl = yaml.gatewayUrl
+    const gatewaySecretKey = yaml.gatewaySecretKey
+    const port = yaml.port ?? 5173
 
     const missing: string[] = []
-    if (!gatewayUrl) missing.push('gatewayUrl (config.yaml) or GATEWAY_URL (env)')
-    if (!gatewaySecretKey) missing.push('gatewaySecretKey (config.yaml) or GATEWAY_SECRET_KEY (env)')
+    if (!gatewayUrl) missing.push('gatewayUrl')
+    if (!gatewaySecretKey) missing.push('gatewaySecretKey')
 
     if (missing.length > 0) {
         console.error('\n Missing required configuration:\n')
         missing.forEach(key => console.error(`   - ${key}`))
-        console.error('\n Create config.yaml in web-app/ or set environment variables.\n')
+        console.error('\n Create config.yaml in web-app/ with these fields.\n')
         process.exit(1)
     }
 

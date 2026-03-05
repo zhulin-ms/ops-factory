@@ -15,7 +15,7 @@ export default function NewSessionModal({
     showInitialMessage = false
 }: NewSessionModalProps) {
     const { t } = useTranslation()
-    const defaultWorkingDir = process.env.GOOSE_WORKING_DIR || '~'
+    const defaultWorkingDir = '~'
 
     const [workingDir, setWorkingDir] = useState(defaultWorkingDir)
     const [initialMessage, setInitialMessage] = useState('')

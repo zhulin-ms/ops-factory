@@ -11,8 +11,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_DIR="$(dirname "${SCRIPT_DIR}")"
 
-# --- Configuration (overridable via env) ---
+# --- Configuration (read from config.yaml) ---
+yaml_val() {
+    local key="$1" file="${SERVICE_DIR}/config.yaml"
+    [ -f "${file}" ] || return 0
+    node -e "const y=require('yaml');const f=require('fs').readFileSync('${file}','utf-8');const c=y.parse(f);const keys='${key}'.split('.');let v=c;for(const k of keys){v=v?.[k]};if(v!=null)process.stdout.write(String(v))" 2>/dev/null || true
+}
+
+GATEWAY_HOST="$(yaml_val gatewayUrl)"
 GATEWAY_HOST="${GATEWAY_HOST:-0.0.0.0}"
+VITE_PORT="$(yaml_val port)"
 VITE_PORT="${VITE_PORT:-5173}"
 
 # --- Logging ---

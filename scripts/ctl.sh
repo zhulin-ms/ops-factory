@@ -30,24 +30,6 @@ ENABLE_LANGFUSE="${ENABLE_LANGFUSE:-true}"
 ENABLE_EXPORTER="${ENABLE_EXPORTER:-true}"
 # gateway and webapp are mandatory — no toggles
 
-# === Configuration ===
-# Each component reads its own config.yaml as the primary config source.
-# Env vars set here (or passed by the user) act as OVERRIDES to config.yaml values.
-export GATEWAY_HOST="${GATEWAY_HOST:-0.0.0.0}"
-export GATEWAY_PORT="${GATEWAY_PORT:-3000}"
-export GATEWAY_SECRET_KEY="${GATEWAY_SECRET_KEY:-test}"
-export GOOSED_BIN="${GOOSED_BIN:-${ROOT_DIR}/gateway/goosed}"
-export PROJECT_ROOT="${ROOT_DIR}"
-export VITE_PORT="${VITE_PORT:-5173}"
-export ONLYOFFICE_PORT="${ONLYOFFICE_PORT:-8080}"
-export LANGFUSE_PORT="${LANGFUSE_PORT:-3100}"
-export EXPORTER_PORT="${EXPORTER_PORT:-9091}"
-export GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
-
-[ -n "${OFFICE_PREVIEW_ENABLED:-}" ] && export OFFICE_PREVIEW_ENABLED
-[ -n "${ONLYOFFICE_URL:-}" ]         && export ONLYOFFICE_URL
-[ -n "${ONLYOFFICE_FILE_BASE_URL:-}" ] && export ONLYOFFICE_FILE_BASE_URL
-
 # === Sub-script paths ===
 CTL_GATEWAY="${ROOT_DIR}/gateway/scripts/ctl.sh"
 CTL_WEBAPP="${ROOT_DIR}/web-app/scripts/ctl.sh"

@@ -2,6 +2,9 @@ import http from 'node:http'
 import net from 'node:net'
 import { ChildProcess, spawn } from 'node:child_process'
 import { resolve, join } from 'node:path'
+import { writeFileSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { stringify } from 'yaml'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { sleep } from './helpers.js'
 
@@ -102,14 +105,21 @@ interface ExporterHandle {
 async function startExporter(gatewayPort: number): Promise<ExporterHandle> {
   const port = await freePort()
 
+  // Write a temp config.yaml for this test run
+  const testConfigPath = join(tmpdir(), `ops-factory-exporter-test-${port}.yaml`)
+  const testConfig = {
+    port,
+    gatewayUrl: `http://127.0.0.1:${gatewayPort}`,
+    gatewaySecretKey: SECRET_KEY,
+    collectTimeoutMs: 3000,
+  }
+  writeFileSync(testConfigPath, stringify(testConfig), 'utf-8')
+
   const child = spawn('npx', ['tsx', 'src/index.ts'], {
     cwd: EXPORTER_DIR,
     env: {
       ...process.env,
-      EXPORTER_PORT: String(port),
-      GATEWAY_URL: `http://127.0.0.1:${gatewayPort}`,
-      GATEWAY_SECRET_KEY: SECRET_KEY,
-      COLLECT_TIMEOUT_MS: '3000',
+      CONFIG_PATH: testConfigPath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -159,6 +169,7 @@ async function startExporter(gatewayPort: number): Promise<ExporterHandle> {
       await sleep(500)
       if (!child.killed) child.kill('SIGKILL')
       await sleep(250)
+      try { unlinkSync(testConfigPath) } catch { /* ignore */ }
     },
   }
 }

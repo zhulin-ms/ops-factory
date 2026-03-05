@@ -132,26 +132,23 @@ function loadYamlFile<T>(filePath: string): T {
 }
 
 export function loadGatewayConfig(): GatewayConfig {
-  // Load gateway config.yaml (one level up from src/)
-  const configYamlPath = resolve(__dirname, '..', 'config.yaml')
+  // CONFIG_PATH is the only env var the gateway reads — a bootstrap mechanism to locate the config file.
+  const configYamlPath = process.env.CONFIG_PATH || resolve(__dirname, '..', 'config.yaml')
   const cfg = loadYamlFile<ConfigYaml>(configYamlPath)
 
   // --- Server ---
-  const host = process.env.GATEWAY_HOST || cfg.server?.host || '0.0.0.0'
-  const port = parseInt(process.env.GATEWAY_PORT || String(cfg.server?.port ?? 3000), 10)
-  const corsOrigin = process.env.CORS_ORIGIN || cfg.server?.corsOrigin || '*'
+  const host = cfg.server?.host || '0.0.0.0'
+  const port = cfg.server?.port ?? 3000
+  const corsOrigin = cfg.server?.corsOrigin || '*'
 
-  // secretKey: REQUIRED — env var > config.yaml > error
-  const secretKey = process.env.GATEWAY_SECRET_KEY || cfg.server?.secretKey || ''
+  const secretKey = cfg.server?.secretKey || ''
   if (!secretKey) {
-    throw new Error(
-      'Missing required config: set "server.secretKey" in gateway/config.yaml or GATEWAY_SECRET_KEY env var'
-    )
+    throw new Error('Missing required config: set "server.secretKey" in gateway/config.yaml')
   }
 
   // --- TLS ---
-  const tlsCert = process.env.TLS_CERT || cfg.tls?.cert || ''
-  const tlsKey = process.env.TLS_KEY || cfg.tls?.key || ''
+  const tlsCert = cfg.tls?.cert || ''
+  const tlsKey = cfg.tls?.key || ''
   const tls: TlsConfig = {
     enabled: !!(tlsCert && tlsKey),
     cert: tlsCert,
@@ -160,15 +157,18 @@ export function loadGatewayConfig(): GatewayConfig {
 
   // --- Paths ---
   const projectRoot = resolve(
-    process.env.PROJECT_ROOT || cfg.paths?.projectRoot || join(__dirname, '../..')
+    cfg.paths?.projectRoot || join(__dirname, '../..')
   )
   const agentsDir = resolve(
-    process.env.AGENTS_DIR || cfg.paths?.agentsDir || join(projectRoot, 'gateway', 'agents')
+    cfg.paths?.agentsDir || join(projectRoot, 'gateway', 'agents')
   )
   const usersDir = resolve(
-    process.env.USERS_DIR || cfg.paths?.usersDir || join(projectRoot, 'gateway', 'users')
+    cfg.paths?.usersDir || join(projectRoot, 'gateway', 'users')
   )
-  const goosedBin = process.env.GOOSED_BIN || cfg.paths?.goosedBin || 'goosed'
+  const goosedBin = cfg.paths?.goosedBin
+  if (!goosedBin) {
+    throw new Error('Missing required config: set "paths.goosedBin" in gateway/config.yaml')
+  }
 
   // --- Load agents registry (separate file, unchanged) ---
   const gatewayConfigDir = resolve(__dirname, '../config')
@@ -192,33 +192,21 @@ export function loadGatewayConfig(): GatewayConfig {
   // --- Office Preview ---
   const yamlOp = cfg.officePreview || {}
   const officePreview: OfficePreviewConfig = {
-    enabled: process.env.OFFICE_PREVIEW_ENABLED
-      ? process.env.OFFICE_PREVIEW_ENABLED === 'true'
-      : yamlOp.enabled ?? false,
-    onlyofficeUrl: process.env.ONLYOFFICE_URL || yamlOp.onlyofficeUrl || 'http://localhost:8080',
-    fileBaseUrl: process.env.ONLYOFFICE_FILE_BASE_URL || yamlOp.fileBaseUrl || `http://host.docker.internal:${port}`,
+    enabled: yamlOp.enabled ?? false,
+    onlyofficeUrl: yamlOp.onlyofficeUrl || 'http://localhost:8080',
+    fileBaseUrl: yamlOp.fileBaseUrl || `http://host.docker.internal:${port}`,
   }
 
   // --- Idle ---
   const idleTimeoutMinutes = cfg.idle?.timeoutMinutes ?? 15
-  const idleTimeoutMs = parseInt(
-    process.env.IDLE_TIMEOUT_MS || String(idleTimeoutMinutes * 60 * 1000), 10
-  )
-  const idleCheckIntervalMs = parseInt(
-    process.env.IDLE_CHECK_INTERVAL_MS || String(cfg.idle?.checkIntervalMs ?? 60000), 10
-  )
+  const idleTimeoutMs = idleTimeoutMinutes * 60 * 1000
+  const idleCheckIntervalMs = cfg.idle?.checkIntervalMs ?? 60000
 
   // --- Upload ---
   const upload: UploadConfig = {
-    maxFileSizeMb: parseInt(
-      process.env.MAX_UPLOAD_FILE_SIZE_MB || String(cfg.upload?.maxFileSizeMb ?? 10), 10
-    ),
-    maxImageSizeMb: parseInt(
-      process.env.MAX_UPLOAD_IMAGE_SIZE_MB || String(cfg.upload?.maxImageSizeMb ?? 5), 10
-    ),
-    retentionHours: parseInt(
-      process.env.UPLOAD_RETENTION_HOURS || String(cfg.upload?.retentionHours ?? 24), 10
-    ),
+    maxFileSizeMb: cfg.upload?.maxFileSizeMb ?? 10,
+    maxImageSizeMb: cfg.upload?.maxImageSizeMb ?? 5,
+    retentionHours: cfg.upload?.retentionHours ?? 24,
   }
 
   // --- Vision ---
@@ -231,24 +219,22 @@ export function loadGatewayConfig(): GatewayConfig {
 Be precise and factual.`
 
   const vision: VisionGlobalConfig = {
-    mode: process.env.VISION_MODE || cfg.vision?.mode || 'passthrough',
-    provider: process.env.VISION_PROVIDER || process.env.GOOSE_PROVIDER || cfg.vision?.provider || '',
-    model: process.env.VISION_MODEL || process.env.GOOSE_MODEL || cfg.vision?.model || '',
-    apiKey: process.env.VISION_API_KEY || process.env.OPENAI_API_KEY || process.env.LITELLM_API_KEY || cfg.vision?.apiKey || '',
-    baseUrl: process.env.VISION_BASE_URL || process.env.OPENAI_HOST || process.env.LITELLM_HOST || cfg.vision?.baseUrl || '',
-    maxTokens: parseInt(
-      process.env.VISION_MAX_TOKENS || String(cfg.vision?.maxTokens ?? 1024), 10
-    ),
-    prompt: process.env.VISION_PROMPT || cfg.vision?.prompt || DEFAULT_VISION_PROMPT,
+    mode: cfg.vision?.mode || 'passthrough',
+    provider: cfg.vision?.provider || '',
+    model: cfg.vision?.model || '',
+    apiKey: cfg.vision?.apiKey || '',
+    baseUrl: cfg.vision?.baseUrl || '',
+    maxTokens: cfg.vision?.maxTokens ?? 1024,
+    prompt: cfg.vision?.prompt || DEFAULT_VISION_PROMPT,
   }
 
   // --- Langfuse ---
-  // Priority: env var > config.yaml > auto-detect from agent configs
+  // Priority: config.yaml > auto-detect from agent configs
   let langfuse: LangfuseConfig | null = null
   {
-    let lfHost = process.env.LANGFUSE_HOST || cfg.langfuse?.host || ''
-    let lfPub  = process.env.LANGFUSE_PUBLIC_KEY || cfg.langfuse?.publicKey || ''
-    let lfSec  = process.env.LANGFUSE_SECRET_KEY || cfg.langfuse?.secretKey || ''
+    let lfHost = cfg.langfuse?.host || ''
+    let lfPub  = cfg.langfuse?.publicKey || ''
+    let lfSec  = cfg.langfuse?.secretKey || ''
 
     if (!lfHost || !lfPub || !lfSec) {
       // Auto-detect from agent configs
