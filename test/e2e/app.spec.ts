@@ -18,6 +18,7 @@
  *   - Files page: renders with category filters
  *   - Chat page: send message, receive streaming response
  *   - Settings page: shows user, logout
+ *   - Embed mode: sidebar hidden, URL-based auth, page rendering
  */
 import { test, expect, type Page } from '@playwright/test'
 
@@ -383,5 +384,66 @@ test.describe('Settings page', () => {
     await page.click('button:has-text("Log out")')
     await page.waitForURL('/login')
     await expect(page.locator('.login-title')).toHaveText('Ops Factory')
+  })
+})
+
+// =====================================================
+// 12. Embed Mode
+// =====================================================
+test.describe('Embed mode', () => {
+  const EMBED_USER = 'e2e-embed-user'
+
+  test('hides sidebar when embed=true', async ({ page }) => {
+    await page.goto(`/history?embed=true&userId=${EMBED_USER}`)
+    // Sidebar should not be rendered
+    await expect(page.locator('.sidebar')).not.toBeVisible()
+    // Main content should still render
+    await expect(page.locator('.main-content')).toBeVisible()
+  })
+
+  test('main-wrapper has embed-mode class', async ({ page }) => {
+    await page.goto(`/history?embed=true&userId=${EMBED_USER}`)
+    await expect(page.locator('.main-wrapper.embed-mode')).toBeVisible()
+  })
+
+  test('auto-authenticates via userId URL param', async ({ page }) => {
+    // Clear any existing auth
+    await page.goto('/login')
+    await page.evaluate(() => localStorage.clear())
+    // Navigate with embed params — should NOT redirect to /login
+    await page.goto(`/files?embed=true&userId=${EMBED_USER}`)
+    await expect(page).not.toHaveURL('/login')
+    await expect(page.locator('.main-content')).toBeVisible()
+  })
+
+  test('userId from URL is persisted to localStorage', async ({ page }) => {
+    await page.goto(`/history?embed=true&userId=${EMBED_USER}`)
+    const storedUserId = await page.evaluate(() => localStorage.getItem('opsfactory:userId'))
+    expect(storedUserId).toBe(EMBED_USER)
+  })
+
+  test('FilePreview is not rendered in embed mode', async ({ page }) => {
+    await page.goto(`/files?embed=true&userId=${EMBED_USER}`)
+    await expect(page.locator('.file-preview')).not.toBeVisible()
+  })
+
+  test('each page renders correctly in embed mode', async ({ page }) => {
+    const pages = [
+      { path: '/history', marker: 'input' },
+      { path: '/files', marker: 'text=All' },
+      { path: '/inbox', marker: '.main-content' },
+    ]
+    for (const p of pages) {
+      await page.goto(`${p.path}?embed=true&userId=${EMBED_USER}`)
+      await expect(page.locator('.sidebar')).not.toBeVisible()
+      await expect(page.locator(p.marker).first()).toBeVisible({ timeout: 5000 })
+    }
+  })
+
+  test('non-embed mode still shows sidebar', async ({ page }) => {
+    await login(page)
+    await page.goto('/history')
+    await expect(page.locator('.sidebar')).toBeVisible()
+    await expect(page.locator('.main-wrapper.embed-mode')).not.toBeVisible()
   })
 })

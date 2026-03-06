@@ -18,6 +18,12 @@ const UserContext = createContext<UserContextType | null>(null)
 
 export function UserProvider({ children }: { children: ReactNode }) {
     const [userId, setUserId] = useState<string | null>(() => {
+        const params = new URLSearchParams(window.location.search)
+        const urlUserId = params.get('userId')
+        if (urlUserId) {
+            localStorage.setItem(STORAGE_KEY, urlUserId)
+            return urlUserId
+        }
         return localStorage.getItem(STORAGE_KEY)
     })
     const [role, setRole] = useState<UserRole | null>(null)

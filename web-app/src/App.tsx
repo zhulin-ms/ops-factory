@@ -21,16 +21,18 @@ function AppContent() {
     const { previewFile } = usePreview()
     const { isCollapsed } = useSidebar()
     const isPreviewOpen = !!previewFile
+    const isEmbed = new URLSearchParams(window.location.search).get('embed') === 'true'
 
     const mainWrapperClass = [
         'main-wrapper',
+        isEmbed ? 'embed-mode' : '',
         isPreviewOpen ? 'with-preview' : '',
         isCollapsed ? 'sidebar-collapsed' : '',
     ].filter(Boolean).join(' ')
 
     return (
         <div className="app-container">
-            <Sidebar />
+            {!isEmbed && <Sidebar />}
             <div className={mainWrapperClass}>
                 <main className="main-content">
                     <Routes>
@@ -45,7 +47,7 @@ function AppContent() {
                         <Route path="/agents/:agentId/configure" element={<AdminRoute><AgentConfigure /></AdminRoute>} />
                     </Routes>
                 </main>
-                <FilePreview />
+                {!isEmbed && <FilePreview />}
             </div>
         </div>
     )

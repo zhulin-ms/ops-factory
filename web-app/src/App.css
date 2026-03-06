@@ -2572,6 +2572,12 @@ textarea {
     max-width: 40%;
 }
 
+/* Embed mode - no sidebar, full width */
+.main-wrapper.embed-mode {
+    margin-left: 0;
+    width: 100%;
+}
+
 /* Sidebar collapsed - main wrapper adjustment */
 .main-wrapper.sidebar-collapsed {
     margin-left: var(--sidebar-width-collapsed);
