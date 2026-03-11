@@ -1,11 +1,27 @@
 package com.huawei.opsfactory.gateway.common.util;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
 /**
  * Process management utility using JDK 21 APIs.
  */
 public final class ProcessUtil {
 
     private ProcessUtil() {
+    }
+
+    /**
+     * Read up to maxBytes from the process stdout/stderr (requires redirectErrorStream=true).
+     * Must only be called after the process has exited (isAlive() == false).
+     */
+    public static String readOutput(Process process, int maxBytes) {
+        try {
+            byte[] bytes = process.getInputStream().readNBytes(maxBytes);
+            return new String(bytes, StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            return "(failed to read output: " + e.getMessage() + ")";
+        }
     }
 
     /**

@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class GatewayPropertiesTest {
 
@@ -71,5 +72,34 @@ public class GatewayPropertiesTest {
         assertEquals("", langfuse.getHost());
         assertEquals("", langfuse.getPublicKey());
         assertEquals("", langfuse.getSecretKey());
+    }
+
+    // ====================== TLS properties ======================
+
+    @Test
+    public void testGoosedTlsDefaultTrue() {
+        GatewayProperties props = new GatewayProperties();
+        assertTrue(props.isGoosedTls());
+    }
+
+    @Test
+    public void testGoosedTlsSetFalse() {
+        GatewayProperties props = new GatewayProperties();
+        props.setGoosedTls(false);
+        assertFalse(props.isGoosedTls());
+    }
+
+    @Test
+    public void testGoosedSchemeHttpsWhenTlsTrue() {
+        GatewayProperties props = new GatewayProperties();
+        props.setGoosedTls(true);
+        assertEquals("https", props.goosedScheme());
+    }
+
+    @Test
+    public void testGoosedSchemeHttpWhenTlsFalse() {
+        GatewayProperties props = new GatewayProperties();
+        props.setGoosedTls(false);
+        assertEquals("http", props.goosedScheme());
     }
 }

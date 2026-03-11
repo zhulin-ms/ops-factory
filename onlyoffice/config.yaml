@@ -3,3 +3,4 @@ jwtEnabled: false
 pluginsEnabled: false
 allowPrivateIpAddress: true
 allowMetaIpAddress: true
+caCert: ""

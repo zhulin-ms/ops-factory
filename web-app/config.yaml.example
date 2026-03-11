@@ -2,6 +2,6 @@
 # Priority: environment variable > config.yaml value > default
 # Required fields will cause build failure if missing from both sources.
 
-gatewayUrl: "http://127.0.0.1:3000"     # env: GATEWAY_URL         [REQUIRED]
+gatewayUrl: "https://127.0.0.1:3000"     # env: GATEWAY_URL         [REQUIRED]
 gatewaySecretKey: ""                    # env: GATEWAY_SECRET_KEY  [REQUIRED]
 port: 5173                              # env: VITE_PORT

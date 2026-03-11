@@ -10,3 +10,6 @@ services:
       PLUGINS_ENABLED: "${PLUGINS_ENABLED:-false}"
       ALLOW_PRIVATE_IP_ADDRESS: "${ALLOW_PRIVATE_IP_ADDRESS:-true}"
       ALLOW_META_IP_ADDRESS: "${ALLOW_META_IP_ADDRESS:-true}"
+      NODE_EXTRA_CA_CERTS: "${NODE_EXTRA_CA_CERTS:-}"
+    volumes:
+      - ${MKCERT_CA_CERT:-/dev/null}:/usr/local/share/ca-certificates/custom-ca.crt:ro

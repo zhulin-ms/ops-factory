@@ -120,10 +120,10 @@ extensions:
     args:
     - tsx
     - config/mcp/platform-monitor/src/index.ts
-    envs:
-      GATEWAY_URL: http://127.0.0.1:3000
     env_keys:
+    - GATEWAY_URL
     - GATEWAY_SECRET_KEY
+    - NODE_TLS_REJECT_UNAUTHORIZED
     timeout: 60
     bundled: null
     available_tools: []

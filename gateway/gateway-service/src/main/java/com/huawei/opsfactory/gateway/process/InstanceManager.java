@@ -9,6 +9,7 @@ import com.huawei.opsfactory.gateway.config.GatewayProperties;
 import com.huawei.opsfactory.gateway.service.AgentConfigService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -52,6 +53,8 @@ public class InstanceManager {
     private final RuntimePreparer runtimePreparer;
     private final AgentConfigService agentConfigService;
     private final SSLSocketFactory trustAllSslFactory;
+    private final int serverPort;
+    private final boolean serverSslEnabled;
 
     /** key = "agentId:userId" -> ManagedInstance */
     private final ConcurrentHashMap<String, ManagedInstance> instances = new ConcurrentHashMap<>();
@@ -61,12 +64,16 @@ public class InstanceManager {
     public InstanceManager(GatewayProperties properties,
                            PortAllocator portAllocator,
                            RuntimePreparer runtimePreparer,
-                           AgentConfigService agentConfigService) {
+                           AgentConfigService agentConfigService,
+                           @Value("${server.port:3000}") int serverPort,
+                           @Value("${server.ssl.enabled:false}") boolean serverSslEnabled) {
         this.properties = properties;
         this.portAllocator = portAllocator;
         this.runtimePreparer = runtimePreparer;
         this.agentConfigService = agentConfigService;
         this.trustAllSslFactory = createTrustAllSslFactory();
+        this.serverPort = serverPort;
+        this.serverSslEnabled = serverSslEnabled;
     }
 
     private static SSLSocketFactory createTrustAllSslFactory() {
@@ -299,7 +306,7 @@ public class InstanceManager {
             ManagedInstance instance = new ManagedInstance(agentId, userId, port, pid, process);
             instances.put(key, instance);
 
-            waitForReady(port);
+            waitForReady(port, process);
             instance.setStatus(ManagedInstance.Status.RUNNING);
             log.info("Instance {}:{} ready on port {} (pid={})", agentId, userId, port, pid);
 
@@ -373,23 +380,36 @@ public class InstanceManager {
         env.put("GOOSE_DISABLE_KEYRING", "1");
         env.put("GOOSE_TLS", String.valueOf(properties.isGoosedTls()));
 
+        // Gateway self-URL for MCP extensions that call back to the gateway
+        String gatewayScheme = serverSslEnabled ? "https" : "http";
+        env.put("GATEWAY_URL", gatewayScheme + "://127.0.0.1:" + serverPort);
+        if (serverSslEnabled) {
+            env.put("NODE_TLS_REJECT_UNAUTHORIZED", "0");
+        }
+
         return env;
     }
 
-    private void waitForReady(int port) throws Exception {
+    private void waitForReady(int port, Process process) throws Exception {
+        URL url = new URL(goosedBaseUrl(port) + "/status");
         long interval = GatewayConstants.HEALTH_CHECK_INITIAL_INTERVAL_MS;
         for (int i = 0; i < GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS; i++) {
+            if (!ProcessUtil.isAlive(process)) {
+                throw processExitedException(process, port);
+            }
             try {
-                URL url = new URL(goosedBaseUrl(port) + "/status");
                 HttpURLConnection conn = openConnection(url);
-                conn.setConnectTimeout(200);
-                conn.setReadTimeout(200);
+                conn.setConnectTimeout(500);
+                conn.setReadTimeout(500);
                 conn.setRequestMethod("GET");
-                int code = conn.getResponseCode();
-                conn.disconnect();
-                if (code == 200) {
-                    log.info("goosed ready on port {} after {} attempts", port, i + 1);
-                    return;
+                try {
+                    int code = conn.getResponseCode();
+                    if (code == 200) {
+                        log.info("goosed ready on port {} after {} attempts", port, i + 1);
+                        return;
+                    }
+                } finally {
+                    conn.disconnect();
                 }
             } catch (IOException ignored) {
                 // Not ready yet
@@ -397,7 +417,19 @@ public class InstanceManager {
             Thread.sleep(interval);
             interval = Math.min(interval * 2, GatewayConstants.HEALTH_CHECK_MAX_INTERVAL_MS);
         }
-        throw new RuntimeException("goosed failed to start on port " + port);
+        if (!ProcessUtil.isAlive(process)) {
+            throw processExitedException(process, port);
+        }
+        throw new RuntimeException("goosed failed to start on port " + port
+                + " (process alive but not responding after "
+                + GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS + " attempts)");
+    }
+
+    private RuntimeException processExitedException(Process process, int port) {
+        int exitCode = process.exitValue();
+        String output = ProcessUtil.readOutput(process, 4096);
+        return new RuntimeException("goosed process exited with code " + exitCode
+                + " on port " + port + ". Output: " + output);
     }
 
     public ManagedInstance getInstance(String agentId, String userId) {

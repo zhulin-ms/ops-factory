@@ -54,7 +54,8 @@ public class InstanceManagerExtendedTest {
         when(agentConfigService.loadAgentConfigYaml(anyString())).thenReturn(Map.of());
         when(agentConfigService.loadAgentSecretsYaml(anyString())).thenReturn(Map.of());
 
-        instanceManager = new InstanceManager(properties, portAllocator, runtimePreparer, agentConfigService);
+        instanceManager = new InstanceManager(properties, portAllocator, runtimePreparer, agentConfigService,
+                3000, false);
     }
 
     // ====================== buildEnvironment ======================
@@ -142,6 +143,61 @@ public class InstanceManagerExtendedTest {
 
         assertEquals("value", env.get("SIMPLE"));
         assertNull(env.get("NESTED"));
+    }
+
+    // ====================== GATEWAY_URL injection ======================
+
+    @Test
+    public void testBuildEnvironment_gatewayUrl_httpWhenSslDisabled() throws Exception {
+        // Default setUp uses serverSslEnabled=false, serverPort=3000
+        Path runtimeRoot = tempFolder.getRoot().toPath();
+
+        Method buildEnv = InstanceManager.class.getDeclaredMethod(
+                "buildEnvironment", String.class, String.class, int.class, Path.class);
+        buildEnv.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, String> env = (Map<String, String>) buildEnv.invoke(
+                instanceManager, "agent1", "user1", 9000, runtimeRoot);
+
+        assertEquals("http://127.0.0.1:3000", env.get("GATEWAY_URL"));
+        assertNull("NODE_TLS_REJECT_UNAUTHORIZED should not be set when SSL disabled",
+                env.get("NODE_TLS_REJECT_UNAUTHORIZED"));
+    }
+
+    @Test
+    public void testBuildEnvironment_gatewayUrl_httpsWhenSslEnabled() throws Exception {
+        // Create a new InstanceManager with SSL enabled and custom port
+        InstanceManager sslManager = new InstanceManager(properties, portAllocator, runtimePreparer,
+                agentConfigService, 3443, true);
+
+        Path runtimeRoot = tempFolder.getRoot().toPath();
+
+        Method buildEnv = InstanceManager.class.getDeclaredMethod(
+                "buildEnvironment", String.class, String.class, int.class, Path.class);
+        buildEnv.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, String> env = (Map<String, String>) buildEnv.invoke(
+                sslManager, "agent1", "user1", 9000, runtimeRoot);
+
+        assertEquals("https://127.0.0.1:3443", env.get("GATEWAY_URL"));
+        assertEquals("0", env.get("NODE_TLS_REJECT_UNAUTHORIZED"));
+    }
+
+    @Test
+    public void testBuildEnvironment_gatewayUrl_defaultPort() throws Exception {
+        InstanceManager defaultManager = new InstanceManager(properties, portAllocator, runtimePreparer,
+                agentConfigService, 8080, false);
+
+        Path runtimeRoot = tempFolder.getRoot().toPath();
+
+        Method buildEnv = InstanceManager.class.getDeclaredMethod(
+                "buildEnvironment", String.class, String.class, int.class, Path.class);
+        buildEnv.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, String> env = (Map<String, String>) buildEnv.invoke(
+                defaultManager, "agent1", "user1", 9000, runtimeRoot);
+
+        assertEquals("http://127.0.0.1:8080", env.get("GATEWAY_URL"));
     }
 
     // ====================== getOrSpawn with dead process ======================

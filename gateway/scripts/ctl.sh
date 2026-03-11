@@ -41,6 +41,20 @@ GOOSED_BIN="${GOOSED_BIN:-$(yaml_val goosedBin)}"
 GOOSED_BIN="${GOOSED_BIN:-goosed}"
 GOOSED_TLS="${GOOSED_TLS:-$(yaml_val goosedTls)}"
 GOOSED_TLS="${GOOSED_TLS:-true}"
+GATEWAY_TLS="${GATEWAY_TLS:-$(yaml_val gatewayTls)}"
+GATEWAY_TLS="${GATEWAY_TLS:-true}"
+GATEWAY_KEY_STORE="${GATEWAY_KEY_STORE:-$(yaml_val gatewayKeyStore)}"
+GATEWAY_KEY_STORE_PASSWORD="${GATEWAY_KEY_STORE_PASSWORD:-$(yaml_val gatewayKeyStorePassword)}"
+GATEWAY_KEY_STORE_PASSWORD="${GATEWAY_KEY_STORE_PASSWORD:-changeit}"
+
+# Gateway TLS scheme + curl options
+if [ "${GATEWAY_TLS}" = "true" ]; then
+    GATEWAY_SCHEME="https"
+    CURL_TLS_OPTS="-k"
+else
+    GATEWAY_SCHEME="http"
+    CURL_TLS_OPTS=""
+fi
 IDLE_TIMEOUT_MINUTES="${IDLE_TIMEOUT_MINUTES:-$(yaml_nested_val idle timeoutMinutes)}"
 IDLE_TIMEOUT_MINUTES="${IDLE_TIMEOUT_MINUTES:-15}"
 IDLE_CHECK_INTERVAL="${IDLE_CHECK_INTERVAL:-$(yaml_nested_val idle checkIntervalMs)}"
@@ -120,9 +134,9 @@ wait_http_ok() {
     local name="$1" url="$2" headers="${3:-}" attempts="${4:-40}" delay="${5:-1}"
     for ((i=1; i<=attempts; i++)); do
         if [ -n "${headers}" ]; then
-            curl -fsS "${url}" -H "${headers}" >/dev/null 2>&1 && return 0
+            curl -fsS ${CURL_TLS_OPTS} "${url}" -H "${headers}" >/dev/null 2>&1 && return 0
         else
-            curl -fsS "${url}" >/dev/null 2>&1 && return 0
+            curl -fsS ${CURL_TLS_OPTS} "${url}" >/dev/null 2>&1 && return 0
         fi
         sleep "${delay}"
     done
@@ -133,14 +147,14 @@ wait_http_ok() {
 gateway_url() {
     local sk="${GATEWAY_SECRET_KEY}"
     for host in "${GATEWAY_HOST}" "127.0.0.1"; do
-        if curl -fsS "http://${host}:${GATEWAY_PORT}/status" -H "x-secret-key: ${sk}" >/dev/null 2>&1; then
-            echo "http://${host}:${GATEWAY_PORT}"; return 0
+        if curl -fsS ${CURL_TLS_OPTS} "${GATEWAY_SCHEME}://${host}:${GATEWAY_PORT}/status" -H "x-secret-key: ${sk}" >/dev/null 2>&1; then
+            echo "${GATEWAY_SCHEME}://${host}:${GATEWAY_PORT}"; return 0
         fi
     done
     for host in "${GATEWAY_HOST}" "127.0.0.1"; do
         local code
-        code="$(curl -s -o /dev/null -w "%{http_code}" "http://${host}:${GATEWAY_PORT}/status" 2>/dev/null || true)"
-        [ "${code}" = "401" ] && { echo "http://${host}:${GATEWAY_PORT}"; return 0; }
+        code="$(curl -s ${CURL_TLS_OPTS} -o /dev/null -w "%{http_code}" "${GATEWAY_SCHEME}://${host}:${GATEWAY_PORT}/status" 2>/dev/null || true)"
+        [ "${code}" = "401" ] && { echo "${GATEWAY_SCHEME}://${host}:${GATEWAY_PORT}"; return 0; }
     done
     return 1
 }
@@ -181,7 +195,7 @@ shutdown_agents() {
 
 check_agents_configured() {
     local agents_json
-    agents_json="$(curl -fsS "http://127.0.0.1:${GATEWAY_PORT}/agents" \
+    agents_json="$(curl -fsS ${CURL_TLS_OPTS} "${GATEWAY_SCHEME}://127.0.0.1:${GATEWAY_PORT}/agents" \
         -H "x-secret-key: ${GATEWAY_SECRET_KEY}" 2>/dev/null || true)"
     [ -z "${agents_json}" ] && { log_error "Failed to query agents"; return 1; }
 
@@ -203,7 +217,7 @@ status_agents() {
 
     if [ -n "${base_url}" ]; then
         local agents_json
-        agents_json="$(curl -fsS "${base_url}/agents" -H "x-secret-key: ${GATEWAY_SECRET_KEY}" 2>/dev/null || true)"
+        agents_json="$(curl -fsS ${CURL_TLS_OPTS} "${base_url}/agents" -H "x-secret-key: ${GATEWAY_SECRET_KEY}" 2>/dev/null || true)"
         if [ -n "${agents_json}" ]; then
             local count
             count="$(echo "${agents_json}" | python3 -c "import sys,json;d=json.load(sys.stdin);print(len(d.get('agents',d) if isinstance(d,dict) else d))" 2>/dev/null || echo "0")"
@@ -242,7 +256,43 @@ do_startup() {
         return 1
     fi
 
-    log_info "Starting gateway at http://${GATEWAY_HOST}:${GATEWAY_PORT}"
+    # Auto-generate self-signed keystore for TLS if needed
+    local gateway_key_alias=""
+    if [ "${GATEWAY_TLS}" = "true" ]; then
+        if [ -z "${GATEWAY_KEY_STORE}" ]; then
+            GATEWAY_KEY_STORE="${SERVICE_DIR}/.gateway-keystore.p12"
+            gateway_key_alias="gateway"
+        else
+            # Resolve relative path against SERVICE_DIR
+            case "${GATEWAY_KEY_STORE}" in
+                /*) ;; # already absolute
+                *)  GATEWAY_KEY_STORE="${SERVICE_DIR}/${GATEWAY_KEY_STORE}" ;;
+            esac
+        fi
+        if [ ! -f "${GATEWAY_KEY_STORE}" ]; then
+            log_info "Generating self-signed TLS certificate..."
+            keytool -genkeypair -alias gateway -keyalg RSA -keysize 2048 \
+                -storetype PKCS12 -keystore "${GATEWAY_KEY_STORE}" \
+                -storepass "${GATEWAY_KEY_STORE_PASSWORD}" \
+                -validity 3650 -dname "CN=localhost" \
+                -ext "SAN=dns:localhost,dns:host.docker.internal,ip:127.0.0.1,ip:0.0.0.0" 2>/dev/null
+            log_info "Certificate saved to ${GATEWAY_KEY_STORE}"
+        fi
+        # Auto-detect alias from existing keystore when not auto-generated
+        if [ -z "${gateway_key_alias}" ] && [ -f "${GATEWAY_KEY_STORE}" ]; then
+            gateway_key_alias=$(keytool -list -keystore "${GATEWAY_KEY_STORE}" \
+                -storepass "${GATEWAY_KEY_STORE_PASSWORD}" -storetype PKCS12 2>/dev/null \
+                | awk -F, '/PrivateKeyEntry/ {print $1; exit}' | xargs)
+        fi
+        # Export certificate as PEM for Docker containers (OnlyOffice etc.)
+        local gateway_cert_pem="${GATEWAY_KEY_STORE%.p12}.pem"
+        if [ ! -f "${gateway_cert_pem}" ] || [ "${GATEWAY_KEY_STORE}" -nt "${gateway_cert_pem}" ]; then
+            keytool -exportcert -alias "${gateway_key_alias:-1}" -keystore "${GATEWAY_KEY_STORE}" \
+                -storepass "${GATEWAY_KEY_STORE_PASSWORD}" -rfc > "${gateway_cert_pem}" 2>/dev/null || true
+        fi
+    fi
+
+    log_info "Starting gateway at ${GATEWAY_SCHEME}://${GATEWAY_HOST}:${GATEWAY_PORT}"
 
     # Build Java command — inject all config as Spring properties
     local java_cmd="java"
@@ -266,6 +316,19 @@ do_startup() {
         "-Dgateway.prewarm.enabled=${PREWARM_ENABLED}"
         "-Dgateway.prewarm.default-agent-id=${PREWARM_DEFAULT_AGENT_ID}"
     )
+
+    # Gateway TLS: inject Spring Boot SSL properties
+    if [ "${GATEWAY_TLS}" = "true" ]; then
+        java_opts+=(
+            "-Dserver.ssl.enabled=true"
+            "-Dserver.ssl.key-store=file:${GATEWAY_KEY_STORE}"
+            "-Dserver.ssl.key-store-password=${GATEWAY_KEY_STORE_PASSWORD}"
+            "-Dserver.ssl.key-store-type=PKCS12"
+        )
+        if [ -n "${gateway_key_alias}" ]; then
+            java_opts+=("-Dserver.ssl.key-alias=${gateway_key_alias}")
+        fi
+    fi
 
     # Optional: vision
     [ -n "${VISION_MODE}" ]       && java_opts+=("-Dgateway.vision.mode=${VISION_MODE}")
@@ -299,7 +362,7 @@ do_startup() {
             log_error "Failed to start gateway"
             return 1
         fi
-        if ! wait_http_ok "Gateway" "http://127.0.0.1:${GATEWAY_PORT}/status" \
+        if ! wait_http_ok "Gateway" "${GATEWAY_SCHEME}://127.0.0.1:${GATEWAY_PORT}/status" \
                 "x-secret-key: ${GATEWAY_SECRET_KEY}" 40 1; then
             log_error "Gateway failed to become healthy. Check logs."
             kill "${GATEWAY_PID}" 2>/dev/null || true
@@ -321,7 +384,7 @@ do_status() {
     local has_fail=0
     if check_port "${GATEWAY_PORT}"; then
         if gateway_url >/dev/null 2>&1; then
-            log_ok "Gateway running (http://localhost:${GATEWAY_PORT})"
+            log_ok "Gateway running (${GATEWAY_SCHEME}://localhost:${GATEWAY_PORT})"
         else
             log_fail "Gateway port open but /status check failed"
             has_fail=1

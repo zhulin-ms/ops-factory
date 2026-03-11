@@ -35,7 +35,8 @@ public class InstanceManagerTest {
         when(agentConfigService.loadAgentConfigYaml(anyString())).thenReturn(Map.of());
         when(agentConfigService.loadAgentSecretsYaml(anyString())).thenReturn(Map.of());
 
-        instanceManager = new InstanceManager(properties, portAllocator, runtimePreparer, agentConfigService);
+        instanceManager = new InstanceManager(properties, portAllocator, runtimePreparer, agentConfigService,
+                3000, false);
     }
 
     @Test

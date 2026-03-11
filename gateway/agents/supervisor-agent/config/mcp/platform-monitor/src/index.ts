@@ -9,7 +9,7 @@ import {
 // Config
 // ---------------------------------------------------------------------------
 
-const GATEWAY_URL = process.env.GATEWAY_URL || 'http://127.0.0.1:3000'
+const GATEWAY_URL = process.env.GATEWAY_URL || 'https://127.0.0.1:3000'
 const GATEWAY_SECRET_KEY = process.env.GATEWAY_SECRET_KEY || 'test'
 
 // ---------------------------------------------------------------------------

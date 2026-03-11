@@ -31,32 +31,69 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_ok()    { echo -e "${GREEN}[OK]${NC}    $1"; }
 log_fail()  { echo -e "${RED}[FAIL]${NC}  $1"; }
 
-# --- Generate .env from config.yaml ---
-generate_env_file() {
-    local env_file="${SERVICE_DIR}/.env"
-    local port jwt_enabled plugins_enabled allow_private_ip allow_meta_ip
+# --- Detect CA cert for HTTPS gateway trust ---
+detect_ca_cert() {
+    # 1. Gateway's exported cert PEM (auto-generated alongside keystore)
+    local gateway_dir
+    gateway_dir="$(dirname "${SERVICE_DIR}")/gateway"
+    local gateway_pem="${gateway_dir}/.gateway-keystore.pem"
+    if [ -f "${gateway_pem}" ]; then
+        echo "${gateway_pem}"
+        return 0
+    fi
+    # 2. mkcert command (if on PATH)
+    if command -v mkcert >/dev/null 2>&1; then
+        local ca_root
+        ca_root="$(mkcert -CAROOT 2>/dev/null)"
+        if [ -n "${ca_root}" ] && [ -f "${ca_root}/rootCA.pem" ]; then
+            echo "${ca_root}/rootCA.pem"
+            return 0
+        fi
+    fi
+    # 3. Common mkcert CA locations by platform
+    local candidates=()
+    case "$(uname -s)" in
+        Darwin)
+            candidates+=("${HOME}/Library/Application Support/mkcert/rootCA.pem")
+            ;;
+        Linux)
+            candidates+=("${HOME}/.local/share/mkcert/rootCA.pem")
+            ;;
+    esac
+    for c in "${candidates[@]}"; do
+        if [ -f "${c}" ]; then
+            echo "${c}"
+            return 0
+        fi
+    done
+}
 
-    port="$(yaml_val port)"
-    jwt_enabled="$(yaml_val jwtEnabled)"
-    plugins_enabled="$(yaml_val pluginsEnabled)"
-    allow_private_ip="$(yaml_val allowPrivateIpAddress)"
-    allow_meta_ip="$(yaml_val allowMetaIpAddress)"
+# --- Load config from config.yaml into env vars ---
+load_config() {
+    ONLYOFFICE_PORT="${ONLYOFFICE_PORT:-$(yaml_val port)}"
+    ONLYOFFICE_PORT="${ONLYOFFICE_PORT:-8080}"
 
-    [ -n "${port}" ] || port="8080"
-    [ -n "${jwt_enabled}" ] || jwt_enabled="false"
-    [ -n "${plugins_enabled}" ] || plugins_enabled="false"
-    [ -n "${allow_private_ip}" ] || allow_private_ip="true"
-    [ -n "${allow_meta_ip}" ] || allow_meta_ip="true"
+    export ONLYOFFICE_PORT
+    export JWT_ENABLED="${JWT_ENABLED:-$(yaml_val jwtEnabled)}"
+    export PLUGINS_ENABLED="${PLUGINS_ENABLED:-$(yaml_val pluginsEnabled)}"
+    export ALLOW_PRIVATE_IP_ADDRESS="${ALLOW_PRIVATE_IP_ADDRESS:-$(yaml_val allowPrivateIpAddress)}"
+    export ALLOW_META_IP_ADDRESS="${ALLOW_META_IP_ADDRESS:-$(yaml_val allowMetaIpAddress)}"
 
-    cat > "${env_file}" <<EOF
-ONLYOFFICE_PORT=${port}
-JWT_ENABLED=${jwt_enabled}
-PLUGINS_ENABLED=${plugins_enabled}
-ALLOW_PRIVATE_IP_ADDRESS=${allow_private_ip}
-ALLOW_META_IP_ADDRESS=${allow_meta_ip}
-EOF
+    [ -n "${JWT_ENABLED}" ] || JWT_ENABLED="false"
+    [ -n "${PLUGINS_ENABLED}" ] || PLUGINS_ENABLED="false"
+    [ -n "${ALLOW_PRIVATE_IP_ADDRESS}" ] || ALLOW_PRIVATE_IP_ADDRESS="true"
+    [ -n "${ALLOW_META_IP_ADDRESS}" ] || ALLOW_META_IP_ADDRESS="true"
 
-    ONLYOFFICE_PORT="${port}"
+    # CA cert for HTTPS gateway trust
+    # Priority: env var > config.yaml > auto-detect mkcert
+    local ca_cert="${MKCERT_CA_CERT:-$(yaml_val caCert)}"
+    if [ -z "${ca_cert}" ] || [ ! -f "${ca_cert}" ]; then
+        ca_cert="$(detect_ca_cert)"
+    fi
+    if [ -n "${ca_cert}" ] && [ -f "${ca_cert}" ]; then
+        export MKCERT_CA_CERT="${ca_cert}"
+        export NODE_EXTRA_CA_CERTS="/usr/local/share/ca-certificates/custom-ca.crt"
+    fi
 }
 
 # --- Utilities ---
@@ -76,13 +113,18 @@ wait_ready() {
 
 # --- OnlyOffice actions ---
 do_startup() {
-    generate_env_file
+    load_config
 
     if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         log_info "OnlyOffice already running"
     else
         log_info "Starting OnlyOffice (port ${ONLYOFFICE_PORT})..."
         docker compose -f "${COMPOSE_FILE}" up -d
+    fi
+
+    # If CA cert is mounted, update container's CA trust store
+    if [ -n "${MKCERT_CA_CERT:-}" ]; then
+        docker exec "${CONTAINER_NAME}" update-ca-certificates >/dev/null 2>&1 || true
     fi
 
     log_info "Checking OnlyOffice readiness (timeout: 120s)..."
@@ -107,7 +149,7 @@ do_shutdown() {
 }
 
 do_status() {
-    generate_env_file
+    load_config
     if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         local port="${ONLYOFFICE_PORT}"
         if curl -fsS "http://127.0.0.1:${port}/healthcheck" >/dev/null 2>&1 \

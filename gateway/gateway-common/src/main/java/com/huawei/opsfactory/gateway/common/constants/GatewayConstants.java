@@ -15,9 +15,9 @@ public final class GatewayConstants {
     public static final String DEFAULT_USER = "__default__";
 
     // Process
-    public static final int HEALTH_CHECK_MAX_ATTEMPTS = 20;
-    public static final long HEALTH_CHECK_INITIAL_INTERVAL_MS = 50L;
-    public static final long HEALTH_CHECK_MAX_INTERVAL_MS = 500L;
+    public static final int HEALTH_CHECK_MAX_ATTEMPTS = 30;
+    public static final long HEALTH_CHECK_INITIAL_INTERVAL_MS = 100L;
+    public static final long HEALTH_CHECK_MAX_INTERVAL_MS = 1000L;
     public static final long STOP_GRACE_PERIOD_MS = 1000L;
 
     // Idle

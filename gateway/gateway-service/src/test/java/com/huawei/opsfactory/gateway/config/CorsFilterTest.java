@@ -270,4 +270,49 @@ public class CorsFilterTest {
         assertEquals("http://any.site.com",
                 exchange.getResponse().getHeaders().getFirst("Access-Control-Allow-Origin"));
     }
+
+    // ====================== HTTPS origin support ======================
+
+    @Test
+    public void httpsOrigin_exactMatch() {
+        properties.setCorsOrigin("https://127.0.0.1:5173");
+        MockServerHttpRequest request = MockServerHttpRequest.get("/test")
+                .header(HttpHeaders.ORIGIN, "https://127.0.0.1:5173")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(corsFilter().filter(exchange, passThrough())).verifyComplete();
+
+        assertEquals("https://127.0.0.1:5173",
+                exchange.getResponse().getHeaders().getFirst("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    public void httpsOrigin_wildcard_returnsHttpsOrigin() {
+        properties.setCorsOrigin("*");
+        MockServerHttpRequest request = MockServerHttpRequest.get("/test")
+                .header(HttpHeaders.ORIGIN, "https://app.example.com")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(corsFilter().filter(exchange, passThrough())).verifyComplete();
+
+        assertEquals("https://app.example.com",
+                exchange.getResponse().getHeaders().getFirst("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    public void httpsOrigin_optionsPreflight_returns204() {
+        properties.setCorsOrigin("https://127.0.0.1:5173");
+        MockServerHttpRequest request = MockServerHttpRequest.options("/test")
+                .header(HttpHeaders.ORIGIN, "https://127.0.0.1:5173")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(corsFilter().filter(exchange, passThrough())).verifyComplete();
+
+        assertEquals(HttpStatus.NO_CONTENT, exchange.getResponse().getStatusCode());
+        assertEquals("https://127.0.0.1:5173",
+                exchange.getResponse().getHeaders().getFirst("Access-Control-Allow-Origin"));
+    }
 }

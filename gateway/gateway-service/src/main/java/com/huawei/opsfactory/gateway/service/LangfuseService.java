@@ -9,8 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -68,10 +66,8 @@ public class LangfuseService {
         if (!isConfigured()) {
             return Mono.just("[]");
         }
-        String encodedFrom = URLEncoder.encode(from, StandardCharsets.UTF_8);
-        String encodedTo = URLEncoder.encode(to, StandardCharsets.UTF_8);
-        String url = config.getHost() + "/api/public/traces?fromTimestamp=" + encodedFrom
-                + "&toTimestamp=" + encodedTo + "&limit=" + limit;
+        String url = config.getHost() + "/api/public/traces?fromTimestamp=" + from
+                + "&toTimestamp=" + to + "&limit=" + limit;
         return doGet(url);
     }
 
@@ -79,10 +75,8 @@ public class LangfuseService {
         if (!isConfigured()) {
             return Mono.just("[]");
         }
-        String encodedFrom = URLEncoder.encode(from, StandardCharsets.UTF_8);
-        String encodedTo = URLEncoder.encode(to, StandardCharsets.UTF_8);
-        String url = config.getHost() + "/api/public/observations?fromTimestamp=" + encodedFrom
-                + "&toTimestamp=" + encodedTo;
+        String url = config.getHost() + "/api/public/observations?fromTimestamp=" + from
+                + "&toTimestamp=" + to;
         return doGet(url);
     }
 

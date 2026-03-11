@@ -1,9 +1,12 @@
 port: 3000
-host: "0.0.0.0"
-secretKey: "test"
-corsOrigin: "*"
-goosedBin: "goosed"
+host: 0.0.0.0
+secretKey: test
+corsOrigin: '*'
+goosedBin: goosed
 goosedTls: true
+gatewayTls: true
+gatewayKeyStore: .gateway-keystore.p12
+gatewayKeyStorePassword: changeit
 
 paths:
   agentsDir: agents
@@ -27,13 +30,13 @@ prewarm:
 
 langfuse:
   host: "http://127.0.0.1:3100"
-  publicKey: "pk-lf-opsfactory"
-  secretKey: "sk-lf-opsfactory"
+  publicKey: pk-lf-opsfactory
+  secretKey: sk-lf-opsfactory
 
 officePreview:
   enabled: true
   onlyofficeUrl: "http://127.0.0.1:8080"
-  fileBaseUrl: "http://host.docker.internal:3000"
+  fileBaseUrl: "https://host.docker.internal:3000"
 
 agents:
   - {id: universal-agent, name: Universal Agent}
