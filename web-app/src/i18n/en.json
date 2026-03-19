@@ -594,6 +594,7 @@
   },
   "market": {
     "title": "Capability Market",
+    "mockBadge": "Mock Page, Under Construction",
     "browseMarket": "Browse Market",
     "searchPlaceholder": "Search capabilities...",
     "tabs": {

@@ -79,7 +79,12 @@ export default function CapabilityMarketPanel({ isOpen, activeTab, onClose, onTa
         <div className="capability-market-container">
             <div className="cap-market-header">
                 <div className="cap-market-title-area">
-                    <h2 className="cap-market-title">{t('market.title')}</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <h2 className="cap-market-title">{t('market.title')}</h2>
+                        <span className="cap-market-mock-badge">
+                            {t('market.mockBadge')}
+                        </span>
+                    </div>
                     <button className="cap-btn-icon" onClick={onClose} aria-label={t('common.close')}>
                         <X size={20} />
                     </button>
@@ -98,7 +103,7 @@ export default function CapabilityMarketPanel({ isOpen, activeTab, onClose, onTa
                     </div>
                 </div>
 
-                <div className="seg-filter" role="tablist" style={{ marginBottom: '24px' }}>
+                <div className="seg-filter" role="tablist" style={{ marginBottom: '8px' }}>
                     <button 
                         className={`seg-filter-btn ${activeTab === 'all' ? 'active' : ''}`}
                         onClick={() => onTabChange('all')}

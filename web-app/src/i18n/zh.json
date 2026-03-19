@@ -593,6 +593,7 @@
   },
   "market": {
     "title": "能力市场",
+    "mockBadge": "模拟页面，待构建",
     "browseMarket": "浏览市场",
     "searchPlaceholder": "搜索能力...",
     "tabs": {
