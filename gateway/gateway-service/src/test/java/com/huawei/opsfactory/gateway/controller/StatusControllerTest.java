@@ -26,7 +26,7 @@ public class StatusControllerTest {
 
     @Test
     public void testStatus() {
-        webTestClient.get().uri("/status")
+        webTestClient.get().uri("/ops-gateway/status")
                 .header("x-secret-key", "test")
                 .exchange()
                 .expectStatus().isOk()
@@ -36,7 +36,7 @@ public class StatusControllerTest {
     @Test
     public void testMe_noUserIdHeader_returnsUnknown() {
         // /me is excluded from UserContextFilter, so no user attributes are set.
-        webTestClient.get().uri("/me")
+        webTestClient.get().uri("/ops-gateway/me")
                 .header("x-secret-key", "test")
                 .exchange()
                 .expectStatus().isOk()
@@ -47,7 +47,7 @@ public class StatusControllerTest {
 
     @Test
     public void testMe_withUserIdHeader_returnsUser() {
-        webTestClient.get().uri("/me")
+        webTestClient.get().uri("/ops-gateway/me")
                 .header("x-secret-key", "test")
                 .header("x-user-id", "user123")
                 .exchange()
@@ -59,7 +59,7 @@ public class StatusControllerTest {
 
     @Test
     public void testConfig() {
-        webTestClient.get().uri("/config")
+        webTestClient.get().uri("/ops-gateway/config")
                 .header("x-secret-key", "test")
                 .exchange()
                 .expectStatus().isOk()
@@ -69,7 +69,7 @@ public class StatusControllerTest {
 
     @Test
     public void testUnauthorized_noKey() {
-        webTestClient.get().uri("/me")
+        webTestClient.get().uri("/ops-gateway/me")
                 .exchange()
                 .expectStatus().isUnauthorized();
     }

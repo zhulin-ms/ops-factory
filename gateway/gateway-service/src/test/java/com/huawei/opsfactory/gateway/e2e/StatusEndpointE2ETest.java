@@ -11,7 +11,7 @@ public class StatusEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void getStatus_returnsOk() {
-        webClient.get().uri("/status")
+        webClient.get().uri("/ops-gateway/status")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .exchange()
                 .expectStatus().isOk()
@@ -22,7 +22,7 @@ public class StatusEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void getMe_sysUser_returnsSys() {
-        webClient.get().uri("/me")
+        webClient.get().uri("/ops-gateway/me")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .exchange()
@@ -34,7 +34,7 @@ public class StatusEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void getMe_regularUser_returnsUser() {
-        webClient.get().uri("/me")
+        webClient.get().uri("/ops-gateway/me")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "user-123")
                 .exchange()
@@ -48,7 +48,7 @@ public class StatusEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void getConfig_returnsOfficePreviewDefaults() {
-        webClient.get().uri("/config")
+        webClient.get().uri("/ops-gateway/config")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .exchange()
                 .expectStatus().isOk()
@@ -60,7 +60,7 @@ public class StatusEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void getConfig_unauthenticated_returns401() {
-        webClient.get().uri("/config")
+        webClient.get().uri("/ops-gateway/config")
                 .exchange()
                 .expectStatus().isUnauthorized();
     }

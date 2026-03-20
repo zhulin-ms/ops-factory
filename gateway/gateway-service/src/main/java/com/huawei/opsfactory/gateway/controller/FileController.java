@@ -63,11 +63,11 @@ public class FileController {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
         Path workingDir = agentConfigService.getUserAgentDir(userId, agentId);
 
-        // Extract the file path after /agents/{agentId}/files/
+        // Extract the file path after /ops-gateway/agents/{agentId}/files/
         // getPath().value() returns the raw percent-encoded URI; decode so that
         // non-ASCII filenames (e.g. Chinese characters) resolve correctly on disk.
         String fullPath = exchange.getRequest().getPath().value();
-        String prefix = "/agents/" + agentId + "/files/";
+        String prefix = "/ops-gateway/agents/" + agentId + "/files/";
         String relativePath = URLDecoder.decode(fullPath.substring(prefix.length()), StandardCharsets.UTF_8);
 
         // Check for path traversal — return 403

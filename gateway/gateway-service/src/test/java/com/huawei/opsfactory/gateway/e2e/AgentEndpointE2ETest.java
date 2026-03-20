@@ -37,7 +37,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
                 Map.of("name", "brainstorming", "description", "Brainstorm ideas", "path", "skills/brainstorming")));
         when(agentConfigService.listSkills("kb-agent")).thenReturn(Collections.emptyList());
 
-        webClient.get().uri("/agents")
+        webClient.get().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -60,7 +60,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
     public void listAgents_emptyRegistry_returnsEmptyArray() {
         when(agentConfigService.getRegistry()).thenReturn(Collections.emptyList());
 
-        webClient.get().uri("/agents")
+        webClient.get().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -72,7 +72,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void listAgents_unauthenticated_returns401() {
-        webClient.get().uri("/agents")
+        webClient.get().uri("/ops-gateway/agents")
                 .exchange()
                 .expectStatus().isUnauthorized();
     }
@@ -81,7 +81,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
     public void listAgents_regularUser_canAccess() {
         when(agentConfigService.getRegistry()).thenReturn(Collections.emptyList());
 
-        webClient.get().uri("/agents")
+        webClient.get().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -98,7 +98,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
                 Map.of("id", "test-agent", "name", "Test Agent",
                         "provider", "openai", "model", "gpt-4o"));
 
-        webClient.post().uri("/agents")
+        webClient.post().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -113,7 +113,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void createAgent_nonAdmin_returns403() {
-        webClient.post().uri("/agents")
+        webClient.post().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -124,7 +124,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void createAgent_missingId_returns400() {
-        webClient.post().uri("/agents")
+        webClient.post().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -135,7 +135,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void createAgent_blankId_returns400() {
-        webClient.post().uri("/agents")
+        webClient.post().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -146,7 +146,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void createAgent_missingName_returns400() {
-        webClient.post().uri("/agents")
+        webClient.post().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -160,7 +160,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
         when(agentConfigService.createAgent(anyString(), anyString()))
                 .thenThrow(new IllegalArgumentException("Agent with ID 'test-agent' already exists"));
 
-        webClient.post().uri("/agents")
+        webClient.post().uri("/ops-gateway/agents")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -176,7 +176,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
         doNothing().when(instanceManager).stopAllForAgent("test-agent");
         doNothing().when(agentConfigService).deleteAgent("test-agent");
 
-        webClient.delete().uri("/agents/test-agent")
+        webClient.delete().uri("/ops-gateway/agents/test-agent")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .exchange()
@@ -190,7 +190,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void deleteAgent_nonAdmin_returns403() {
-        webClient.delete().uri("/agents/test-agent")
+        webClient.delete().uri("/ops-gateway/agents/test-agent")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "bob")
                 .exchange()
@@ -202,7 +202,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
         doThrow(new IllegalArgumentException("Agent 'nonexistent' not found"))
                 .when(agentConfigService).deleteAgent("nonexistent");
 
-        webClient.delete().uri("/agents/nonexistent")
+        webClient.delete().uri("/ops-gateway/agents/nonexistent")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .exchange()
@@ -217,7 +217,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
                 Map.of("name", "brainstorming", "description", "Brainstorm ideas", "path", "skills/brainstorming"),
                 Map.of("name", "coding", "description", "Code assistance", "path", "skills/coding")));
 
-        webClient.get().uri("/agents/universal-agent/skills")
+        webClient.get().uri("/ops-gateway/agents/universal-agent/skills")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .exchange()
@@ -232,7 +232,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void listSkills_nonAdmin_returns403() {
-        webClient.get().uri("/agents/universal-agent/skills")
+        webClient.get().uri("/ops-gateway/agents/universal-agent/skills")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -251,7 +251,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
                 .thenReturn("# Universal Agent\nA general purpose agent.");
         when(agentConfigService.getAgentsDir()).thenReturn(Path.of("/tmp/agents"));
 
-        webClient.get().uri("/agents/universal-agent/config")
+        webClient.get().uri("/ops-gateway/agents/universal-agent/config")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .exchange()
@@ -264,7 +264,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void getConfig_nonAdmin_returns403() {
-        webClient.get().uri("/agents/universal-agent/config")
+        webClient.get().uri("/ops-gateway/agents/universal-agent/config")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "bob")
                 .exchange()
@@ -280,7 +280,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
         when(agentConfigService.readAgentsMd("minimal-agent")).thenReturn("");
         when(agentConfigService.getAgentsDir()).thenReturn(Path.of("/tmp/agents"));
 
-        webClient.get().uri("/agents/minimal-agent/config")
+        webClient.get().uri("/ops-gateway/agents/minimal-agent/config")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .exchange()
@@ -299,7 +299,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
                 .thenReturn(new AgentRegistryEntry("universal-agent", "Universal Agent", false));
         doNothing().when(agentConfigService).writeAgentsMd(eq("universal-agent"), anyString());
 
-        webClient.put().uri("/agents/universal-agent/config")
+        webClient.put().uri("/ops-gateway/agents/universal-agent/config")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -314,7 +314,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void updateConfig_nonAdmin_returns403() {
-        webClient.put().uri("/agents/universal-agent/config")
+        webClient.put().uri("/ops-gateway/agents/universal-agent/config")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -328,7 +328,7 @@ public class AgentEndpointE2ETest extends BaseE2ETest {
         when(agentConfigService.findAgent("universal-agent"))
                 .thenReturn(new AgentRegistryEntry("universal-agent", "Universal Agent", false));
 
-        webClient.put().uri("/agents/universal-agent/config")
+        webClient.put().uri("/ops-gateway/agents/universal-agent/config")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "sys")
                 .contentType(MediaType.APPLICATION_JSON)

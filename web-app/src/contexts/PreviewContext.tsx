@@ -54,7 +54,10 @@ export function PreviewProvider({ children }: { children: ReactNode }) {
     // Fetch gateway config on mount
     useEffect(() => {
         fetch(`${GATEWAY_URL}/config`, {
-            headers: { 'x-secret-key': GATEWAY_SECRET_KEY },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-secret-key': GATEWAY_SECRET_KEY,
+            },
         })
             .then(res => res.ok ? res.json() : null)
             .then(data => {

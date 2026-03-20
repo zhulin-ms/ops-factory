@@ -39,7 +39,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
                 Map.of("name", "report.pdf", "path", "data/report.pdf", "size", 1024),
                 Map.of("name", "notes.txt", "path", "data/notes.txt", "size", 256)));
 
-        webClient.get().uri("/agents/test-agent/files")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -55,7 +55,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
     public void listFiles_emptyDir_returnsEmptyArray() throws IOException {
         when(fileService.listFiles(any(Path.class))).thenReturn(Collections.emptyList());
 
-        webClient.get().uri("/agents/test-agent/files")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -66,7 +66,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void listFiles_unauthenticated_returns401() {
-        webClient.get().uri("/agents/test-agent/files")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files")
                 .exchange()
                 .expectStatus().isUnauthorized();
     }
@@ -75,7 +75,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
     public void listFiles_ioException_returns500() throws IOException {
         when(fileService.listFiles(any(Path.class))).thenThrow(new IOException("disk error"));
 
-        webClient.get().uri("/agents/test-agent/files")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -97,7 +97,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
         when(fileService.getMimeType("readme.txt")).thenReturn("text/plain");
         when(fileService.isInline("text/plain")).thenReturn(true);
 
-        webClient.get().uri("/agents/test-agent/files/data/readme.txt")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files/data/readme.txt")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -119,7 +119,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
         when(fileService.getMimeType("archive.zip")).thenReturn("application/zip");
         when(fileService.isInline("application/zip")).thenReturn(false);
 
-        webClient.get().uri("/agents/test-agent/files/archive.zip")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files/archive.zip")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -133,7 +133,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
         when(fileService.resolveFile(any(Path.class), eq("nonexistent.txt")))
                 .thenReturn(null);
 
-        webClient.get().uri("/agents/test-agent/files/nonexistent.txt")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files/nonexistent.txt")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -142,7 +142,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void getFile_unauthenticated_returns401() {
-        webClient.get().uri("/agents/test-agent/files/data/secret.txt")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files/data/secret.txt")
                 .exchange()
                 .expectStatus().isUnauthorized();
     }
@@ -160,7 +160,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
         when(fileService.getMimeType("nested.txt")).thenReturn("text/plain");
         when(fileService.isInline("text/plain")).thenReturn(true);
 
-        webClient.get().uri("/agents/test-agent/files/data/subdir/nested.txt")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files/data/subdir/nested.txt")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -174,7 +174,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
 
     @Test
     public void uploadFile_unauthenticated_returns401() {
-        webClient.post().uri("/agents/test-agent/files/upload?sessionId=s1")
+        webClient.post().uri("/ops-gateway/agents/test-agent/files/upload?sessionId=s1")
                 .exchange()
                 .expectStatus().isUnauthorized();
     }
@@ -189,7 +189,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
                 .thenReturn(List.of(Map.of("name", "bob-file.txt", "path", "bob-file.txt", "size", 200)));
 
         // Alice sees her files
-        webClient.get().uri("/agents/test-agent/files")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -198,7 +198,7 @@ public class FileEndpointE2ETest extends BaseE2ETest {
                 .jsonPath("$.files[0].name").isEqualTo("alice-file.txt");
 
         // Bob sees his files
-        webClient.get().uri("/agents/test-agent/files")
+        webClient.get().uri("/ops-gateway/agents/test-agent/files")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "bob")
                 .exchange()

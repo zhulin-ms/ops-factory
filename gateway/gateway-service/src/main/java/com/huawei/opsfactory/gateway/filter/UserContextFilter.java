@@ -27,7 +27,8 @@ public class UserContextFilter implements WebFilter {
     }
 
     private static boolean isSystemEndpoint(String path) {
-        return path.equals("/status") || path.equals("/me") || path.equals("/config");
+        return path.equals("/status") || path.equals("/me") || path.equals("/config") ||
+               path.equals("/ops-gateway/status") || path.equals("/ops-gateway/me") || path.equals("/ops-gateway/config");
     }
 
     @Override
