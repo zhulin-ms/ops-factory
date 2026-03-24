@@ -1,47 +1,51 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { parse } from 'yaml'
+import type { Plugin } from 'vite'
 
-interface ConfigYaml {
-    gatewayUrl?: string
-    gatewaySecretKey?: string
-    port?: number
-}
+function runtimeConfigPlugin(): Plugin {
+    const cwd = process.cwd()
+    const configPath = resolve(cwd, 'config.yaml')
+    const configExamplePath = resolve(cwd, 'config.yaml.example')
 
-function loadYamlConfig(): ConfigYaml {
-    const configPath = resolve(process.cwd(), 'config.yaml')
-    if (!existsSync(configPath)) return {}
-    return (parse(readFileSync(configPath, 'utf-8')) as ConfigYaml) || {}
+    return {
+        name: 'runtime-config',
+        configureServer(server) {
+            server.middlewares.use((req, res, next) => {
+                if (req.url === '/config.yaml' || req.url === '/config.yaml.example') {
+                    const sourcePath = req.url === '/config.yaml' ? configPath : configExamplePath
+                    if (!existsSync(sourcePath)) {
+                        res.statusCode = 404
+                        res.end('Not Found')
+                        return
+                    }
+
+                    res.setHeader('Content-Type', 'application/yaml; charset=utf-8')
+                    res.end(readFileSync(sourcePath, 'utf-8'))
+                    return
+                }
+                next()
+            })
+        },
+        writeBundle(options) {
+            const outDir = resolve(cwd, options.dir || 'dist')
+            mkdirSync(outDir, { recursive: true })
+            if (existsSync(configPath)) {
+                copyFileSync(configPath, resolve(outDir, 'config.yaml'))
+            }
+            if (existsSync(configExamplePath)) {
+                copyFileSync(configExamplePath, resolve(outDir, 'config.yaml.example'))
+            }
+        },
+    }
 }
 
 export default defineConfig(() => {
-    const yaml = loadYamlConfig()
-
-    const gatewayUrl = yaml.gatewayUrl
-    const gatewaySecretKey = yaml.gatewaySecretKey
-    const port = yaml.port ?? 5173
-
-    const missing: string[] = []
-    if (!gatewayUrl) missing.push('gatewayUrl')
-    if (!gatewaySecretKey) missing.push('gatewaySecretKey')
-
-    if (missing.length > 0) {
-        console.error('\n Missing required configuration:\n')
-        missing.forEach(key => console.error(`   - ${key}`))
-        console.error('\n Create config.yaml in web-app/ with these fields.\n')
-        process.exit(1)
-    }
-
     return {
-        plugins: [react()],
-        define: {
-            'import.meta.env.VITE_GATEWAY_URL': JSON.stringify(gatewayUrl),
-            'import.meta.env.VITE_GATEWAY_SECRET_KEY': JSON.stringify(gatewaySecretKey),
-        },
+        plugins: [react(), runtimeConfigPlugin()],
         server: {
-            port,
+            port: 5173,
         },
     }
 })

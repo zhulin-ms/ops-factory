@@ -1,4 +1,10 @@
 import type { UserRole } from '../contexts/UserContext'
+import { parse } from 'yaml'
+
+interface RuntimeConfigYaml {
+    gatewayUrl?: string
+    gatewaySecretKey?: string
+}
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1'])
 
@@ -25,8 +31,33 @@ function resolveGatewayUrl(raw: string | undefined): string {
     }
 }
 
-export const GATEWAY_URL = resolveGatewayUrl(import.meta.env.VITE_GATEWAY_URL)
-export const GATEWAY_SECRET_KEY = import.meta.env.VITE_GATEWAY_SECRET_KEY || 'test'
+const DEFAULT_SECRET_KEY = 'test'
+
+export let GATEWAY_URL = resolveGatewayUrl(undefined)
+export let GATEWAY_SECRET_KEY = DEFAULT_SECRET_KEY
+
+function setRuntimeConfig(config: RuntimeConfigYaml): void {
+    GATEWAY_URL = resolveGatewayUrl(config.gatewayUrl)
+    GATEWAY_SECRET_KEY = config.gatewaySecretKey || DEFAULT_SECRET_KEY
+}
+
+export async function initializeRuntimeConfig(): Promise<void> {
+    const response = await fetch('/config.yaml', { cache: 'no-store' })
+    if (!response.ok) {
+        throw new Error(`Failed to load /config.yaml (${response.status})`)
+    }
+
+    const config = (parse(await response.text()) as RuntimeConfigYaml | null) || {}
+
+    if (!config.gatewayUrl) {
+        throw new Error('Missing required configuration: gatewayUrl')
+    }
+    if (!config.gatewaySecretKey) {
+        throw new Error('Missing required configuration: gatewaySecretKey')
+    }
+
+    setRuntimeConfig(config)
+}
 
 export function isAdminUser(userId: string | null, role: UserRole | null): boolean {
     if (role === 'admin') return true
