@@ -334,6 +334,9 @@ public class InstanceManager {
             resetStuckRunningSchedules(runtimeRoot);
             int port = portAllocator.allocate();
 
+            log.info("Preparing to spawn goosed for {}:{} on port {}, runtimeRoot={}, goosedBin={}",
+                    agentId, userId, port, runtimeRoot, properties.getGoosedBin());
+
             Map<String, String> env = buildEnvironment(agentId, userId, port, runtimeRoot);
             String instanceSecret = env.get("GOOSE_SERVER__SECRET_KEY");
 
@@ -342,9 +345,12 @@ public class InstanceManager {
             pb.environment().putAll(env);
             pb.redirectErrorStream(true);
 
-            log.info("Spawning goosed for {}:{} on port {}", agentId, userId, port);
+            log.info("Spawning goosed for {}:{} on port {}, command: {} agent, TLS={}",
+                    agentId, userId, port, properties.getGoosedBin(), env.get("GOOSE_TLS"));
             Process process = pb.start();
             long pid = ProcessUtil.getPid(process);
+            log.info("goosed process started for {}:{} on port {} with pid={}, GOOSE_TLS env={}",
+                    agentId, userId, port, pid, env.get("GOOSE_TLS"));
 
             // Drain stdout/stderr to prevent pipe buffer full → goosed write() blocks → tokio deadlock.
             // goosed's tracing subscriber writes every log to both file and stderr; if the pipe buffer
@@ -352,11 +358,16 @@ public class InstanceManager {
             Thread drainThread = new Thread(() -> {
                 try (var in = process.getInputStream()) {
                     byte[] buf = new byte[8192];
-                    while (in.read(buf) != -1) {
-                        // discard
+                    long totalBytes = 0;
+                    int bytesRead;
+                    while ((bytesRead = in.read(buf)) != -1) {
+                        totalBytes += bytesRead;
                     }
-                } catch (java.io.IOException ignored) {
-                    // Process ended
+                    log.debug("Drain thread for {}:{} finished, total bytes drained: {}",
+                            agentId, userId, totalBytes);
+                } catch (java.io.IOException e) {
+                    log.debug("Drain thread for {}:{} ended with IOException: {}",
+                            agentId, userId, e.getMessage());
                 }
             }, "goosed-drain-" + agentId + "-" + userId);
             drainThread.setDaemon(true);
@@ -365,6 +376,8 @@ public class InstanceManager {
             ManagedInstance instance = new ManagedInstance(agentId, userId, port, pid, process, instanceSecret);
             instances.put(key, instance);
 
+            log.debug("Starting health check for {}:{} on port {} (pid={}), URL: {}",
+                    agentId, userId, port, pid, goosedBaseUrl(port) + "/status");
             waitForReady(port, process);
             instance.setStatus(ManagedInstance.Status.RUNNING);
             log.info("Instance {}:{} ready on port {} (pid={})", agentId, userId, port, pid);
@@ -444,7 +457,11 @@ public class InstanceManager {
         env.put("GOOSE_SERVER__SECRET_KEY", hexSecret.toString());
         env.put("GOOSE_PATH_ROOT", runtimeRoot.toString());
         env.put("GOOSE_DISABLE_KEYRING", "1");
-        env.put("GOOSE_TLS", String.valueOf(properties.isGoosedTls()));
+
+        boolean goosedTlsValue = properties.isGoosedTls();
+        env.put("GOOSE_TLS", String.valueOf(goosedTlsValue));
+        log.info("buildEnvironment: properties.isGoosedTls()={}, setting GOOSE_TLS={} for {}:{}",
+                goosedTlsValue, goosedTlsValue, agentId, userId);
 
         // Enable debug logging for goose internals, but keep rustls/hyper at info
         // to avoid tracing_log deadlock in TLS handshake (rustls debug logs go through
@@ -470,7 +487,13 @@ public class InstanceManager {
     }
 
     private void waitForReady(int port, Process process) throws Exception {
-        URL url = new URL(goosedBaseUrl(port) + "/status");
+        String baseUrl = goosedBaseUrl(port);
+        URL url = new URL(baseUrl + "/status");
+        String healthCheckUrl = url.toString();
+        log.info("[goosedTls config] waitForReady: using baseUrl={}, goosedScheme={}, health check URL: {}",
+                baseUrl, properties.goosedScheme(), healthCheckUrl);
+        log.info("Waiting for goosed on port {} to be ready, health check URL: {}, max attempts: {}",
+                port, healthCheckUrl, GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS);
         long interval = GatewayConstants.HEALTH_CHECK_INITIAL_INTERVAL_MS;
         for (int i = 0; i < GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS; i++) {
             if (!ProcessUtil.isAlive(process)) {
@@ -486,12 +509,16 @@ public class InstanceManager {
                     if (code == 200) {
                         log.info("goosed ready on port {} after {} attempts", port, i + 1);
                         return;
+                    } else {
+                        log.warn("Health check attempt {}/{} returned status code {} for {}",
+                                i + 1, GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS, code, healthCheckUrl);
                     }
                 } finally {
                     conn.disconnect();
                 }
-            } catch (IOException ignored) {
-                // Not ready yet
+            } catch (IOException e) {
+                log.debug("Health check attempt {}/{} failed for {}: {}",
+                        i + 1, GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS, healthCheckUrl, e.getMessage());
             }
             Thread.sleep(interval);
             interval = Math.min(interval * 2, GatewayConstants.HEALTH_CHECK_MAX_INTERVAL_MS);
@@ -499,6 +526,8 @@ public class InstanceManager {
         if (!ProcessUtil.isAlive(process)) {
             throw processExitedException(process, port);
         }
+        log.error("goosed failed to start on port {} after {} attempts - process is alive but not responding. Health check URL: {}",
+                port, GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS, healthCheckUrl);
         throw new RuntimeException("goosed failed to start on port " + port
                 + " (process alive but not responding after "
                 + GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS + " attempts)");
@@ -507,6 +536,8 @@ public class InstanceManager {
     private RuntimeException processExitedException(Process process, int port) {
         int exitCode = process.exitValue();
         String output = ProcessUtil.readOutput(process, 4096);
+        log.error("goosed process exited unexpectedly on port {}, exitCode={}, output (first 4KB): {}",
+                port, exitCode, output);
         return new RuntimeException("goosed process exited with code " + exitCode
                 + " on port " + port + ". Output: " + output);
     }

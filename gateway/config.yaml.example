@@ -7,7 +7,7 @@ host: "0.0.0.0"                         # env: GATEWAY_HOST
 secretKey: ""                           # env: GATEWAY_SECRET_KEY     [REQUIRED]
 corsOrigin: "http://127.0.0.1:5173"     # env: CORS_ORIGIN
 goosedBin: "goosed"                     # env: GOOSED_BIN
-goosedTls: false                        # env: GOOSED_TLS  (gateway↔goosed TLS)
+goosedTls: true                         # env: GOOSED_TLS  (gateway↔goosed TLS)
 
 paths:
   agentsDir: "agents"                   # env: AGENTS_DIR

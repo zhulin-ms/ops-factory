@@ -507,7 +507,7 @@ try {
 | 预热开关 | true | `gateway.prewarm.enabled` | — |
 | 预热默认 Agent | universal-agent | `gateway.prewarm.defaultAgentId` | — |
 | goosed 二进制路径 | goosed | `gateway.goosedBin` | — |
-| goosed TLS | false | `gateway.goosedTls` | — |
+| goosed TLS | true | `gateway.goosedTls` | — |
 | 优雅停止等待时间 | 1000ms | 硬编码 `GatewayConstants.STOP_GRACE_PERIOD_MS` | — |
 
 ### 9.2 配置注入链路

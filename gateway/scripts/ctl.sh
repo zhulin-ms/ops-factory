@@ -45,7 +45,7 @@ case "${GOOSED_BIN}" in
     *)  [ -f "${SERVICE_DIR}/${GOOSED_BIN}" ] && GOOSED_BIN="${SERVICE_DIR}/${GOOSED_BIN}" ;;
 esac
 GOOSED_TLS="${GOOSED_TLS:-$(yaml_val goosedTls)}"
-GOOSED_TLS="${GOOSED_TLS:-false}"
+GOOSED_TLS="${GOOSED_TLS:-true}"
 GATEWAY_TLS="${GATEWAY_TLS:-$(yaml_val gatewayTls)}"
 GATEWAY_TLS="${GATEWAY_TLS:-true}"
 GATEWAY_KEY_STORE="${GATEWAY_KEY_STORE:-$(yaml_val gatewayKeyStore)}"
@@ -343,7 +343,11 @@ do_startup() {
         log_info "Generated random internal gateway API password for child processes"
     fi
 
+    # Log goosedTls configuration for debugging
+    log_info "[goosedTls config] env=$GOOSED_TLS (source: env var > config.yaml > default)"
+
     log_info "Starting gateway at ${GATEWAY_SCHEME}://${GATEWAY_HOST}:${GATEWAY_PORT}"
+    log_info "[goosedTls config] Java will be started with -Dgateway.goosed-tls=${GOOSED_TLS}"
 
     # Build Java command — inject all config as Spring properties
     local java_cmd="java"

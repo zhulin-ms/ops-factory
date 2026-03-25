@@ -16,7 +16,7 @@ public class GoosedProxyTest {
     public void setUp() {
         GatewayProperties properties = new GatewayProperties();
         properties.setSecretKey("test-key");
-        // Default: goosedTls = false
+        properties.setGoosedTls(false);
         proxy = new GoosedProxy(properties);
 
         GatewayProperties tlsProps = new GatewayProperties();

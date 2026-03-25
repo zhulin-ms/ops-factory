@@ -69,9 +69,9 @@ public class GatewayPropertiesTest {
     // ====================== TLS properties ======================
 
     @Test
-    public void testGoosedTlsDefaultFalse() {
+    public void testGoosedTlsDefaultTrue() {
         GatewayProperties props = new GatewayProperties();
-        assertFalse(props.isGoosedTls());
+        assertTrue(props.isGoosedTls());
     }
 
     @Test
