@@ -16,12 +16,12 @@ public class GoosedProxyTest {
     public void setUp() {
         GatewayProperties properties = new GatewayProperties();
         properties.setSecretKey("test-key");
-        properties.setGoosedTls(false);
+        properties.setGooseTls(false);
         proxy = new GoosedProxy(properties);
 
         GatewayProperties tlsProps = new GatewayProperties();
         tlsProps.setSecretKey("test-key");
-        tlsProps.setGoosedTls(true);
+        tlsProps.setGooseTls(true);
         proxyTls = new GoosedProxy(tlsProps);
     }
 

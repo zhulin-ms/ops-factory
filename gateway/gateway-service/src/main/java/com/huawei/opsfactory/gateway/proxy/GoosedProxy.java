@@ -45,7 +45,7 @@ public class GoosedProxy {
         HttpClient httpClient = HttpClient.newConnection()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000);
 
-        if (properties.isGoosedTls()) {
+        if (properties.isGooseTls()) {
             try {
                 SslContext sslContext = SslContextBuilder.forClient()
                         .trustManager(InsecureTrustManagerFactory.INSTANCE)
@@ -65,7 +65,7 @@ public class GoosedProxy {
     }
 
     public String goosedBaseUrl(int port) {
-        return properties.goosedScheme() + "://127.0.0.1:" + port;
+        return properties.gooseScheme() + "://127.0.0.1:" + port;
     }
 
     /**

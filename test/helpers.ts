@@ -167,7 +167,7 @@ export async function startJavaGateway(): Promise<GatewayHandle> {
     '-Dserver.address=127.0.0.1',
     `-Dgateway.secret-key=${SECRET_KEY}`,
     `-Dgateway.goosed-bin=${process.env.GOOSED_BIN || 'goosed'}`,
-    '-Dgateway.goosed-tls=true',
+    '-Dgateway.goose-tls=true',
     `-Dgateway.paths.project-root=${PROJECT_ROOT}`,
     '-Dgateway.cors-origin=*',
     `-Dlogging.config=file:${log4jConfig}`,

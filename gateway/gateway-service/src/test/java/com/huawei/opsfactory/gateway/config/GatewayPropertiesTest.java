@@ -69,29 +69,29 @@ public class GatewayPropertiesTest {
     // ====================== TLS properties ======================
 
     @Test
-    public void testGoosedTlsDefaultTrue() {
+    public void testGooseTlsDefaultTrue() {
         GatewayProperties props = new GatewayProperties();
-        assertTrue(props.isGoosedTls());
+        assertTrue(props.isGooseTls());
     }
 
     @Test
-    public void testGoosedTlsSetTrue() {
+    public void testGooseTlsSetTrue() {
         GatewayProperties props = new GatewayProperties();
-        props.setGoosedTls(true);
-        assertTrue(props.isGoosedTls());
+        props.setGooseTls(true);
+        assertTrue(props.isGooseTls());
     }
 
     @Test
-    public void testGoosedSchemeHttpsWhenTlsTrue() {
+    public void testGooseSchemeHttpsWhenTlsTrue() {
         GatewayProperties props = new GatewayProperties();
-        props.setGoosedTls(true);
-        assertEquals("https", props.goosedScheme());
+        props.setGooseTls(true);
+        assertEquals("https", props.gooseScheme());
     }
 
     @Test
-    public void testGoosedSchemeHttpWhenTlsFalse() {
+    public void testGooseSchemeHttpWhenTlsFalse() {
         GatewayProperties props = new GatewayProperties();
-        props.setGoosedTls(false);
-        assertEquals("http", props.goosedScheme());
+        props.setGooseTls(false);
+        assertEquals("http", props.gooseScheme());
     }
 }

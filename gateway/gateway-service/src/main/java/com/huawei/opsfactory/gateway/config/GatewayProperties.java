@@ -16,7 +16,7 @@ public class GatewayProperties {
     private String secretKey = "test";
     private String corsOrigin = "http://127.0.0.1:5173";
     private String goosedBin = "goosed";
-    private boolean goosedTls = true;
+    private boolean gooseTls = true;
 
     private Paths paths = new Paths();
     private Idle idle = new Idle();
@@ -53,16 +53,16 @@ public class GatewayProperties {
         this.goosedBin = goosedBin;
     }
 
-    public boolean isGoosedTls() {
-        return goosedTls;
+    public boolean isGooseTls() {
+        return gooseTls;
     }
 
-    public void setGoosedTls(boolean goosedTls) {
-        this.goosedTls = goosedTls;
+    public void setGooseTls(boolean gooseTls) {
+        this.gooseTls = gooseTls;
     }
 
-    public String goosedScheme() {
-        return goosedTls ? "https" : "http";
+    public String gooseScheme() {
+        return gooseTls ? "https" : "http";
     }
 
     public Paths getPaths() {
@@ -233,7 +233,7 @@ public class GatewayProperties {
 
     @PostConstruct
     public void logConfiguration() {
-        log.info("GatewayProperties loaded: goosedTls={}, goosedScheme={}, goosedBin={}",
-                goosedTls, goosedScheme(), goosedBin);
+        log.info("GatewayProperties loaded: gooseTls={}, gooseScheme={}, goosedBin={}",
+                gooseTls, gooseScheme(), goosedBin);
     }
 }

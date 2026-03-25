@@ -44,8 +44,9 @@ case "${GOOSED_BIN}" in
     /*) ;;  # already absolute
     *)  [ -f "${SERVICE_DIR}/${GOOSED_BIN}" ] && GOOSED_BIN="${SERVICE_DIR}/${GOOSED_BIN}" ;;
 esac
-GOOSED_TLS="${GOOSED_TLS:-$(yaml_val goosedTls)}"
-GOOSED_TLS="${GOOSED_TLS:-true}"
+GOOSE_TLS="${GOOSE_TLS:-$(yaml_val gooseTls)}"
+GOOSE_TLS="${GOOSE_TLS:-$(yaml_val goosedTls)}"
+GOOSE_TLS="${GOOSE_TLS:-true}"
 GATEWAY_TLS="${GATEWAY_TLS:-$(yaml_val gatewayTls)}"
 GATEWAY_TLS="${GATEWAY_TLS:-true}"
 GATEWAY_KEY_STORE="${GATEWAY_KEY_STORE:-$(yaml_val gatewayKeyStore)}"
@@ -343,11 +344,11 @@ do_startup() {
         log_info "Generated random internal gateway API password for child processes"
     fi
 
-    # Log goosedTls configuration for debugging
-    log_info "[goosedTls config] env=$GOOSED_TLS (source: env var > config.yaml > default)"
+    # Log gooseTls configuration for debugging
+    log_info "[gooseTls config] env=$GOOSE_TLS (source: env var > config.yaml > default)"
 
     log_info "Starting gateway at ${GATEWAY_SCHEME}://${GATEWAY_HOST}:${GATEWAY_PORT}"
-    log_info "[goosedTls config] Java will be started with -Dgateway.goosed-tls=${GOOSED_TLS}"
+    log_info "[gooseTls config] Java will be started with -Dgateway.goose-tls=${GOOSE_TLS}"
 
     # Build Java command — inject all config as Spring properties
     local java_cmd="java"
@@ -358,7 +359,7 @@ do_startup() {
         "-Dgateway.secret-key=${GATEWAY_SECRET_KEY}"
         "-Dgateway.cors-origin=${CORS_ORIGIN}"
         "-Dgateway.goosed-bin=${GOOSED_BIN}"
-        "-Dgateway.goosed-tls=${GOOSED_TLS}"
+        "-Dgateway.goose-tls=${GOOSE_TLS}"
         "-Dgateway.paths.project-root=${PROJECT_ROOT}"
         "-Dgateway.paths.agents-dir=${AGENTS_DIR}"
         "-Dgateway.paths.users-dir=${USERS_DIR}"

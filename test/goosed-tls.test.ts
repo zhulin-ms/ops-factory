@@ -1,9 +1,9 @@
 /**
  * Tests for goosed TLS support.
  *
- * Verifies the full config chain for the goosed-tls feature:
- * 1. config.yaml parsing (yaml_val reads goosedTls)
- * 2. ctl.sh injects -Dgateway.goosed-tls via GOOSED_TLS
+ * Verifies the full config chain for the goose-tls feature:
+ * 1. config.yaml parsing (yaml_val reads gooseTls)
+ * 2. ctl.sh injects -Dgateway.goose-tls via GOOSE_TLS
  * 3. env var overrides config.yaml value
  * 4. Gateway Java unit tests pass (GatewayProperties, InstanceManager, GoosedProxy, etc.)
  * 5. No remaining hardcoded http://127.0.0.1 in goosed proxy code
@@ -51,27 +51,27 @@ afterAll(async () => {
 })
 
 // =============================================================================
-// 1. config.yaml contains goosedTls
+// 1. config.yaml contains gooseTls
 // =============================================================================
-describe('config.yaml goosedTls field', () => {
-  it('gateway/config.yaml contains goosedTls key', async () => {
+describe('config.yaml gooseTls field', () => {
+  it('gateway/config.yaml contains gooseTls key', async () => {
     const content = await readFile(join(GATEWAY_DIR, 'config.yaml'), 'utf-8')
-    expect(content).toMatch(/^goosedTls:\s*(true|false)/m)
+    expect(content).toMatch(/^gooseTls:\s*(true|false)/m)
   })
 
-  it('goosedTls defaults to true', async () => {
+  it('gooseTls defaults to true', async () => {
     const content = await readFile(join(GATEWAY_DIR, 'config.yaml'), 'utf-8')
-    expect(content).toMatch(/^goosedTls:\s*true/m)
+    expect(content).toMatch(/^gooseTls:\s*true/m)
   })
 })
 
 // =============================================================================
-// 2. ctl.sh parses goosedTls from config.yaml
+// 2. ctl.sh parses gooseTls from config.yaml
 // =============================================================================
-describe('ctl.sh goosedTls parsing', () => {
-  it('yaml_val reads goosedTls value', async () => {
+describe('ctl.sh gooseTls parsing', () => {
+  it('yaml_val reads gooseTls value', async () => {
     const tmpConfig = join(TMP_DIR, 'tls-yaml-val.yaml')
-    await writeFile(tmpConfig, 'goosedTls: true\ngoosedBin: "goosed"\n')
+    await writeFile(tmpConfig, 'gooseTls: true\ngoosedBin: "goosed"\n')
 
     const script = `
       yaml_val() {
@@ -79,17 +79,60 @@ describe('ctl.sh goosedTls parsing', () => {
         [ -f "\${file}" ] || return 0
         awk -F': ' -v k="\${key}" '$1==k {print $2}' "\${file}" | head -n1 | sed "s/^[\\"']//;s/[\\"']$//"
       }
-      GOOSED_TLS="\${GOOSED_TLS:-\$(yaml_val goosedTls)}"
-      GOOSED_TLS="\${GOOSED_TLS:-true}"
-      echo "goosedTls=\${GOOSED_TLS}"
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val gooseTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val goosedTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-true}"
+      echo "gooseTls=\${GOOSE_TLS}"
     `
     const { stdout, code } = await run('bash', ['-c', script])
     expect(code).toBe(0)
-    expect(stdout).toContain('goosedTls=true')
+    expect(stdout).toContain('gooseTls=true')
   })
 
-  it('yaml_val reads goosedTls=false', async () => {
+  it('yaml_val reads gooseTls=false', async () => {
     const tmpConfig = join(TMP_DIR, 'tls-yaml-val-false.yaml')
+    await writeFile(tmpConfig, 'gooseTls: false\n')
+
+    const script = `
+      yaml_val() {
+        local key="$1" file="${tmpConfig}"
+        [ -f "\${file}" ] || return 0
+        awk -F': ' -v k="\${key}" '$1==k {print $2}' "\${file}" | head -n1 | sed "s/^[\\"']//;s/[\\"']$//"
+      }
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val gooseTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val goosedTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-true}"
+      echo "gooseTls=\${GOOSE_TLS}"
+    `
+    const { stdout, code } = await run('bash', ['-c', script])
+    expect(code).toBe(0)
+    expect(stdout).toContain('gooseTls=false')
+  })
+
+  it('env var GOOSE_TLS overrides config.yaml', async () => {
+    const tmpConfig = join(TMP_DIR, 'tls-env-override.yaml')
+    await writeFile(tmpConfig, 'gooseTls: true\n')
+
+    const script = `
+      yaml_val() {
+        local key="$1" file="${tmpConfig}"
+        [ -f "\${file}" ] || return 0
+        awk -F': ' -v k="\${key}" '$1==k {print $2}' "\${file}" | head -n1 | sed "s/^[\\"']//;s/[\\"']$//"
+      }
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val gooseTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val goosedTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-true}"
+      echo "gooseTls=\${GOOSE_TLS}"
+    `
+    const { stdout, code } = await run('bash', ['-c', script], {
+      env: { ...process.env, GOOSE_TLS: 'false' },
+    })
+    expect(code).toBe(0)
+    expect(stdout).toContain('gooseTls=false')
+  })
+
+  it('falls back to legacy goosedTls key when gooseTls is absent', async () => {
+    const tmpConfig = join(TMP_DIR, 'tls-legacy-key.yaml')
     await writeFile(tmpConfig, 'goosedTls: false\n')
 
     const script = `
@@ -98,37 +141,17 @@ describe('ctl.sh goosedTls parsing', () => {
         [ -f "\${file}" ] || return 0
         awk -F': ' -v k="\${key}" '$1==k {print $2}' "\${file}" | head -n1 | sed "s/^[\\"']//;s/[\\"']$//"
       }
-      GOOSED_TLS="\${GOOSED_TLS:-\$(yaml_val goosedTls)}"
-      GOOSED_TLS="\${GOOSED_TLS:-true}"
-      echo "goosedTls=\${GOOSED_TLS}"
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val gooseTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val goosedTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-true}"
+      echo "gooseTls=\${GOOSE_TLS}"
     `
     const { stdout, code } = await run('bash', ['-c', script])
     expect(code).toBe(0)
-    expect(stdout).toContain('goosedTls=false')
+    expect(stdout).toContain('gooseTls=false')
   })
 
-  it('env var GOOSED_TLS overrides config.yaml', async () => {
-    const tmpConfig = join(TMP_DIR, 'tls-env-override.yaml')
-    await writeFile(tmpConfig, 'goosedTls: true\n')
-
-    const script = `
-      yaml_val() {
-        local key="$1" file="${tmpConfig}"
-        [ -f "\${file}" ] || return 0
-        awk -F': ' -v k="\${key}" '$1==k {print $2}' "\${file}" | head -n1 | sed "s/^[\\"']//;s/[\\"']$//"
-      }
-      GOOSED_TLS="\${GOOSED_TLS:-\$(yaml_val goosedTls)}"
-      GOOSED_TLS="\${GOOSED_TLS:-true}"
-      echo "goosedTls=\${GOOSED_TLS}"
-    `
-    const { stdout, code } = await run('bash', ['-c', script], {
-      env: { ...process.env, GOOSED_TLS: 'false' },
-    })
-    expect(code).toBe(0)
-    expect(stdout).toContain('goosedTls=false')
-  })
-
-  it('defaults to true when config.yaml has no goosedTls', async () => {
+  it('defaults to true when config.yaml has no gooseTls', async () => {
     const tmpConfig = join(TMP_DIR, 'tls-no-key.yaml')
     await writeFile(tmpConfig, 'port: 3000\n')
 
@@ -138,29 +161,31 @@ describe('ctl.sh goosedTls parsing', () => {
         [ -f "\${file}" ] || return 0
         awk -F': ' -v k="\${key}" '$1==k {print $2}' "\${file}" | head -n1 | sed "s/^[\\"']//;s/[\\"']$//"
       }
-      GOOSED_TLS="\${GOOSED_TLS:-\$(yaml_val goosedTls)}"
-      GOOSED_TLS="\${GOOSED_TLS:-true}"
-      echo "goosedTls=\${GOOSED_TLS}"
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val gooseTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-\$(yaml_val goosedTls)}"
+      GOOSE_TLS="\${GOOSE_TLS:-true}"
+      echo "gooseTls=\${GOOSE_TLS}"
     `
     const { stdout, code } = await run('bash', ['-c', script])
     expect(code).toBe(0)
-    expect(stdout).toContain('goosedTls=true')
+    expect(stdout).toContain('gooseTls=true')
   })
 })
 
 // =============================================================================
-// 3. ctl.sh injects -Dgateway.goosed-tls into Java opts
+// 3. ctl.sh injects -Dgateway.goose-tls into Java opts
 // =============================================================================
 describe('ctl.sh Java property injection', () => {
-  it('ctl.sh contains -Dgateway.goosed-tls injection', async () => {
+  it('ctl.sh contains -Dgateway.goose-tls injection', async () => {
     const content = await readFile(CTL_SH, 'utf-8')
-    expect(content).toContain('"-Dgateway.goosed-tls=${GOOSED_TLS}"')
+    expect(content).toContain('"-Dgateway.goose-tls=${GOOSE_TLS}"')
   })
 
-  it('ctl.sh reads GOOSED_TLS from yaml_val', async () => {
+  it('ctl.sh reads GOOSE_TLS from yaml_val', async () => {
     const content = await readFile(CTL_SH, 'utf-8')
-    expect(content).toContain('GOOSED_TLS="${GOOSED_TLS:-$(yaml_val goosedTls)}"')
-    expect(content).toContain('GOOSED_TLS="${GOOSED_TLS:-true}"')
+    expect(content).toContain('GOOSE_TLS="${GOOSE_TLS:-$(yaml_val gooseTls)}"')
+    expect(content).toContain('GOOSE_TLS="${GOOSE_TLS:-$(yaml_val goosedTls)}"')
+    expect(content).toContain('GOOSE_TLS="${GOOSE_TLS:-true}"')
   })
 
   it('ctl.sh passes bash -n (syntax valid after changes)', async () => {
@@ -171,15 +196,15 @@ describe('ctl.sh Java property injection', () => {
 })
 
 // =============================================================================
-// 4. Spring Boot application.yml has goosed-tls property
+// 4. Spring Boot application.yml has goose-tls property
 // =============================================================================
-describe('application.yml goosed-tls', () => {
-  it('application.yml contains goosed-tls property', async () => {
+describe('application.yml goose-tls', () => {
+  it('application.yml contains goose-tls property', async () => {
     const content = await readFile(
       join(GATEWAY_DIR, 'gateway-service', 'src', 'main', 'resources', 'application.yml'),
       'utf-8',
     )
-    expect(content).toMatch(/goosed-tls:\s*\$\{GOOSED_TLS:true\}/)
+    expect(content).toMatch(/goose-tls:\s*\$\{GOOSE_TLS:true\}/)
   })
 })
 
@@ -214,9 +239,9 @@ describe('no hardcoded http:// in goosed proxy code', () => {
 })
 
 // =============================================================================
-// 6. GatewayProperties has goosedTls field and goosedScheme() method
+// 6. GatewayProperties has gooseTls field and gooseScheme() method
 // =============================================================================
-describe('GatewayProperties goosedTls', () => {
+describe('GatewayProperties gooseTls', () => {
   let content: string
 
   beforeAll(async () => {
@@ -227,21 +252,21 @@ describe('GatewayProperties goosedTls', () => {
     )
   })
 
-  it('declares goosedTls boolean field', () => {
-    expect(content).toMatch(/private\s+boolean\s+goosedTls\s*=\s*true/)
+  it('declares gooseTls boolean field', () => {
+    expect(content).toMatch(/private\s+boolean\s+gooseTls\s*=\s*true/)
   })
 
-  it('has isGoosedTls() getter', () => {
-    expect(content).toContain('isGoosedTls()')
+  it('has isGooseTls() getter', () => {
+    expect(content).toContain('isGooseTls()')
   })
 
-  it('has setGoosedTls() setter', () => {
-    expect(content).toContain('setGoosedTls(boolean')
+  it('has setGooseTls() setter', () => {
+    expect(content).toContain('setGooseTls(boolean')
   })
 
-  it('has goosedScheme() method returning https or http', () => {
-    expect(content).toContain('goosedScheme()')
-    expect(content).toMatch(/goosedTls\s*\?\s*"https"\s*:\s*"http"/)
+  it('has gooseScheme() method returning https or http', () => {
+    expect(content).toContain('gooseScheme()')
+    expect(content).toMatch(/gooseTls\s*\?\s*"https"\s*:\s*"http"/)
   })
 })
 
@@ -299,15 +324,15 @@ describe('GoosedProxy TLS WebClient', () => {
     expect(content).toContain('InsecureTrustManagerFactory')
   })
 
-  it('configures insecure SSL when goosedTls is true', () => {
-    expect(content).toContain('isGoosedTls()')
+  it('configures insecure SSL when gooseTls is true', () => {
+    expect(content).toContain('isGooseTls()')
     expect(content).toContain('SslContextBuilder.forClient()')
     expect(content).toContain('InsecureTrustManagerFactory.INSTANCE')
   })
 
   it('uses ReactorClientHttpConnector with custom HttpClient', () => {
     expect(content).toContain('ReactorClientHttpConnector')
-    expect(content).toContain('HttpClient.create()')
+    expect(content).toContain('HttpClient.newConnection()')
   })
 
   it('exposes goosedBaseUrl() method', () => {
@@ -319,7 +344,7 @@ describe('GoosedProxy TLS WebClient', () => {
 // 9. Gateway Java unit tests pass
 // =============================================================================
 describe('gateway Java unit tests', () => {
-  it('mvn test passes (354 tests)', async () => {
+  it('mvn test passes', async () => {
     const { stdout, stderr, code } = await run(
       MVN, ['test', '-q'],
       { cwd: GATEWAY_DIR, timeout: 180_000 },

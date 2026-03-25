@@ -98,7 +98,7 @@ public class InstanceManager {
     }
 
     private String goosedBaseUrl(int port) {
-        return properties.goosedScheme() + "://127.0.0.1:" + port;
+        return properties.gooseScheme() + "://127.0.0.1:" + port;
     }
 
     /**
@@ -199,7 +199,7 @@ public class InstanceManager {
 
     private HttpURLConnection openConnection(URL url) throws IOException {
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        if (properties.isGoosedTls() && conn instanceof HttpsURLConnection) {
+        if (properties.isGooseTls() && conn instanceof HttpsURLConnection) {
             HttpsURLConnection httpsConn = (HttpsURLConnection) conn;
             httpsConn.setSSLSocketFactory(trustAllSslFactory);
             httpsConn.setHostnameVerifier((hostname, session) -> true);
@@ -458,10 +458,10 @@ public class InstanceManager {
         env.put("GOOSE_PATH_ROOT", runtimeRoot.toString());
         env.put("GOOSE_DISABLE_KEYRING", "1");
 
-        boolean goosedTlsValue = properties.isGoosedTls();
-        env.put("GOOSE_TLS", String.valueOf(goosedTlsValue));
-        log.info("buildEnvironment: properties.isGoosedTls()={}, setting GOOSE_TLS={} for {}:{}",
-                goosedTlsValue, goosedTlsValue, agentId, userId);
+        boolean gooseTlsValue = properties.isGooseTls();
+        env.put("GOOSE_TLS", String.valueOf(gooseTlsValue));
+        log.info("buildEnvironment: properties.isGooseTls()={}, setting GOOSE_TLS={} for {}:{}",
+                gooseTlsValue, gooseTlsValue, agentId, userId);
 
         // Enable debug logging for goose internals, but keep rustls/hyper at info
         // to avoid tracing_log deadlock in TLS handshake (rustls debug logs go through
@@ -490,8 +490,8 @@ public class InstanceManager {
         String baseUrl = goosedBaseUrl(port);
         URL url = new URL(baseUrl + "/status");
         String healthCheckUrl = url.toString();
-        log.info("[goosedTls config] waitForReady: using baseUrl={}, goosedScheme={}, health check URL: {}",
-                baseUrl, properties.goosedScheme(), healthCheckUrl);
+        log.info("[gooseTls config] waitForReady: using baseUrl={}, gooseScheme={}, health check URL: {}",
+                baseUrl, properties.gooseScheme(), healthCheckUrl);
         log.info("Waiting for goosed on port {} to be ready, health check URL: {}, max attempts: {}",
                 port, healthCheckUrl, GatewayConstants.HEALTH_CHECK_MAX_ATTEMPTS);
         long interval = GatewayConstants.HEALTH_CHECK_INITIAL_INTERVAL_MS;

@@ -6,7 +6,7 @@ gateway:
   secret-key: ${GATEWAY_SECRET_KEY:test}
   cors-origin: ${CORS_ORIGIN:http://127.0.0.1:5173}
   goosed-bin: ${GOOSED_BIN:goosed}
-  goosed-tls: ${GOOSED_TLS:true}
+  goose-tls: ${GOOSE_TLS:true}
 
   paths:
     project-root: ${PROJECT_ROOT:..}

@@ -105,7 +105,7 @@ Duration: 50.17s
 - **JsonUtil**: New shared utility in `gateway-common` for `extractSessionId` (replaces 2 duplicate implementations)
 
 ### Test fixes
-- **`test/helpers.ts`**: Added `goosed-tls=true` (goosed 1.27.2 forces TLS); added default `x-user-id: sys` to `gw.fetch()`
+- **`test/helpers.ts`**: Added `goose-tls=true` (goosed 1.27.2 forces TLS); added default `x-user-id: sys` to `gw.fetch()`
 - **Java E2E tests**: Updated `fetchJson` mocks from 4-arg to 5-arg (added `anyInt()` for timeout param)
 - **`integration.test.ts`**: Updated hardcoded provider/model (`openai` -> `custom_opsagentllm`); added `Origin` header to CORS tests
 - **`user-journey.test.ts`**: Fixed lazy `WebClient` init; adjusted session ID and file name assertions for goosed behavior
