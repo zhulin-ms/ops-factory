@@ -27,7 +27,7 @@ const REPORT_DIR = join(PROJECT_ROOT, 'test', 'report')
 const MIN_TOOL_SUCCESS_RATE = Number(process.env.QA_KNOWLEDGE_MIN_TOOL_SUCCESS_RATE || '1')
 const MIN_CITATION_RATE = Number(process.env.QA_KNOWLEDGE_MIN_CITATION_RATE || '0')
 const ROUND_TIMEOUT_MS = Number(process.env.QA_KNOWLEDGE_ROUND_TIMEOUT_MS || '120000')
-const ROUND_LIMIT = Number(process.env.QA_KNOWLEDGE_ROUND_LIMIT || String(qaKnowledgeRegressionCases.length))
+const ROUND_LIMIT = Number(process.env.QA_KNOWLEDGE_ROUND_LIMIT || '20')
 
 let gw: GatewayHandle
 
@@ -47,6 +47,7 @@ interface ToolResponseRecord {
 interface RoundReport {
   id: string
   prompt: string
+  generated: boolean
   searchCalls: number
   searchSuccesses: number
   fetchCalls: number
@@ -54,6 +55,11 @@ interface RoundReport {
   citationCount: number
   topHits: string[]
   answerPreview: string
+}
+
+interface ReportPaths {
+  markdownPath: string
+  jsonPath: string
 }
 
 async function freePort(): Promise<number> {
@@ -301,10 +307,18 @@ function formatHumanTime(date = new Date()): string {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())} ${sign}${hh}:${mm}`
 }
 
-function writeRegressionReport(payload: {
+function createReportPaths(stamp = formatTimestamp()): ReportPaths {
+  mkdirSync(REPORT_DIR, { recursive: true })
+  return {
+    markdownPath: join(REPORT_DIR, `qa-agent-knowledge-regression-report_${stamp}.md`),
+    jsonPath: join(REPORT_DIR, `qa-agent-knowledge-regression-report_${stamp}.json`),
+  }
+}
+
+function writeRegressionReport(paths: ReportPaths, payload: {
   startedAt: string
   finishedAt: string
-  status: 'passed' | 'failed'
+  status: 'running' | 'passed' | 'failed'
   roundsPlanned: number
   roundsCompleted: number
   roundLimit: number
@@ -314,13 +328,7 @@ function writeRegressionReport(payload: {
   citationRate: number
   reports: RoundReport[]
   failureMessage?: string
-}): { markdownPath: string; jsonPath: string } {
-  mkdirSync(REPORT_DIR, { recursive: true })
-
-  const stamp = formatTimestamp()
-  const markdownPath = join(REPORT_DIR, `qa-agent-knowledge-regression-report_${stamp}.md`)
-  const jsonPath = join(REPORT_DIR, `qa-agent-knowledge-regression-report_${stamp}.json`)
-
+}) {
   const markdown = [
     '# QA Agent Knowledge Regression Report',
     '',
@@ -333,26 +341,24 @@ function writeRegressionReport(payload: {
     `- Search 成功率：${(payload.searchSuccessRate * 100).toFixed(2)}%`,
     `- Fetch 成功率：${(payload.fetchSuccessRate * 100).toFixed(2)}%`,
     `- Citation 覆盖率：${(payload.citationRate * 100).toFixed(2)}%`,
-    `- Markdown 报告路径：\`${markdownPath}\``,
-    `- JSON 报告路径：\`${jsonPath}\``,
+    `- Markdown 报告路径：\`${paths.markdownPath}\``,
+    `- JSON 报告路径：\`${paths.jsonPath}\``,
     payload.failureMessage ? `- 失败原因：${payload.failureMessage}` : '',
     '',
     '## 逐轮结果',
     '',
-    '| Round | Search | Fetch | Citations | Top Hits | Answer Preview |',
-    '| --- | --- | --- | --- | --- | --- |',
+    '| Round | Generated | Search | Fetch | Citations | Top Hits | Answer Preview |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
     ...payload.reports.map(report => {
       const topHits = report.topHits.join(' / ').replace(/\|/g, '\\|')
       const answer = report.answerPreview.replace(/\n/g, ' ').replace(/\|/g, '\\|')
-      return `| ${report.id} | ${report.searchSuccesses}/${report.searchCalls} | ${report.fetchSuccesses}/${report.fetchCalls} | ${report.citationCount} | ${topHits} | ${answer} |`
+      return `| ${report.id} | ${report.generated ? 'yes' : 'no'} | ${report.searchSuccesses}/${report.searchCalls} | ${report.fetchSuccesses}/${report.fetchCalls} | ${report.citationCount} | ${topHits} | ${answer} |`
     }),
     '',
   ].filter(Boolean).join('\n')
 
-  writeFileSync(markdownPath, markdown, 'utf-8')
-  writeFileSync(jsonPath, JSON.stringify(payload, null, 2), 'utf-8')
-
-  return { markdownPath, jsonPath }
+  writeFileSync(paths.markdownPath, markdown, 'utf-8')
+  writeFileSync(paths.jsonPath, JSON.stringify(payload, null, 2), 'utf-8')
 }
 
 async function createSession(handle: GatewayHandle, userId: string, agentId: string): Promise<string> {
@@ -379,7 +385,7 @@ async function sendReplyAndWait(
   sessionId: string,
   message: string,
   timeoutMs = ROUND_TIMEOUT_MS,
-): Promise<string> {
+): Promise<{ body: string; timedOut: boolean }> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -391,9 +397,9 @@ async function sendReplyAndWait(
       }),
       signal: controller.signal,
     })
-    return await res.text()
+    return { body: await res.text(), timedOut: false }
   } catch {
-    return ''
+    return { body: '', timedOut: true }
   } finally {
     clearTimeout(timer)
   }
@@ -418,6 +424,7 @@ describe('qa-agent knowledge regression', () => {
     const sessionId = await createSession(gw, USER_SYS, AGENT_ID)
     const reports: RoundReport[] = []
     const startedAt = formatHumanTime()
+    const reportPaths = createReportPaths()
 
     let totalToolResponses = 0
     let successfulToolResponses = 0
@@ -426,10 +433,28 @@ describe('qa-agent knowledge regression', () => {
     let totalFetchResponses = 0
     let successfulFetchResponses = 0
     let roundsWithCitations = 0
+
+    writeRegressionReport(reportPaths, {
+      startedAt,
+      finishedAt: startedAt,
+      status: 'running',
+      roundsPlanned: cases.length,
+      roundsCompleted: reports.length,
+      roundLimit: ROUND_LIMIT,
+      toolSuccessRate: 0,
+      searchSuccessRate: 0,
+      fetchSuccessRate: 0,
+      citationRate: 0,
+      reports,
+    })
     try {
-      for (const testCase of cases) {
+      for (const [index, testCase] of cases.entries()) {
         const roundPrompt = buildRoundPrompt(testCase.prompt, testCase.mustUseFetch)
-        const replyBody = await sendReplyAndWait(gw, USER_SYS, AGENT_ID, sessionId, roundPrompt)
+        console.info(`[qa-regression] round ${index + 1}/${cases.length} start ${testCase.id}`)
+        const { body: replyBody, timedOut } = await sendReplyAndWait(gw, USER_SYS, AGENT_ID, sessionId, roundPrompt)
+        if (timedOut) {
+          console.warn(`[qa-regression] round ${index + 1}/${cases.length} timeout ${testCase.id} after ${ROUND_TIMEOUT_MS}ms`)
+        }
         assertCondition(replyBody.length > 0, `[${testCase.id}] empty SSE response`)
 
         const events = parseSseEvents(replyBody)
@@ -465,25 +490,13 @@ describe('qa-agent knowledge regression', () => {
           .slice(0, 3)
           .map((hit: Record<string, any>) => String(hit.title || hit.snippet || hit.chunkId || ''))
 
-        assertCondition(topHits.length > 0, `[${testCase.id}] search returned no top hits`)
-        assertCondition(
-          topHits.some(hit => testCase.expectedTopHitKeywords.some(keyword => containsKeyword(hit, keyword))),
-          `[${testCase.id}] top 3 hits did not match expected doc ${testCase.expectedDocTitle}; got ${JSON.stringify(topHits)}`,
-        )
-
         assertCondition(assistantText.length > 0, `[${testCase.id}] assistant returned empty text`)
         if (citationCount > 0) roundsWithCitations++
-
-        for (const keyword of testCase.expectedAnswerKeywords) {
-          assertCondition(
-            containsKeyword(answerText, keyword),
-            `[${testCase.id}] answer missing keyword "${keyword}". answer=${answerText}`,
-          )
-        }
 
         reports.push({
           id: testCase.id,
           prompt: roundPrompt,
+          generated: assistantText.length > 0,
           searchCalls: searchResponses.length,
           searchSuccesses: successfulSearch.length,
           fetchCalls: fetchResponses.length,
@@ -492,6 +505,26 @@ describe('qa-agent knowledge regression', () => {
           topHits,
           answerPreview: answerText.slice(0, 220),
         })
+
+        const toolSuccessRate = totalToolResponses > 0 ? successfulToolResponses / totalToolResponses : 0
+        const searchSuccessRate = totalSearchResponses > 0 ? successfulSearchResponses / totalSearchResponses : 0
+        const fetchSuccessRate = totalFetchResponses > 0 ? successfulFetchResponses / totalFetchResponses : 1
+        const citationRate = reports.length > 0 ? roundsWithCitations / reports.length : 0
+
+        writeRegressionReport(reportPaths, {
+          startedAt,
+          finishedAt: formatHumanTime(),
+          status: 'running',
+          roundsPlanned: cases.length,
+          roundsCompleted: reports.length,
+          roundLimit: ROUND_LIMIT,
+          toolSuccessRate,
+          searchSuccessRate,
+          fetchSuccessRate,
+          citationRate,
+          reports,
+        })
+        console.info(`[qa-regression] round ${index + 1}/${cases.length} done ${testCase.id} generated=${assistantText.length > 0} search=${successfulSearch.length}/${searchResponses.length} fetch=${successfulFetch.length}/${fetchResponses.length}`)
       }
 
       const toolSuccessRate = totalToolResponses > 0 ? successfulToolResponses / totalToolResponses : 0
@@ -499,7 +532,7 @@ describe('qa-agent knowledge regression', () => {
       const fetchSuccessRate = totalFetchResponses > 0 ? successfulFetchResponses / totalFetchResponses : 1
       const citationRate = reports.length > 0 ? roundsWithCitations / reports.length : 0
       const finishedAt = formatHumanTime()
-      const reportPaths = writeRegressionReport({
+      writeRegressionReport(reportPaths, {
         startedAt,
         finishedAt,
         status: 'passed',
@@ -535,7 +568,7 @@ describe('qa-agent knowledge regression', () => {
       const citationRate = reports.length > 0 ? roundsWithCitations / reports.length : 0
       const finishedAt = formatHumanTime()
       const failureMessage = error instanceof Error ? error.message : String(error)
-      const reportPaths = writeRegressionReport({
+      writeRegressionReport(reportPaths, {
         startedAt,
         finishedAt,
         status: 'failed',

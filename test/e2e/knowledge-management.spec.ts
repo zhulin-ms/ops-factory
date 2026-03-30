@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
 
 const KNOWLEDGE_URL = process.env.KNOWLEDGE_SERVICE_URL || 'http://127.0.0.1:8092'
 
-async function loginAsAdmin(page: Page, username = `knowledge-e2e-${Date.now()}`) {
+async function loginAsAdmin(page: Page, username = 'admin') {
   await page.goto('/login')
   await page.fill('input[placeholder="Your name"]', username)
   await page.click('button:has-text("Enter")')
@@ -63,7 +63,11 @@ async function uploadFile(
 }
 
 async function deleteSourceBestEffort(request: APIRequestContext, sourceId: string) {
-  await request.delete(`${KNOWLEDGE_URL}/ops-knowledge/sources/${sourceId}`)
+  try {
+    await request.delete(`${KNOWLEDGE_URL}/ops-knowledge/sources/${sourceId}`)
+  } catch {
+    // Best-effort cleanup only.
+  }
 }
 
 async function waitForSourceRebuildCleared(
@@ -105,7 +109,7 @@ test.describe('Knowledge management', () => {
       await page.goto('/knowledge')
       await expect(page.locator('.page-title')).toBeVisible()
 
-      await page.locator('.page-header-actions .btn.btn-primary').click()
+      await page.locator('.action-btn-primary.btn.btn-primary').click()
       await page.locator('.modal input.form-input').first().fill(createdName)
       await page.locator('.modal textarea.form-input').fill('created from playwright')
       await page.locator('.modal-footer .btn.btn-primary').click()
@@ -182,6 +186,8 @@ test.describe('Knowledge management', () => {
       })
       await page.locator('.knowledge-upload-modal .modal-footer .btn.btn-primary').click()
       await expect(page.locator('.knowledge-doc-row')).toHaveCount(3, { timeout: 15_000 })
+      await page.locator('.knowledge-upload-modal .modal-footer .btn.btn-secondary').click()
+      await expect(page.locator('.knowledge-upload-modal')).toHaveCount(0)
 
       const gammaRow = documentRow(page, 'gamma-checklist.md')
       await expect(gammaRow).toBeVisible()
@@ -243,7 +249,6 @@ test.describe('Knowledge management', () => {
       const createdCard = page.locator('.knowledge-chunk-card').filter({ hasText: createdChunkTitle }).first()
       await expect(createdCard).toBeVisible({ timeout: 15_000 })
 
-      await createdCard.click()
       await page.locator('.knowledge-chunk-detail-footer .btn.btn-primary').click()
       await page.locator('#knowledge-chunk-content').fill([
         createdChunkTitle,
@@ -259,7 +264,7 @@ test.describe('Knowledge management', () => {
 
       await page.locator('.knowledge-chunk-detail-footer .btn.btn-primary').click()
       await page.locator('.knowledge-chunk-detail-footer .btn.btn-danger').click()
-      await page.locator('.modal-footer .btn.btn-danger').click()
+      await page.locator('.modal .modal-footer .btn.btn-danger').last().click()
       await expect(page.locator('.knowledge-chunk-card').filter({ hasText: createdChunkTitle })).toHaveCount(0)
     } finally {
       for (const sourceId of cleanup) {
@@ -288,14 +293,14 @@ test.describe('Knowledge management', () => {
 
       await loginAsAdmin(page)
       await page.goto(`/knowledge/${source.id}?tab=config`)
-      await expect(page.locator('.knowledge-section-card')).toHaveCount(4, { timeout: 15_000 })
+      await expect(page.locator('.knowledge-section-action').filter({ hasText: 'Edit Parameters' }).first()).toBeVisible({ timeout: 15_000 })
 
       await page.locator('.knowledge-section-card .knowledge-section-action').nth(0).click()
       await page.locator('.knowledge-profile-config-modal input.form-input').nth(3).fill('5.5')
       await page.locator('.knowledge-profile-config-modal .modal-footer .btn.btn-primary').click()
 
       await page.goto(`/knowledge/${source.id}?tab=maintenance`)
-      await expect(page.locator('.conn-banner.conn-banner-warning')).toBeVisible({ timeout: 15_000 })
+      await expect(page.locator('.conn-banner.conn-banner-warning').first()).toBeVisible({ timeout: 15_000 })
 
       await page.locator('.knowledge-config-stack .knowledge-section-card .knowledge-section-action').last().click()
       await page.locator('.modal-footer .btn.btn-primary').click()

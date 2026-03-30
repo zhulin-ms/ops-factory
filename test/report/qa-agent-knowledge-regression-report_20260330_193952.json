@@ -1,0 +1,90 @@
+{
+  "startedAt": "2026-03-30 19:38:06 +08:00",
+  "finishedAt": "2026-03-30 19:39:52 +08:00",
+  "status": "failed",
+  "roundsPlanned": 50,
+  "roundsCompleted": 5,
+  "roundLimit": 50,
+  "toolSuccessRate": 1,
+  "searchSuccessRate": 1,
+  "fetchSuccessRate": 1,
+  "citationRate": 1,
+  "reports": [
+    {
+      "id": "R01",
+      "prompt": "请基于《部署方案》回答：所有的介质和运行内容放在哪里？\n\n请每次都重新检索知识库，不要只依赖当前会话里之前轮次的记忆。 请至少 fetch 1 个最相关 chunk 的完整内容后再回答。 回答保持简洁，并尽量保留 citation 标记。",
+      "searchCalls": 1,
+      "searchSuccesses": 1,
+      "fetchCalls": 1,
+      "fetchSuccesses": 1,
+      "citationCount": 1,
+      "topHits": [
+        "部署方案.pdf",
+        "部署方案.pdf",
+        "部署方案.pdf"
+      ],
+      "answerPreview": "根据《部署方案》，所有的介质和运行内容都放到**数据盘**。\n\n具体路径包括：\n- `/data/{gateway_home}/docker`\n- `/data/{gateway_home}/langfuse`\n- `/data/{gateway_home}/onlyoffice`\n- `/data/{gateway_home}/logs`\n\n其中 `{gateway_home}` 是网关的根目录占位符。"
+    },
+    {
+      "id": "R02",
+      "prompt": "请基于《部署方案》回答：itsm-01 和 itsm-02 的操作系统是什么？\n\n请每次都重新检索知识库，不要只依赖当前会话里之前轮次的记忆。 请至少 fetch 1 个最相关 chunk 的完整内容后再回答。 回答保持简洁，并尽量保留 citation 标记。",
+      "searchCalls": 1,
+      "searchSuccesses": 1,
+      "fetchCalls": 1,
+      "fetchSuccesses": 1,
+      "citationCount": 1,
+      "topHits": [
+        "部署方案.pdf",
+        "Major_Incident_Analysis_INC20250115001_EN.docx",
+        "部署方案.pdf"
+      ],
+      "answerPreview": "根据《部署方案》，itsm-01 和 itsm-02 的操作系统均为 **EulerOS 2 SP12 x86**。"
+    },
+    {
+      "id": "R03",
+      "prompt": "请基于《部署方案》回答：ops-agent 的操作系统和硬件配置是什么？\n\n请每次都重新检索知识库，不要只依赖当前会话里之前轮次的记忆。 请至少 fetch 1 个最相关 chunk 的完整内容后再回答。 回答保持简洁，并尽量保留 citation 标记。",
+      "searchCalls": 2,
+      "searchSuccesses": 2,
+      "fetchCalls": 1,
+      "fetchSuccesses": 1,
+      "citationCount": 2,
+      "topHits": [
+        "腾讯云2025智能化时代数据库自主可靠运维白皮书89页.pdf",
+        "腾讯云2025智能化时代数据库自主可靠运维白皮书89页.pdf",
+        "部署方案.pdf"
+      ],
+      "answerPreview": "根据《部署方案》，ops-agent 的配置如下：\n\n- **操作系统**：EulerOS 2 SP12 x86\n- **硬件配置**：16C / 64G / 50G 系统盘 / 2T 数据盘"
+    },
+    {
+      "id": "R04",
+      "prompt": "请基于《部署方案》回答：llm-service-01 和 llm-service-02 的操作系统是什么？\n\n请每次都重新检索知识库，不要只依赖当前会话里之前轮次的记忆。 请至少 fetch 1 个最相关 chunk 的完整内容后再回答。 回答保持简洁，并尽量保留 citation 标记。",
+      "searchCalls": 1,
+      "searchSuccesses": 1,
+      "fetchCalls": 1,
+      "fetchSuccesses": 1,
+      "citationCount": 1,
+      "topHits": [
+        "部署方案.pdf",
+        "华为TMForum2024新一代智能运维白皮书2.0英文版82页.pdf",
+        "华为TMForum2024新一代智能运维白皮书2.0英文版82页.pdf"
+      ],
+      "answerPreview": "根据《部署方案》，llm-service-01 和 llm-service-02 的操作系统均为 **Ubuntu 20.04 x86**。"
+    },
+    {
+      "id": "R05",
+      "prompt": "请基于《部署方案》回答：管理后台和部署后台分别是什么？\n\n请每次都重新检索知识库，不要只依赖当前会话里之前轮次的记忆。 请至少 fetch 1 个最相关 chunk 的完整内容后再回答。 回答保持简洁，并尽量保留 citation 标记。",
+      "searchCalls": 1,
+      "searchSuccesses": 1,
+      "fetchCalls": 1,
+      "fetchSuccesses": 1,
+      "citationCount": 2,
+      "topHits": [
+        "部署方案.pdf",
+        "部署方案.pdf",
+        "腾讯云2025智能化时代数据库自主可靠运维白皮书89页.pdf"
+      ],
+      "answerPreview": "根据《部署方案》：\n\n- **管理后台**：GDE 26.1\n- **部署后台**：GKIT"
+    }
+  ],
+  "failureMessage": "[R06] top 3 hits did not match expected doc 部署方案; got [\"罗克韦尔自动化从智能制造到智能运维化工行业未来工厂52页.pdf\",\"罗克韦尔自动化从智能制造到智能运维化工行业未来工厂52页.pdf\",\"罗克韦尔自动化从智能制造到智能运维化工行业未来工厂52页.pdf\"]"
+}
