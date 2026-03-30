@@ -512,7 +512,6 @@ function MaintenanceTab({
     const { t } = useTranslation()
     const currentJob = maintenance?.currentJob || null
     const lastCompletedJob = maintenance?.lastCompletedJob || null
-    const isRunning = currentJob?.status?.toUpperCase() === 'RUNNING'
     const totalDocuments = Math.max(currentJob?.totalDocuments || 0, 0)
     const processedDocuments = Math.max(currentJob?.processedDocuments || 0, 0)
     const progressPercent = totalDocuments > 0 ? Math.min(100, Math.round((processedDocuments / totalDocuments) * 100)) : 0

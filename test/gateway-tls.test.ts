@@ -7,7 +7,7 @@
  * 3. ctl.sh auto-generates self-signed keystore via keytool when missing
  * 4. ctl.sh injects server.ssl.* Spring Boot properties when TLS enabled
  * 5. ctl.sh internal URLs use GATEWAY_SCHEME (no hardcoded http://)
- * 6. web-app config.yaml uses https:// gatewayUrl
+ * 6. web-app config.json uses https:// gatewayUrl
  * 7. web-app runtime.ts preserves protocol from configured URL
  * 8. Gateway Java unit tests pass (no regression)
  */
@@ -310,14 +310,14 @@ describe('ctl.sh syntax', () => {
 // 7. web-app config uses https://
 // =============================================================================
 describe('web-app gateway URL', () => {
-  it('config.yaml uses https:// for gatewayUrl', async () => {
-    const content = await readFile(join(WEBAPP_DIR, 'config.yaml'), 'utf-8')
-    expect(content).toMatch(/gatewayUrl:\s*"https:\/\//)
+  it('config.json uses https:// for gatewayUrl', async () => {
+    const content = JSON.parse(await readFile(join(WEBAPP_DIR, 'config.json'), 'utf-8'))
+    expect(content.gatewayUrl).toMatch(/^https:\/\//)
   })
 
-  it('config.yaml.example uses https:// for gatewayUrl', async () => {
-    const content = await readFile(join(WEBAPP_DIR, 'config.yaml.example'), 'utf-8')
-    expect(content).toMatch(/gatewayUrl:\s*"https:\/\//)
+  it('config.json.example uses https:// for gatewayUrl', async () => {
+    const content = JSON.parse(await readFile(join(WEBAPP_DIR, 'config.json.example'), 'utf-8'))
+    expect(content.gatewayUrl).toMatch(/^https:\/\//)
   })
 })
 

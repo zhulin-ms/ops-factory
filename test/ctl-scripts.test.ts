@@ -163,7 +163,7 @@ describe('no args', () => {
 // 6. Status when services are not running
 // =============================================================================
 describe('status when not running', () => {
-  // Scripts now read port from their own config.yaml
+  // Scripts now read port from their own config file
   // These tests work as long as the real services aren't running during test execution
 
   it('gateway status reports not running', async () => {

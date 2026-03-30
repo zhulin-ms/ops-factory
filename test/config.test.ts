@@ -67,12 +67,15 @@ describe('config files exist', () => {
   ]
 
   for (const { name, dir } of components) {
-    it(`${name}/config.yaml exists`, async () => {
-      await expect(access(join(dir, 'config.yaml'), constants.R_OK)).resolves.toBeUndefined()
+    const configFileName = name === 'web-app' ? 'config.json' : 'config.yaml'
+    const configExampleFileName = name === 'web-app' ? 'config.json.example' : 'config.yaml.example'
+
+    it(`${name}/${configFileName} exists`, async () => {
+      await expect(access(join(dir, configFileName), constants.R_OK)).resolves.toBeUndefined()
     })
 
-    it(`${name}/config.yaml.example exists`, async () => {
-      await expect(access(join(dir, 'config.yaml.example'), constants.R_OK)).resolves.toBeUndefined()
+    it(`${name}/${configExampleFileName} exists`, async () => {
+      await expect(access(join(dir, configExampleFileName), constants.R_OK)).resolves.toBeUndefined()
     })
   }
 })

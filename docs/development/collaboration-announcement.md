@@ -20,7 +20,7 @@
 
 1. 开始开发前，至少阅读 `AGENTS.md`、`docs/architecture/overview.md`，以及与本次改动相关的 development 文档。
 2. 如果改动影响 API、SSE、鉴权头、配置项、运行时目录、UI 交互骨架，必须在同一个 PR 中同步更新对应文档。
-3. 新增配置项时，必须同时更新代码实现、对应的 `config.yaml.example` 和相关文档。
+3. 新增配置项时，必须同时更新代码实现、对应的配置示例文件和相关文档。
 4. 不允许绕过既定架构边界。前端不得直连 provider 或 agent runtime，浏览器侧访问必须继续通过 gateway。
 5. UI 改动必须遵守现有交互模型，包括路由结构、侧边栏、右侧面板、错误提示和 i18n 方式。若要突破这些约束，需在 PR 中明确说明原因和影响。
 6. 测试要和改动范围匹配：前端逻辑补 Vitest，Java 行为补 JUnit，跨服务行为补 integration test，主用户流程改动补 Playwright。

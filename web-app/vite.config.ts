@@ -6,22 +6,24 @@ import type { Plugin } from 'vite'
 
 function runtimeConfigPlugin(): Plugin {
     const cwd = process.cwd()
-    const configPath = resolve(cwd, 'config.yaml')
-    const configExamplePath = resolve(cwd, 'config.yaml.example')
+    const configJsonPath = resolve(cwd, 'config.json')
+    const configJsonExamplePath = resolve(cwd, 'config.json.example')
 
     return {
         name: 'runtime-config',
         configureServer(server) {
             server.middlewares.use((req, res, next) => {
-                if (req.url === '/config.yaml' || req.url === '/config.yaml.example') {
-                    const sourcePath = req.url === '/config.yaml' ? configPath : configExamplePath
+                if (req.url === '/config.json' || req.url === '/config.json.example') {
+                    const sourcePath = req.url === '/config.json'
+                        ? configJsonPath
+                        : configJsonExamplePath
                     if (!existsSync(sourcePath)) {
                         res.statusCode = 404
                         res.end('Not Found')
                         return
                     }
 
-                    res.setHeader('Content-Type', 'application/yaml; charset=utf-8')
+                    res.setHeader('Content-Type', 'application/json; charset=utf-8')
                     res.end(readFileSync(sourcePath, 'utf-8'))
                     return
                 }
@@ -31,11 +33,11 @@ function runtimeConfigPlugin(): Plugin {
         writeBundle(options) {
             const outDir = resolve(cwd, options.dir || 'dist')
             mkdirSync(outDir, { recursive: true })
-            if (existsSync(configPath)) {
-                copyFileSync(configPath, resolve(outDir, 'config.yaml'))
+            if (existsSync(configJsonPath)) {
+                copyFileSync(configJsonPath, resolve(outDir, 'config.json'))
             }
-            if (existsSync(configExamplePath)) {
-                copyFileSync(configExamplePath, resolve(outDir, 'config.yaml.example'))
+            if (existsSync(configJsonExamplePath)) {
+                copyFileSync(configJsonExamplePath, resolve(outDir, 'config.json.example'))
             }
         },
     }

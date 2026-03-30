@@ -18,7 +18,7 @@ Use this checklist for PR review, especially when multiple teams or AI contribut
 - Error handling and loading behavior match established frontend patterns.
 
 ## Configuration And Ops
-- New config keys are added to the correct `config.yaml.example`.
+- New config keys are added to the correct config example file.
 - Startup or runtime behavior changes are reflected in scripts and docs where needed.
 - Optional services remain optional unless the design intentionally changes that contract.
 

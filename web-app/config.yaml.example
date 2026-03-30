@@ -1,7 +1,0 @@
-# Web App runtime configuration
-# This file is fetched by the browser from /config.yaml at startup.
-# Update it on the deployment host to change frontend gateway settings without rebuilding.
-
-gatewayUrl: "http://127.0.0.1:3000"     # [REQUIRED]
-gatewaySecretKey: ""                    # [REQUIRED]
-knowledgeServiceUrl: "http://127.0.0.1:8092"

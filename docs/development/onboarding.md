@@ -22,6 +22,6 @@ For a lighter loop, start only the required services:
 ```
 
 ## First Checks
-- Confirm `gateway/config.yaml` and `web-app/config.yaml` are valid for your environment.
+- Confirm `gateway/config.yaml` and `web-app/config.json` are valid for your environment.
 - Use `test/` for cross-service validation, not ad hoc one-off scripts.
 - Read `AGENTS.md` and the docs in `architecture/` and `development/` before large changes.

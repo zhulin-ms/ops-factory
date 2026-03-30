@@ -11,16 +11,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_DIR="$(dirname "${SCRIPT_DIR}")"
 
-# --- Configuration (read from config.yaml) ---
-yaml_val() {
-    local key="$1" file="${SERVICE_DIR}/config.yaml"
-    [ -f "${file}" ] || return 0
-    node -e "const y=require('yaml');const f=require('fs').readFileSync('${file}','utf-8');const c=y.parse(f);const keys='${key}'.split('.');let v=c;for(const k of keys){v=v?.[k]};if(v!=null)process.stdout.write(String(v))" 2>/dev/null || true
+# --- Configuration (read from config.json) ---
+config_val() {
+    local key="$1" json_file="${SERVICE_DIR}/config.json"
+    [ -f "${json_file}" ] || return 0
+    node -e "const f=require('fs').readFileSync('${json_file}','utf-8');const c=JSON.parse(f);const keys='${key}'.split('.');let v=c;for(const k of keys){v=v?.[k]};if(v!=null)process.stdout.write(String(v))" 2>/dev/null || true
 }
 
-VITE_HOST="$(yaml_val host)"
+VITE_HOST="$(config_val host)"
 VITE_HOST="${VITE_HOST:-0.0.0.0}"
-VITE_PORT="$(yaml_val port)"
+VITE_PORT="$(config_val port)"
 VITE_PORT="${VITE_PORT:-5173}"
 
 # --- Logging ---

@@ -1,7 +1,6 @@
 import type { UserRole } from '../contexts/UserContext'
-import { parse } from 'yaml'
 
-interface RuntimeConfigYaml {
+interface RuntimeConfig {
     gatewayUrl?: string
     gatewaySecretKey?: string
     knowledgeServiceUrl?: string
@@ -56,19 +55,23 @@ export let GATEWAY_URL = resolveGatewayUrl(undefined)
 export let GATEWAY_SECRET_KEY = DEFAULT_SECRET_KEY
 export let KNOWLEDGE_SERVICE_URL = resolveKnowledgeServiceUrl(undefined)
 
-function setRuntimeConfig(config: RuntimeConfigYaml): void {
+function setRuntimeConfig(config: RuntimeConfig): void {
     GATEWAY_URL = resolveGatewayUrl(config.gatewayUrl)
     GATEWAY_SECRET_KEY = config.gatewaySecretKey || DEFAULT_SECRET_KEY
     KNOWLEDGE_SERVICE_URL = resolveKnowledgeServiceUrl(config.knowledgeServiceUrl)
 }
 
-export async function initializeRuntimeConfig(): Promise<void> {
-    const response = await fetch('/config.yaml', { cache: 'no-store' })
+async function loadRuntimeConfig(): Promise<RuntimeConfig> {
+    const response = await fetch('/config.json', { cache: 'no-store' })
     if (!response.ok) {
-        throw new Error(`Failed to load /config.yaml (${response.status})`)
+        throw new Error(`Failed to load /config.json (${response.status})`)
     }
 
-    const config = (parse(await response.text()) as RuntimeConfigYaml | null) || {}
+    return (await response.json()) as RuntimeConfig
+}
+
+export async function initializeRuntimeConfig(): Promise<void> {
+    const config = await loadRuntimeConfig()
 
     if (!config.gatewayUrl) {
         throw new Error('Missing required configuration: gatewayUrl')

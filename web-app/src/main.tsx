@@ -17,7 +17,7 @@ function renderStartupError(error: unknown) {
             <div style={{ padding: '24px', fontFamily: 'monospace', lineHeight: 1.5 }}>
                 <h1>Web App startup failed</h1>
                 <p>{message}</p>
-                <p>Please verify /config.yaml on the deployment host.</p>
+                <p>Please verify /config.json on the deployment host.</p>
             </div>
         </React.StrictMode>,
     )

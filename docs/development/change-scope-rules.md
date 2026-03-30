@@ -7,7 +7,7 @@
 
 ## Cross-Team Coordination
 - If a change touches `gateway`, `web-app`, and shared contracts together, describe the dependency chain clearly in the PR.
-- If you add a config field, update `config.yaml.example`, startup assumptions, and docs in the same change.
+- If you add a config field, update the matching config example file, startup assumptions, and docs in the same change.
 - If a change breaks compatibility for other teams, write that explicitly instead of hiding it in implementation details.
 
 ## AI And Human Contributors
