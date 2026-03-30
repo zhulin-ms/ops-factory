@@ -5,8 +5,6 @@ import { useGoosed } from '../contexts/GoosedContext'
 import { useUser } from '../contexts/UserContext'
 import { useToast } from '../contexts/ToastContext'
 import ChatInput from '../components/ChatInput'
-import { PROMPT_TEMPLATES, CATEGORIES, type PromptTemplateConfig } from '../config/promptTemplates'
-import { iconMap } from '../config/iconMap'
 import { gatewayHeaders } from '../config/runtime'
 import opsclawIcon from '../assets/opsclaw.svg'
 
@@ -30,10 +28,6 @@ export default function Home() {
     const [diagnosisMessage, setDiagnosisMessage] = useState<string>('')
     const [selectedAgent, setSelectedAgent] = useState('')
     const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
-    const [presetMessage, setPresetMessage] = useState('')
-    const [presetToken, setPresetToken] = useState(0)
-    const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
-    const [activeCategory, setActiveCategory] = useState<string>('all')
     
     // 诊断接口调用
     const handleDiagnosis = async (sceneCode: string) => {
