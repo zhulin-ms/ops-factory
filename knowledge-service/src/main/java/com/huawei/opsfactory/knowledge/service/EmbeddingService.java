@@ -18,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -57,17 +56,26 @@ public class EmbeddingService {
 
         Map<String, SearchService.SearchableChunk> chunkMap = chunks.stream()
             .collect(LinkedHashMap::new, (map, chunk) -> map.put(chunk.id(), chunk), Map::putAll);
-        Map<String, EmbeddingRepository.EmbeddingRecord> existing = embeddingRepository.findByChunkIds(chunkMap.keySet());
+        Map<String, String> contentHashByChunkId = new LinkedHashMap<>();
+        chunkMap.forEach((chunkId, chunk) -> contentHashByChunkId.put(chunkId, embeddingHash(buildChunkEmbeddingText(chunk))));
+
+        int expectedDimension = expectedEmbeddingDimension();
+        String model = properties.getEmbedding().getModel();
+        Map<String, EmbeddingRepository.EmbeddingRecord> existing = embeddingRepository.findByContentHashes(
+            model,
+            expectedDimension,
+            contentHashByChunkId.values()
+        );
         Map<String, List<Double>> resolved = new LinkedHashMap<>();
         List<SearchService.SearchableChunk> missing = new ArrayList<>();
 
         chunkMap.forEach((chunkId, chunk) -> {
-            String expectedHash = embeddingHash(buildChunkEmbeddingText(chunk));
-            EmbeddingRepository.EmbeddingRecord record = existing.get(chunkId);
+            String expectedHash = contentHashByChunkId.get(chunkId);
+            EmbeddingRepository.EmbeddingRecord record = existing.get(expectedHash);
             if (record != null
-                && expectedHash.equals(record.vectorHash())
-                && properties.getEmbedding().getModel().equals(record.model())
-                && expectedEmbeddingDimension() == record.dimension()
+                && expectedHash.equals(record.contentHash())
+                && model.equals(record.model())
+                && expectedDimension == record.dimension()
             ) {
                 resolved.put(chunkId, record.vector());
             } else {
@@ -82,10 +90,10 @@ public class EmbeddingService {
                 SearchService.SearchableChunk chunk = missing.get(index);
                 List<Double> vector = vectors.get(index);
                 embeddingRepository.upsert(
-                    chunk.id(),
-                    properties.getEmbedding().getModel(),
-                    vector,
-                    embeddingHash(inputs.get(index))
+                    contentHashByChunkId.get(chunk.id()),
+                    model,
+                    expectedDimension,
+                    vector
                 );
                 resolved.put(chunk.id(), vector);
             }
@@ -96,18 +104,6 @@ public class EmbeddingService {
 
     public List<Double> embedQuery(String query) {
         return embed(List.of(query)).getFirst();
-    }
-
-    public void deleteByChunkId(String chunkId) {
-        embeddingRepository.deleteByChunkId(chunkId);
-    }
-
-    public void deleteByDocumentId(String documentId) {
-        embeddingRepository.deleteByDocumentId(documentId);
-    }
-
-    public void deleteBySourceId(String sourceId) {
-        embeddingRepository.deleteBySourceId(sourceId);
     }
 
     public String buildChunkEmbeddingText(SearchService.SearchableChunk chunk) {

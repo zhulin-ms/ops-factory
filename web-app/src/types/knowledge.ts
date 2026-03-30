@@ -13,6 +13,11 @@ export interface KnowledgeSource {
     storageMode: string
     indexProfileId: string | null
     retrievalProfileId: string | null
+    runtimeStatus: string
+    runtimeMessage: string | null
+    currentJobId: string | null
+    lastJobError: string | null
+    rebuildRequired: boolean
     createdAt: string
     updatedAt: string
 }
@@ -26,6 +31,40 @@ export interface KnowledgeSourceStats {
     chunkCount: number
     userEditedChunkCount: number
     lastIngestionAt: string | null
+}
+
+export interface KnowledgeMaintenanceJobSummary {
+    id: string
+    type: string
+    status: string
+    stage: string | null
+    createdBy: string | null
+    startedAt: string | null
+    updatedAt: string | null
+    finishedAt: string | null
+    totalDocuments: number
+    processedDocuments: number
+    successDocuments: number
+    failedDocuments: number
+    currentDocumentId: string | null
+    currentDocumentName: string | null
+    message: string | null
+    errorSummary: string | null
+}
+
+export interface KnowledgeMaintenanceOverview {
+    sourceId: string
+    currentJob: KnowledgeMaintenanceJobSummary | null
+    lastCompletedJob: KnowledgeMaintenanceJobSummary | null
+}
+
+export interface KnowledgeMaintenanceFailure {
+    documentId: string | null
+    documentName: string | null
+    stage: string
+    errorCode: string | null
+    message: string
+    finishedAt: string
 }
 
 export interface KnowledgeFeatureFlags {

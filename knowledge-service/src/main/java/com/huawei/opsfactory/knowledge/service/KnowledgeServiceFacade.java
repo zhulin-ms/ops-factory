@@ -6,6 +6,7 @@ import com.huawei.opsfactory.knowledge.api.job.JobController;
 import com.huawei.opsfactory.knowledge.api.profile.ProfileController;
 import com.huawei.opsfactory.knowledge.api.retrieval.RetrievalController;
 import com.huawei.opsfactory.knowledge.api.source.SourceController;
+import com.huawei.opsfactory.knowledge.common.error.ApiConflictException;
 import com.huawei.opsfactory.knowledge.common.model.PageResponse;
 import com.huawei.opsfactory.knowledge.common.util.Ids;
 import com.huawei.opsfactory.knowledge.config.KnowledgeProperties;
@@ -13,6 +14,7 @@ import com.huawei.opsfactory.knowledge.repository.BindingRepository;
 import com.huawei.opsfactory.knowledge.repository.ChunkRepository;
 import com.huawei.opsfactory.knowledge.repository.DocumentRepository;
 import com.huawei.opsfactory.knowledge.repository.JobRepository;
+import com.huawei.opsfactory.knowledge.repository.MaintenanceJobFailureRepository;
 import com.huawei.opsfactory.knowledge.repository.ProfileRepository;
 import com.huawei.opsfactory.knowledge.repository.SourceRepository;
 import java.io.InputStream;
@@ -22,11 +24,15 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -39,6 +45,7 @@ public class KnowledgeServiceFacade {
     private final DocumentRepository documentRepository;
     private final ChunkRepository chunkRepository;
     private final JobRepository jobRepository;
+    private final MaintenanceJobFailureRepository maintenanceJobFailureRepository;
     private final ProfileRepository profileRepository;
     private final BindingRepository bindingRepository;
     private final StorageManager storageManager;
@@ -49,12 +56,14 @@ public class KnowledgeServiceFacade {
     private final LexicalIndexService lexicalIndexService;
     private final VectorIndexService vectorIndexService;
     private final ProfileBootstrapService profileBootstrapService;
+    private final ThreadPoolTaskExecutor taskExecutor;
 
     public KnowledgeServiceFacade(
         SourceRepository sourceRepository,
         DocumentRepository documentRepository,
         ChunkRepository chunkRepository,
         JobRepository jobRepository,
+        MaintenanceJobFailureRepository maintenanceJobFailureRepository,
         ProfileRepository profileRepository,
         BindingRepository bindingRepository,
         StorageManager storageManager,
@@ -64,12 +73,14 @@ public class KnowledgeServiceFacade {
         EmbeddingService embeddingService,
         LexicalIndexService lexicalIndexService,
         VectorIndexService vectorIndexService,
-        ProfileBootstrapService profileBootstrapService
+        ProfileBootstrapService profileBootstrapService,
+        ThreadPoolTaskExecutor taskExecutor
     ) {
         this.sourceRepository = sourceRepository;
         this.documentRepository = documentRepository;
         this.chunkRepository = chunkRepository;
         this.jobRepository = jobRepository;
+        this.maintenanceJobFailureRepository = maintenanceJobFailureRepository;
         this.profileRepository = profileRepository;
         this.bindingRepository = bindingRepository;
         this.storageManager = storageManager;
@@ -80,6 +91,7 @@ public class KnowledgeServiceFacade {
         this.lexicalIndexService = lexicalIndexService;
         this.vectorIndexService = vectorIndexService;
         this.profileBootstrapService = profileBootstrapService;
+        this.taskExecutor = taskExecutor;
     }
 
     public PageResponse<SourceController.SourceResponse> listSources(int page, int pageSize) {
@@ -87,6 +99,7 @@ public class KnowledgeServiceFacade {
         return page(items, page, pageSize);
     }
 
+    @Transactional
     public SourceController.SourceResponse createSource(SourceController.CreateSourceRequest request) {
         Instant now = Instant.now();
         String id = Ids.newId("src");
@@ -95,7 +108,8 @@ public class KnowledgeServiceFacade {
         validateIndexProfileExists(indexProfileId);
         validateRetrievalProfileExists(retrievalProfileId);
         SourceRepository.SourceRecord record = new SourceRepository.SourceRecord(
-            id, request.name(), request.description(), "ACTIVE", "MANAGED", indexProfileId, retrievalProfileId, now, now
+            id, request.name(), request.description(), "ACTIVE", "MANAGED", indexProfileId, retrievalProfileId,
+            "ACTIVE", null, null, null, false, now, now
         );
         sourceRepository.insert(record);
         bindingRepository.upsert(new BindingRepository.BindingRecord(Ids.newId("spb"), id, indexProfileId, retrievalProfileId, now, now));
@@ -107,9 +121,11 @@ public class KnowledgeServiceFacade {
             .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
     }
 
+    @Transactional
     public SourceController.SourceResponse updateSource(String sourceId, SourceController.UpdateSourceRequest request) {
         SourceRepository.SourceRecord existing = sourceRepository.findById(sourceId)
             .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ensureSourceWritable(existing);
         Instant now = Instant.now();
         String indexProfileId = request.indexProfileId() != null ? request.indexProfileId() : existing.indexProfileId();
         String retrievalProfileId = request.retrievalProfileId() != null ? request.retrievalProfileId() : existing.retrievalProfileId();
@@ -123,6 +139,11 @@ public class KnowledgeServiceFacade {
             existing.storageMode(),
             indexProfileId,
             retrievalProfileId,
+            existing.runtimeStatus(),
+            existing.runtimeMessage(),
+            existing.currentJobId(),
+            existing.lastJobError(),
+            existing.rebuildRequired() || !indexProfileId.equals(existing.indexProfileId()),
             existing.createdAt(),
             now
         );
@@ -133,15 +154,16 @@ public class KnowledgeServiceFacade {
         return toSourceResponse(updated);
     }
 
+    @Transactional
     public SourceController.DeleteSourceResponse deleteSource(String sourceId) {
         SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
             .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ensureSourceWritable(source);
         List<DocumentRepository.DocumentRecord> documents = documentRepository.findBySourceId(sourceId);
         for (DocumentRepository.DocumentRecord document : documents) {
             storageManager.deleteRecursively(storageManager.artifactDir(sourceId, document.id()));
             storageManager.deleteRecursively(storageManager.uploadDocumentDir(sourceId, document.id()));
         }
-        embeddingService.deleteBySourceId(sourceId);
         lexicalIndexService.deleteSource(sourceId);
         vectorIndexService.deleteSource(sourceId);
         chunkRepository.deleteBySourceId(sourceId);
@@ -179,9 +201,11 @@ public class KnowledgeServiceFacade {
     }
 
     public DocumentController.IngestDocumentsResponse ingest(String sourceId, MultipartFile[] files) {
-        sourceRepository.findById(sourceId).orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ensureSourceWritable(source);
         Instant now = Instant.now();
-        JobRepository.JobRecord job = new JobRepository.JobRecord(Ids.newId("job"), "INGEST", sourceId, null, "RUNNING", 0, "Ingest started", now, null, now, now);
+        JobRepository.JobRecord job = new JobRepository.JobRecord(Ids.newId("job"), "INGEST", sourceId, null, "RUNNING", 0, null, "Ingest started", "system", 0, 0, 0, 0, null, null, null, now, null, now, now);
         jobRepository.insert(job);
         int imported = 0;
         try {
@@ -193,11 +217,11 @@ public class KnowledgeServiceFacade {
                     imported++;
                 }
             }
-            JobRepository.JobRecord finished = new JobRepository.JobRecord(job.id(), job.jobType(), sourceId, null, "SUCCEEDED", 100, "Ingest completed", now, Instant.now(), job.createdAt(), Instant.now());
+            JobRepository.JobRecord finished = new JobRepository.JobRecord(job.id(), job.jobType(), sourceId, null, "SUCCEEDED", 100, null, "Ingest completed", "system", 0, 0, 0, 0, null, null, null, now, Instant.now(), job.createdAt(), Instant.now());
             jobRepository.update(finished);
             return new DocumentController.IngestDocumentsResponse(job.id(), sourceId, "SUCCEEDED", imported);
         } catch (RuntimeException ex) {
-            JobRepository.JobRecord failed = new JobRepository.JobRecord(job.id(), job.jobType(), sourceId, null, "FAILED", imported == 0 ? 0 : 100, ex.getMessage(), now, Instant.now(), job.createdAt(), Instant.now());
+            JobRepository.JobRecord failed = new JobRepository.JobRecord(job.id(), job.jobType(), sourceId, null, "FAILED", imported == 0 ? 0 : 100, null, ex.getMessage(), "system", 0, 0, 0, 0, null, null, ex.getMessage(), now, Instant.now(), job.createdAt(), Instant.now());
             jobRepository.update(failed);
             throw ex;
         }
@@ -208,9 +232,11 @@ public class KnowledgeServiceFacade {
             .orElseThrow(() -> new IllegalArgumentException("Document not found: " + documentId));
     }
 
+    @Transactional
     public DocumentController.DocumentUpdateResponse updateDocument(String documentId, DocumentController.UpdateDocumentRequest request) {
         DocumentRepository.DocumentRecord existing = documentRepository.findById(documentId)
             .orElseThrow(() -> new IllegalArgumentException("Document not found: " + documentId));
+        ensureSourceWritable(existing.sourceId());
         DocumentRepository.DocumentRecord updated = new DocumentRepository.DocumentRecord(
             existing.id(), existing.sourceId(), existing.name(), existing.originalFilename(),
             request.title() != null ? request.title() : existing.title(),
@@ -224,10 +250,11 @@ public class KnowledgeServiceFacade {
         return new DocumentController.DocumentUpdateResponse(documentId, true, updated.updatedAt());
     }
 
+    @Transactional
     public DocumentController.DeleteDocumentResponse deleteDocument(String documentId) {
         DocumentRepository.DocumentRecord existing = documentRepository.findById(documentId)
             .orElseThrow(() -> new IllegalArgumentException("Document not found: " + documentId));
-        embeddingService.deleteByDocumentId(documentId);
+        ensureSourceWritable(existing.sourceId());
         lexicalIndexService.deleteDocument(existing.sourceId(), documentId);
         vectorIndexService.deleteDocument(documentId);
         chunkRepository.deleteByDocumentId(documentId);
@@ -282,8 +309,11 @@ public class KnowledgeServiceFacade {
     }
 
     public DocumentController.JobCreationResponse simpleDocumentJob(String documentId, String jobType) {
+        DocumentRepository.DocumentRecord document = documentRepository.findById(documentId)
+            .orElseThrow(() -> new IllegalArgumentException("Document not found: " + documentId));
+        ensureSourceWritable(document.sourceId());
         Instant now = Instant.now();
-        JobRepository.JobRecord job = new JobRepository.JobRecord(Ids.newId("job"), jobType, null, documentId, "SUCCEEDED", 100, jobType + " completed", now, now, now, now);
+        JobRepository.JobRecord job = new JobRepository.JobRecord(Ids.newId("job"), jobType, document.sourceId(), documentId, "SUCCEEDED", 100, null, jobType + " completed", "system", 0, 0, 0, 0, null, null, null, now, now, now, now);
         jobRepository.insert(job);
         return new DocumentController.JobCreationResponse(job.id(), documentId, jobType, job.status());
     }
@@ -319,9 +349,11 @@ public class KnowledgeServiceFacade {
             .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + chunkId));
     }
 
+    @Transactional
     public ChunkController.ChunkMutationResponse createChunk(String documentId, ChunkController.CreateChunkRequest request) {
         DocumentRepository.DocumentRecord document = documentRepository.findById(documentId)
             .orElseThrow(() -> new IllegalArgumentException("Document not found: " + documentId));
+        ensureSourceWritable(document.sourceId());
         ChunkRepository.ChunkRecord record = new ChunkRepository.ChunkRecord(
             Ids.newId("chk"), documentId, document.sourceId(), request.ordinal(), request.title(), request.titlePath(),
             request.keywords(), request.text(), request.markdown(), request.pageFrom(), request.pageTo(),
@@ -338,9 +370,11 @@ public class KnowledgeServiceFacade {
         return new ChunkController.ChunkMutationResponse(record.id(), documentId, true, true, record.editStatus(), record.updatedAt());
     }
 
+    @Transactional
     public ChunkController.ChunkMutationResponse updateChunk(String chunkId, ChunkController.UpdateChunkRequest request) {
         ChunkRepository.ChunkRecord existing = chunkRepository.findById(chunkId)
             .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + chunkId));
+        ensureSourceWritable(existing.sourceId());
         String text = request.text() != null ? request.text() : existing.text();
         String markdown = request.markdown() != null ? request.markdown() : existing.markdown();
         ChunkRepository.ChunkRecord updated = new ChunkRepository.ChunkRecord(
@@ -369,9 +403,11 @@ public class KnowledgeServiceFacade {
         return new ChunkController.ChunkMutationResponse(chunkId, existing.documentId(), true, true, updated.editStatus(), updated.updatedAt());
     }
 
+    @Transactional
     public ChunkController.ChunkKeywordsResponse updateChunkKeywords(String chunkId, List<String> keywords) {
         ChunkRepository.ChunkRecord existing = chunkRepository.findById(chunkId)
             .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + chunkId));
+        ensureSourceWritable(existing.sourceId());
         ChunkRepository.ChunkRecord updated = new ChunkRepository.ChunkRecord(
             existing.id(), existing.documentId(), existing.sourceId(), existing.ordinal(), existing.title(),
             existing.titlePath(), keywords, existing.text(), existing.markdown(), existing.pageFrom(), existing.pageTo(),
@@ -387,10 +423,11 @@ public class KnowledgeServiceFacade {
         return new ChunkController.ChunkKeywordsResponse(chunkId, keywords, true, true, updated.updatedAt());
     }
 
+    @Transactional
     public ChunkController.DeleteChunkResponse deleteChunk(String chunkId) {
         ChunkRepository.ChunkRecord existing = chunkRepository.findById(chunkId)
             .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + chunkId));
-        embeddingService.deleteByChunkId(chunkId);
+        ensureSourceWritable(existing.sourceId());
         lexicalIndexService.deleteChunk(existing.sourceId(), chunkId);
         vectorIndexService.deleteChunk(chunkId);
         chunkRepository.delete(chunkId);
@@ -398,7 +435,11 @@ public class KnowledgeServiceFacade {
         return new ChunkController.DeleteChunkResponse(chunkId, true);
     }
 
+    @Transactional
     public ChunkController.ReorderChunksResponse reorderChunks(String documentId, List<ChunkController.ReorderItem> items) {
+        DocumentRepository.DocumentRecord document = documentRepository.findById(documentId)
+            .orElseThrow(() -> new IllegalArgumentException("Document not found: " + documentId));
+        ensureSourceWritable(document.sourceId());
         for (ChunkController.ReorderItem item : items) {
             ChunkRepository.ChunkRecord existing = chunkRepository.findById(item.chunkId())
                 .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + item.chunkId()));
@@ -415,6 +456,7 @@ public class KnowledgeServiceFacade {
     public ChunkController.ChunkReindexResponse reindexChunk(String chunkId) {
         ChunkRepository.ChunkRecord chunk = chunkRepository.findById(chunkId)
             .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + chunkId));
+        ensureSourceWritable(chunk.sourceId());
         SearchService.SearchableChunk searchableChunk = toSearchableChunk(chunk);
         Map<String, List<Double>> vectors = embeddingService.ensureChunkEmbeddings(List.of(searchableChunk));
         lexicalIndexService.upsertChunks(List.of(searchableChunk));
@@ -423,6 +465,7 @@ public class KnowledgeServiceFacade {
     }
 
     public RetrievalController.SearchResponse search(RetrievalController.SearchRequest request) {
+        ensureSourcesReadable(resolveReferencedSourceIds(request.sourceIds(), request.documentIds()));
         String retrievalProfileId = resolveSearchRetrievalProfileId(request.retrievalProfileId(), request.sourceIds());
         ResolvedRetrievalSettings settings = resolveRetrievalSettings(retrievalProfileId, request.topK(), request.override());
         List<SearchService.SearchableChunk> searchableChunks = filterChunks(request.sourceIds(), request.documentIds(), request.filters());
@@ -432,6 +475,7 @@ public class KnowledgeServiceFacade {
     }
 
     public RetrievalController.CompareSearchResponse compare(RetrievalController.CompareSearchRequest request) {
+        ensureSourcesReadable(resolveReferencedSourceIds(request.sourceIds(), request.documentIds()));
         String retrievalProfileId = resolveSearchRetrievalProfileId(request.retrievalProfileId(), request.sourceIds());
         ResolvedRetrievalSettings baseSettings = resolveRetrievalSettings(retrievalProfileId, COMPARE_FETCH_TOP_K, null);
         List<SearchService.SearchableChunk> searchableChunks = filterChunks(request.sourceIds(), request.documentIds(), request.filters());
@@ -462,6 +506,7 @@ public class KnowledgeServiceFacade {
         }
         ChunkRepository.ChunkRecord chunk = chunkRepository.findById(chunkId)
             .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + chunkId));
+        ensureSourceReadable(chunk.sourceId());
         List<RetrievalController.NeighborChunk> neighbors = null;
         if (includeNeighbors) {
             List<ChunkRepository.ChunkRecord> siblings = chunkRepository.findByDocumentId(chunk.documentId());
@@ -480,6 +525,7 @@ public class KnowledgeServiceFacade {
     }
 
     public RetrievalController.RetrieveResponse retrieve(RetrievalController.RetrieveRequest request) {
+        ensureSourcesReadable(resolveReferencedSourceIds(request.sourceIds(), List.of()));
         RetrievalController.SearchResponse searchResponse = search(new RetrievalController.SearchRequest(
             request.query(), request.sourceIds(), List.of(), request.retrievalProfileId(), request.topK(), null, null
         ));
@@ -496,6 +542,7 @@ public class KnowledgeServiceFacade {
     public RetrievalController.ExplainResponse explain(RetrievalController.ExplainRequest request) {
         ChunkRepository.ChunkRecord chunk = chunkRepository.findById(request.chunkId())
             .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + request.chunkId()));
+        ensureSourceReadable(chunk.sourceId());
         String retrievalProfileId = resolveSearchRetrievalProfileId(request.retrievalProfileId(), List.of(chunk.sourceId()));
         ResolvedRetrievalSettings settings = resolveRetrievalSettings(retrievalProfileId, null, null);
         SearchService.ExplainResult explain = searchService.explain(toSearchableChunk(chunk), request.query(), settings.toSearchOptions());
@@ -548,6 +595,7 @@ public class KnowledgeServiceFacade {
         return page(items, page, pageSize);
     }
 
+    @Transactional
     public ProfileController.ProfileDetail createIndexProfile(ProfileController.CreateProfileRequest request) {
         Instant now = Instant.now();
         ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(Ids.newId("ip"), request.name(), request.config(), "index", now, now);
@@ -555,6 +603,7 @@ public class KnowledgeServiceFacade {
         return new ProfileController.ProfileDetail(record.id(), record.name(), record.config(), now, now);
     }
 
+    @Transactional
     public ProfileController.ProfileDetail createRetrievalProfile(ProfileController.CreateProfileRequest request) {
         Instant now = Instant.now();
         ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(Ids.newId("rp"), request.name(), request.config(), "retrieval", now, now);
@@ -572,14 +621,19 @@ public class KnowledgeServiceFacade {
         return new ProfileController.ProfileDetail(record.id(), record.name(), record.config(), record.createdAt(), record.updatedAt());
     }
 
+    @Transactional
     public ProfileController.ProfileUpdateResponse updateIndexProfile(String id, ProfileController.UpdateProfileRequest request) {
         ProfileRepository.ProfileRecord existing = profileRepository.findIndexById(id).orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + id));
         ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(id, request.name() != null ? request.name() : existing.name(),
             mergeMaps(existing.config(), request.config()), "index", existing.createdAt(), Instant.now());
         profileRepository.updateIndex(updated);
+        if (request.config() != null && !request.config().isEmpty()) {
+            markSourcesRebuildRequiredByIndexProfile(id);
+        }
         return new ProfileController.ProfileUpdateResponse(id, updated.name(), updated.updatedAt());
     }
 
+    @Transactional
     public ProfileController.ProfileUpdateResponse updateRetrievalProfile(String id, ProfileController.UpdateProfileRequest request) {
         ProfileRepository.ProfileRecord existing = profileRepository.findRetrievalById(id).orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + id));
         ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(id, request.name() != null ? request.name() : existing.name(),
@@ -588,12 +642,14 @@ public class KnowledgeServiceFacade {
         return new ProfileController.ProfileUpdateResponse(id, updated.name(), updated.updatedAt());
     }
 
+    @Transactional
     public ProfileController.DeleteProfileResponse deleteIndexProfile(String id) {
         ensureProfileNotBound(id, true);
         profileRepository.deleteIndex(id);
         return new ProfileController.DeleteProfileResponse(id, true);
     }
 
+    @Transactional
     public ProfileController.DeleteProfileResponse deleteRetrievalProfile(String id) {
         ensureProfileNotBound(id, false);
         profileRepository.deleteRetrieval(id);
@@ -607,15 +663,58 @@ public class KnowledgeServiceFacade {
         return page(items, page, pageSize);
     }
 
+    @Transactional
     public ProfileController.BindingResponse bindProfiles(ProfileController.BindingRequest request) {
-        sourceRepository.findById(request.sourceId()).orElseThrow(() -> new IllegalArgumentException("Source not found: " + request.sourceId()));
+        SourceRepository.SourceRecord source = sourceRepository.findById(request.sourceId())
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + request.sourceId()));
+        ensureSourceWritable(source);
         validateIndexProfileExists(request.indexProfileId());
         validateRetrievalProfileExists(request.retrievalProfileId());
         Instant now = Instant.now();
         bindingRepository.upsert(new BindingRepository.BindingRecord(Ids.newId("spb"), request.sourceId(), request.indexProfileId(), request.retrievalProfileId(), now, now));
-        SourceRepository.SourceRecord source = sourceRepository.findById(request.sourceId()).orElseThrow(() -> new IllegalArgumentException("Source not found: " + request.sourceId()));
-        sourceRepository.update(new SourceRepository.SourceRecord(source.id(), source.name(), source.description(), source.status(), source.storageMode(), request.indexProfileId(), request.retrievalProfileId(), source.createdAt(), now));
+        sourceRepository.update(new SourceRepository.SourceRecord(
+            source.id(), source.name(), source.description(), source.status(), source.storageMode(),
+            request.indexProfileId(), request.retrievalProfileId(), source.runtimeStatus(), source.runtimeMessage(),
+            source.currentJobId(), source.lastJobError(), source.rebuildRequired() || !request.indexProfileId().equals(source.indexProfileId()),
+            source.createdAt(), now
+        ));
         return new ProfileController.BindingResponse(request.sourceId(), request.indexProfileId(), request.retrievalProfileId(), now);
+    }
+
+    @Transactional
+    public SourceController.RebuildSourceResponse rebuildSource(String sourceId) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        if ("MAINTENANCE".equals(source.runtimeStatus())) {
+            throw new ApiConflictException("REBUILD_ALREADY_RUNNING", "当前知识库正在重建，请稍后再试");
+        }
+        Instant now = Instant.now();
+        JobRepository.JobRecord job = new JobRepository.JobRecord(
+            Ids.newId("job"), "SOURCE_REBUILD", sourceId, null, "RUNNING", 0, "PREPARING", "Source rebuild started",
+            "admin", 0, 0, 0, 0, null, null, null, now, null, now, now
+        );
+        jobRepository.insert(job);
+        sourceRepository.update(withRuntimeState(source, "MAINTENANCE", "知识库重建中，请稍后再试", job.id(), source.lastJobError(), source.rebuildRequired(), now));
+        taskExecutor.execute(() -> runSourceRebuild(job.id(), sourceId));
+        return new SourceController.RebuildSourceResponse(job.id(), sourceId, "RUNNING");
+    }
+
+    public SourceController.MaintenanceOverviewResponse maintenanceOverview(String sourceId) {
+        sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        JobRepository.JobRecord currentJob = jobRepository.findAll().stream()
+            .filter(job -> sourceId.equals(job.sourceId()) && "SOURCE_REBUILD".equals(job.jobType()) && "RUNNING".equals(job.status()))
+            .findFirst()
+            .orElse(null);
+        JobRepository.JobRecord lastCompletedJob = jobRepository.findAll().stream()
+            .filter(job -> sourceId.equals(job.sourceId()) && "SOURCE_REBUILD".equals(job.jobType()) && job.finishedAt() != null)
+            .max(Comparator.comparing(JobRepository.JobRecord::finishedAt))
+            .orElse(null);
+        return new SourceController.MaintenanceOverviewResponse(
+            sourceId,
+            toMaintenanceJobSummary(currentJob),
+            toMaintenanceJobSummary(lastCompletedJob)
+        );
     }
 
     public ProfileController.BindingResponse updateBinding(String sourceId, ProfileController.BindingPatchRequest request) {
@@ -638,20 +737,22 @@ public class KnowledgeServiceFacade {
         return page(items, page, pageSize);
     }
 
+    @Transactional
     public JobController.JobCancelResponse cancelJob(String jobId) {
         JobRepository.JobRecord existing = jobRepository.findById(jobId).orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
-        JobRepository.JobRecord updated = new JobRepository.JobRecord(existing.id(), existing.jobType(), existing.sourceId(), existing.documentId(), "CANCELLED", existing.progress(), existing.message(), existing.startedAt(), Instant.now(), existing.createdAt(), Instant.now());
+        JobRepository.JobRecord updated = new JobRepository.JobRecord(existing.id(), existing.jobType(), existing.sourceId(), existing.documentId(), "CANCELLED", existing.progress(), existing.stage(), existing.message(), existing.createdBy(), existing.totalDocuments(), existing.processedDocuments(), existing.successDocuments(), existing.failedDocuments(), existing.currentDocumentId(), existing.currentDocumentName(), existing.errorSummary(), existing.startedAt(), Instant.now(), existing.createdAt(), Instant.now());
         jobRepository.update(updated);
         return new JobController.JobCancelResponse(jobId, true, "CANCELLED", updated.updatedAt());
     }
 
+    @Transactional
     public JobController.JobRetryResponse retryJob(String jobId) {
         JobRepository.JobRecord existing = jobRepository.findById(jobId).orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
         if (!"FAILED".equals(existing.status())) {
             throw new IllegalStateException("Only failed jobs can be retried");
         }
         Instant now = Instant.now();
-        JobRepository.JobRecord retry = new JobRepository.JobRecord(Ids.newId("job"), existing.jobType(), existing.sourceId(), existing.documentId(), "SUCCEEDED", 100, "Retry completed", now, now, now, now);
+        JobRepository.JobRecord retry = new JobRepository.JobRecord(Ids.newId("job"), existing.jobType(), existing.sourceId(), existing.documentId(), "SUCCEEDED", 100, existing.stage(), "Retry completed", "system", existing.totalDocuments(), existing.processedDocuments(), existing.successDocuments(), existing.failedDocuments(), existing.currentDocumentId(), existing.currentDocumentName(), existing.errorSummary(), now, now, now, now);
         jobRepository.insert(retry);
         return new JobController.JobRetryResponse(retry.id(), jobId, retry.status());
     }
@@ -659,6 +760,23 @@ public class KnowledgeServiceFacade {
     public JobController.JobLogsResponse logs(String jobId) {
         JobController.JobResponse job = getJob(jobId);
         return new JobController.JobLogsResponse(jobId, List.of(new JobController.JobLogEntry(job.updatedAt(), "INFO", job.message())));
+    }
+
+    public JobController.JobFailuresResponse jobFailures(String jobId) {
+        jobRepository.findById(jobId).orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
+        return new JobController.JobFailuresResponse(
+            jobId,
+            maintenanceJobFailureRepository.findByJobId(jobId).stream()
+                .map(failure -> new JobController.JobFailureEntry(
+                    failure.documentId(),
+                    failure.documentName(),
+                    failure.stage(),
+                    failure.errorCode(),
+                    failure.message(),
+                    failure.finishedAt()
+                ))
+                .toList()
+        );
     }
 
     public com.huawei.opsfactory.knowledge.api.stats.StatsController.OverviewStatsResponse overviewStats() {
@@ -808,10 +926,309 @@ public class KnowledgeServiceFacade {
         );
     }
 
+    private void ensureSourceWritable(String sourceId) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ensureSourceWritable(source);
+    }
+
+    private void ensureSourceWritable(SourceRepository.SourceRecord source) {
+        if ("MAINTENANCE".equals(source.runtimeStatus())) {
+            throw new ApiConflictException("SOURCE_IN_MAINTENANCE", "当前知识库正在重建，暂不可执行该操作");
+        }
+        if ("ERROR".equals(source.runtimeStatus())) {
+            throw new ApiConflictException("SOURCE_UNAVAILABLE", "当前知识库处于异常状态，请重新触发重建");
+        }
+    }
+
+    private void ensureSourceReadable(String sourceId) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        if ("MAINTENANCE".equals(source.runtimeStatus())) {
+            throw new ApiConflictException("SOURCE_IN_MAINTENANCE", "当前知识库正在重建，暂不可执行该操作");
+        }
+        if ("ERROR".equals(source.runtimeStatus())) {
+            throw new ApiConflictException("SOURCE_UNAVAILABLE", "当前知识库处于异常状态，请重新触发重建");
+        }
+    }
+
+    private void ensureSourcesReadable(Set<String> sourceIds) {
+        for (String sourceId : sourceIds) {
+            ensureSourceReadable(sourceId);
+        }
+    }
+
+    private Set<String> resolveReferencedSourceIds(List<String> sourceIds, List<String> documentIds) {
+        LinkedHashSet<String> resolved = new LinkedHashSet<>();
+        if (sourceIds != null) {
+            resolved.addAll(sourceIds.stream().filter(StringUtils::hasText).toList());
+        }
+        if (documentIds != null) {
+            documentIds.stream()
+                .filter(StringUtils::hasText)
+                .map(documentRepository::findById)
+                .flatMap(Optional::stream)
+                .map(DocumentRepository.DocumentRecord::sourceId)
+                .forEach(resolved::add);
+        }
+        return resolved;
+    }
+
+    private SourceRepository.SourceRecord withRuntimeState(
+        SourceRepository.SourceRecord source,
+        String runtimeStatus,
+        String runtimeMessage,
+        String currentJobId,
+        String lastJobError,
+        boolean rebuildRequired,
+        Instant updatedAt
+    ) {
+        return new SourceRepository.SourceRecord(
+            source.id(), source.name(), source.description(), source.status(), source.storageMode(),
+            source.indexProfileId(), source.retrievalProfileId(), runtimeStatus, runtimeMessage, currentJobId,
+            lastJobError, rebuildRequired, source.createdAt(), updatedAt
+        );
+    }
+
+    private void markSourcesRebuildRequiredByIndexProfile(String profileId) {
+        Instant now = Instant.now();
+        bindingRepository.findAll().stream()
+            .filter(binding -> profileId.equals(binding.indexProfileId()))
+            .map(BindingRepository.BindingRecord::sourceId)
+            .map(sourceRepository::findById)
+            .flatMap(Optional::stream)
+            .forEach(source -> sourceRepository.update(withRuntimeState(
+                source,
+                source.runtimeStatus(),
+                source.runtimeMessage(),
+                source.currentJobId(),
+                source.lastJobError(),
+                true,
+                now
+            )));
+    }
+
+    private void runSourceRebuild(String jobId, String sourceId) {
+        Instant startedAt = Instant.now();
+        try {
+            SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+                .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+            List<DocumentRepository.DocumentRecord> documents = documentRepository.findBySourceId(sourceId);
+            maintenanceJobFailureRepository.deleteByJobId(jobId);
+
+            updateRebuildJob(jobId, sourceId, "RUNNING", "PREPARING", "Source rebuild started", documents.size(), 0, 0, 0, null, null, null, startedAt, null);
+
+            updateRebuildJob(jobId, sourceId, "RUNNING", "CLEANING", "Cleaning existing chunks and indexes", documents.size(), 0, 0, 0, null, null, null, startedAt, null);
+            lexicalIndexService.deleteSource(sourceId);
+            vectorIndexService.deleteSource(sourceId);
+            chunkRepository.deleteBySourceId(sourceId);
+            storageManager.deleteRecursively(storageManager.artifactSourceDir(sourceId));
+
+            int total = documents.size();
+            int processed = 0;
+            int succeededCount = 0;
+            int failedCount = 0;
+            for (DocumentRepository.DocumentRecord document : documents) {
+                final String[] stageHolder = { "PARSING" };
+                final int processedBeforeDocument = processed;
+                final int succeededBeforeDocument = succeededCount;
+                final int failedBeforeDocument = failedCount;
+                try {
+                    updateRebuildJob(jobId, sourceId, "RUNNING", stageHolder[0], "Parsing document", total, processedBeforeDocument, succeededBeforeDocument, failedBeforeDocument, document.id(), document.name(), null, startedAt, null);
+                    rebuildDocumentFromOriginal(document, currentStage -> {
+                        stageHolder[0] = currentStage;
+                        updateRebuildJob(
+                        jobId,
+                        sourceId,
+                        "RUNNING",
+                        currentStage,
+                        stageMessage(currentStage),
+                        total,
+                        processedBeforeDocument,
+                        succeededBeforeDocument,
+                        failedBeforeDocument,
+                        document.id(),
+                        document.name(),
+                        null,
+                        startedAt,
+                        null
+                    );
+                    });
+                    succeededCount++;
+                } catch (Exception ex) {
+                    failedCount++;
+                    maintenanceJobFailureRepository.insert(new MaintenanceJobFailureRepository.FailureRecord(
+                        Ids.newId("mjf"),
+                        jobId,
+                        sourceId,
+                        document.id(),
+                        document.name(),
+                        stageHolder[0],
+                        errorCodeFromException(ex),
+                        summarizeError(ex),
+                        Instant.now()
+                    ));
+                }
+                processed++;
+                updateRebuildJob(jobId, sourceId, "RUNNING", processed == total ? "INDEXING" : "PARSING", "Rebuilt " + processed + "/" + total + " documents", total, processed, succeededCount, failedCount, null, null, failedCount > 0 ? failedCount + " 个文档处理失败" : null, startedAt, null);
+            }
+            Instant now = Instant.now();
+            final int finalFailedCount = failedCount;
+            final int finalSucceededCount = succeededCount;
+            JobRepository.JobRecord succeeded = new JobRepository.JobRecord(
+                jobId, "SOURCE_REBUILD", sourceId, null, finalFailedCount > 0 ? "FAILED" : "SUCCEEDED", 100, "COMPLETED",
+                finalFailedCount > 0 ? "Source rebuild completed with failures" : "Source rebuild completed",
+                "admin", total, total, finalSucceededCount, finalFailedCount, null, null,
+                finalFailedCount > 0 ? finalFailedCount + " 个文档处理失败" : null, startedAt, now, startedAt, now
+            );
+            jobRepository.update(succeeded);
+            sourceRepository.findById(sourceId).ifPresent(current -> sourceRepository.update(withRuntimeState(
+                current,
+                finalFailedCount > 0 ? "ERROR" : "ACTIVE",
+                finalFailedCount > 0 ? "知识库重建失败，请重新触发重建" : null,
+                null,
+                finalFailedCount > 0 ? finalFailedCount + " 个文档处理失败" : null,
+                finalFailedCount > 0,
+                now
+            )));
+        } catch (Exception ex) {
+            Instant now = Instant.now();
+            jobRepository.update(new JobRepository.JobRecord(
+                jobId, "SOURCE_REBUILD", sourceId, null, "FAILED", 0, "COMPLETED", ex.getMessage(),
+                "admin", 0, 0, 0, 0, null, null, summarizeError(ex), startedAt, now, startedAt, now
+            ));
+            sourceRepository.findById(sourceId).ifPresent(current -> sourceRepository.update(withRuntimeState(
+                current,
+                "ERROR",
+                "知识库重建失败，请重新触发重建",
+                null,
+                summarizeError(ex),
+                true,
+                now
+            )));
+        }
+    }
+
+    private void rebuildDocumentFromOriginal(DocumentRepository.DocumentRecord document, java.util.function.Consumer<String> stageCallback) {
+        Path originalPath = storageManager.originalFilePath(document.sourceId(), document.id(), document.originalFilename());
+        stageCallback.accept("PARSING");
+        TikaConversionService.ConversionResult conversion = conversionService.convert(originalPath);
+        Path artifactDir = storageManager.artifactDir(document.sourceId(), document.id());
+        storageManager.writeString(artifactDir.resolve("content.md"), conversion.markdown());
+
+        Instant now = Instant.now();
+        DocumentRepository.DocumentRecord updatedDocument = new DocumentRepository.DocumentRecord(
+            document.id(), document.sourceId(), document.name(), document.originalFilename(),
+            conversion.title(), document.description(), document.tags(), document.sha256(),
+            document.contentType(), document.language(), "INDEXED", "INDEXED", document.fileSizeBytes(), 0, 0,
+            null, "system", document.createdAt(), now
+        );
+        documentRepository.update(updatedDocument);
+
+        stageCallback.accept("CHUNKING");
+        List<ChunkingService.ChunkDraft> chunks = chunkingService.chunk(conversion.title(), conversion.text(), conversion.markdown());
+        List<SearchService.SearchableChunk> insertedChunks = new ArrayList<>();
+        for (ChunkingService.ChunkDraft draft : chunks) {
+            ChunkRepository.ChunkRecord chunkRecord = new ChunkRepository.ChunkRecord(
+                Ids.newId("chk"), document.id(), document.sourceId(), draft.ordinal(), draft.title(), draft.titlePath(), draft.keywords(),
+                draft.text(), draft.markdown(), 1, 1, draft.tokenCount(), draft.textLength(), hash(draft.text() + draft.markdown()),
+                "SYSTEM_GENERATED", "system", now, now
+            );
+            chunkRepository.insert(chunkRecord);
+            insertedChunks.add(toSearchableChunk(chunkRecord));
+        }
+        stageCallback.accept("INDEXING");
+        Map<String, List<Double>> vectors = embeddingService.ensureChunkEmbeddings(insertedChunks);
+        lexicalIndexService.upsertChunks(insertedChunks);
+        vectorIndexService.upsertChunks(insertedChunks, vectors);
+        refreshDocumentChunkStats(document.id());
+    }
+
+    private void updateRebuildJob(
+        String jobId,
+        String sourceId,
+        String status,
+        String stage,
+        String message,
+        int totalDocuments,
+        int processedDocuments,
+        int successDocuments,
+        int failedDocuments,
+        String currentDocumentId,
+        String currentDocumentName,
+        String errorSummary,
+        Instant startedAt,
+        Instant finishedAt
+    ) {
+        int progress = totalDocuments == 0 ? ("COMPLETED".equals(stage) ? 100 : 0) : Math.min(99, (processedDocuments * 100) / totalDocuments);
+        if (finishedAt != null) {
+            progress = 100;
+        }
+        jobRepository.update(new JobRepository.JobRecord(
+            jobId,
+            "SOURCE_REBUILD",
+            sourceId,
+            null,
+            status,
+            progress,
+            stage,
+            message,
+            "admin",
+            totalDocuments,
+            processedDocuments,
+            successDocuments,
+            failedDocuments,
+            currentDocumentId,
+            currentDocumentName,
+            errorSummary,
+            startedAt,
+            finishedAt,
+            startedAt,
+            Instant.now()
+        ));
+    }
+
+    private String stageMessage(String stage) {
+        return switch (stage) {
+        case "CLEANING" -> "Cleaning existing chunks and indexes";
+        case "PARSING" -> "Parsing document";
+        case "CHUNKING" -> "Rebuilding chunks";
+        case "INDEXING" -> "Rebuilding indexes";
+        case "COMPLETED" -> "Source rebuild completed";
+        default -> "Preparing source rebuild";
+        };
+    }
+
+    private String summarizeError(Exception ex) {
+        Throwable current = ex;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return StringUtils.hasText(current.getMessage()) ? current.getMessage() : ex.getClass().getSimpleName();
+    }
+
+    private String errorCodeFromException(Exception ex) {
+        String message = summarizeError(ex).toLowerCase();
+        if (message.contains("parse") || message.contains("convert")) {
+            return "DOCUMENT_PARSE_FAILED";
+        }
+        if (message.contains("chunk")) {
+            return "CHUNK_BUILD_FAILED";
+        }
+        if (message.contains("index")) {
+            return "INDEX_WRITE_FAILED";
+        }
+        if (message.contains("embed")) {
+            return "EMBEDDING_FAILED";
+        }
+        return "REBUILD_DOCUMENT_FAILED";
+    }
+
     private SourceController.SourceResponse toSourceResponse(SourceRepository.SourceRecord source) {
         return new SourceController.SourceResponse(
             source.id(), source.name(), source.description(), source.status(), source.storageMode(),
-            source.indexProfileId(), source.retrievalProfileId(), source.createdAt(), source.updatedAt()
+            source.indexProfileId(), source.retrievalProfileId(), source.runtimeStatus(), source.runtimeMessage(),
+            source.currentJobId(), source.lastJobError(), source.rebuildRequired(), source.createdAt(), source.updatedAt()
         );
     }
 
@@ -850,8 +1267,34 @@ public class KnowledgeServiceFacade {
 
     private JobController.JobResponse toJobResponse(JobRepository.JobRecord job) {
         return new JobController.JobResponse(
-            job.id(), job.jobType(), job.sourceId(), job.documentId(), job.status(), job.progress(), job.message(),
+            job.id(), job.jobType(), job.sourceId(), job.documentId(), job.status(), job.progress(), job.stage(), job.message(),
+            job.createdBy(), job.totalDocuments(), job.processedDocuments(), job.successDocuments(), job.failedDocuments(),
+            job.currentDocumentId(), job.currentDocumentName(), job.errorSummary(),
             job.startedAt(), job.finishedAt(), job.createdAt(), job.updatedAt()
+        );
+    }
+
+    private SourceController.MaintenanceJobSummary toMaintenanceJobSummary(JobRepository.JobRecord job) {
+        if (job == null) {
+            return null;
+        }
+        return new SourceController.MaintenanceJobSummary(
+            job.id(),
+            job.jobType(),
+            job.status(),
+            job.stage(),
+            job.createdBy(),
+            job.startedAt(),
+            job.updatedAt(),
+            job.finishedAt(),
+            job.totalDocuments(),
+            job.processedDocuments(),
+            job.successDocuments(),
+            job.failedDocuments(),
+            job.currentDocumentId(),
+            job.currentDocumentName(),
+            job.message(),
+            job.errorSummary()
         );
     }
 

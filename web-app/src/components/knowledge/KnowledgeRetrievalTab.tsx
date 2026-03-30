@@ -5,6 +5,7 @@ import { useToast } from '../../contexts/ToastContext'
 import KnowledgeChunkDetailModal from './KnowledgeChunkDetailModal'
 import type {
     KnowledgeCapabilities,
+    KnowledgeChunkMutationResponse,
     KnowledgeDefaults,
     KnowledgeDocumentSummary,
     KnowledgeProfileDetail,
@@ -99,6 +100,12 @@ interface RetrievalSelection {
     hit: RetrievalDisplayHit
 }
 
+interface RetrievalEditorDraft {
+    keywords: string[]
+    keywordInput: string
+    text: string
+}
+
 interface RetrievalModeResultState {
     hits: RetrievalSearchHit[]
     total: number
@@ -116,6 +123,7 @@ interface KnowledgeRetrievalTabProps {
     capabilities: KnowledgeCapabilities | null
     defaults: KnowledgeDefaults | null
     retrievalProfileDetail: KnowledgeProfileDetail | null
+    disabled?: boolean
 }
 
 const QUERY_MAX_LENGTH = 200
@@ -492,6 +500,40 @@ function buildPageRange(pageFrom: number | null, pageTo: number | null, fallback
     return `${pageFrom}-${pageTo}`
 }
 
+function parseKeywords(value: string): string[] {
+    const seen = new Set<string>()
+
+    return value
+        .split(/[\n,，;；]+/)
+        .map(item => item.trim())
+        .filter(Boolean)
+        .filter(item => {
+            const normalized = item.toLowerCase()
+            if (seen.has(normalized)) return false
+            seen.add(normalized)
+            return true
+        })
+}
+
+function appendKeywords(current: string[], value: string): string[] {
+    const seen = new Set(current.map(item => item.toLowerCase()))
+    const additions = parseKeywords(value)
+
+    if (additions.length === 0) {
+        return current
+    }
+
+    return [
+        ...current,
+        ...additions.filter(item => {
+            const normalized = item.toLowerCase()
+            if (seen.has(normalized)) return false
+            seen.add(normalized)
+            return true
+        }),
+    ]
+}
+
 function createEmptyModeResults(): Record<RetrievalMode, RetrievalModeResultState> {
     return {
         semantic: {
@@ -682,95 +724,344 @@ function RetrievalDetailPanel({
     detail,
     loading,
     error,
+    canEdit,
+    onReload,
     onClear,
 }: {
     selection: RetrievalSelection | null
     detail: RetrievalFetchResponse | null
     loading: boolean
     error: string | null
+    canEdit: boolean
+    onReload: () => Promise<void>
     onClear: () => void
 }) {
     const { t } = useTranslation()
+    const { showToast } = useToast()
+    const [panelMode, setPanelMode] = useState<'view' | 'edit'>('view')
+    const [draft, setDraft] = useState<RetrievalEditorDraft | null>(null)
+    const [saving, setSaving] = useState(false)
+    const [saveError, setSaveError] = useState<string | null>(null)
+
+    useEffect(() => {
+        setPanelMode('view')
+        setSaving(false)
+        setSaveError(null)
+        setDraft(detail ? {
+            keywords: detail.keywords,
+            keywordInput: '',
+            text: detail.text || detail.markdown || '',
+        } : null)
+    }, [detail, selection])
 
     if (!selection) {
         return null
     }
 
-    const { hit, mode } = selection
+    const { hit } = selection
     const content = detail?.text || detail?.markdown || hit.snippet || ''
+    const isEditing = panelMode === 'edit'
+    const retrievalContextItems = [
+        {
+            label: t('knowledge.retrievalDetailMode'),
+            value: t(getModeLabelKey(selection.mode)),
+        },
+        ...(selection.mode === 'hybrid'
+            ? []
+            : [{
+                label: t('knowledge.retrievalModeScoreLabel'),
+                value: formatScore(hit.displayScore),
+            }]),
+        {
+            label: t('knowledge.retrievalLexicalScoreLabel'),
+            value: formatScore(hit.lexicalScore),
+        },
+        {
+            label: t('knowledge.retrievalSemanticScoreLabel'),
+            value: formatScore(hit.semanticScore),
+        },
+        {
+            label: t('knowledge.retrievalFusionScoreLabel'),
+            value: formatScore(hit.fusionScore),
+        },
+        {
+            label: t('knowledge.retrievalDetailTitlePath'),
+            value: (detail?.titlePath || hit.titlePath).length > 0
+                ? (detail?.titlePath || hit.titlePath).join(' / ')
+                : t('knowledge.notAvailable'),
+        },
+    ]
+
+    const metadataItems = [
+        {
+            label: t('knowledge.retrievalDetailDocument'),
+            value: hit.documentName,
+        },
+        {
+            label: t('knowledge.retrievalDetailChunkId'),
+            value: hit.chunkId,
+            code: true,
+        },
+        {
+            label: t('knowledge.retrievalDetailPageRange'),
+            value: buildPageRange(detail?.pageFrom ?? hit.pageFrom, detail?.pageTo ?? hit.pageTo, t('knowledge.notAvailable')),
+        },
+    ]
+
+    const commitPendingKeyword = () => {
+        setDraft(current => {
+            if (!current) return current
+
+            const nextKeywords = appendKeywords(current.keywords, current.keywordInput)
+            if (nextKeywords === current.keywords && !current.keywordInput.trim()) {
+                return current
+            }
+
+            return {
+                ...current,
+                keywords: nextKeywords,
+                keywordInput: '',
+            }
+        })
+    }
+
+    const handleRemoveKeyword = (keyword: string) => {
+        setDraft(current => current
+            ? {
+                ...current,
+                keywords: current.keywords.filter(item => item.toLowerCase() !== keyword.toLowerCase()),
+            }
+            : current
+        )
+    }
+
+    const handleSave = async () => {
+        if (!draft) return
+
+        const text = draft.text.trim()
+        const keywords = appendKeywords(draft.keywords, draft.keywordInput)
+
+        setSaveError(null)
+
+        if (!text) {
+            setSaveError(t('knowledge.chunkContentRequired'))
+            return
+        }
+
+        setSaving(true)
+
+        try {
+            const response = await fetch(`${KNOWLEDGE_SERVICE_URL}/ops-knowledge/chunks/${hit.chunkId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    keywords,
+                    text,
+                    markdown: text,
+                }),
+            })
+            const data = await response.json().catch(() => null) as KnowledgeChunkMutationResponse | { message?: string } | null
+
+            if (!response.ok) {
+                throw new Error(
+                    data && typeof data === 'object' && 'message' in data
+                        ? String(data.message || response.statusText)
+                        : response.statusText
+                )
+            }
+
+            await onReload()
+            setPanelMode('view')
+            showToast('success', t('knowledge.chunkSaveSuccess'))
+        } catch (err) {
+            setSaveError(t('knowledge.chunkSaveFailed', {
+                error: err instanceof Error ? err.message : t('errors.unknown'),
+            }))
+        } finally {
+            setSaving(false)
+        }
+    }
+
     return (
         <KnowledgeChunkDetailModal
             title={hit.documentName}
             subtitle={hit.chunkId}
             badges={[
-                `${t('knowledge.retrievalDetailMode')} ${t(getModeLabelKey(mode))}`,
-                ...(mode === 'hybrid' ? [] : [`${t('knowledge.retrievalModeScoreLabel')} ${formatScore(hit.displayScore)}`]),
+                `${t('knowledge.retrievalDetailMode')} ${t(getModeLabelKey(selection.mode))}`,
+                ...(selection.mode === 'hybrid' ? [] : [`${t('knowledge.retrievalModeScoreLabel')} ${formatScore(hit.displayScore)}`]),
                 `${t('knowledge.retrievalLexicalScoreLabel')} ${formatScore(hit.lexicalScore)}`,
                 `${t('knowledge.retrievalSemanticScoreLabel')} ${formatScore(hit.semanticScore)}`,
                 `${t('knowledge.retrievalFusionScoreLabel')} ${formatScore(hit.fusionScore)}`,
                 `${t('knowledge.retrievalPageShort')} ${buildPageRange(detail?.pageFrom ?? hit.pageFrom, detail?.pageTo ?? hit.pageTo, t('knowledge.notAvailable'))}`,
             ]}
-            error={error ? t('common.connectionError', { error }) : null}
+            error={saveError || (error ? t('common.connectionError', { error }) : null)}
             loading={loading}
             loadingLabel={t('knowledge.retrievalDetailLoading')}
-            metadataTitle={t('knowledge.retrievalDetailMetadata')}
-            metadataItems={[
-                {
-                    label: t('knowledge.retrievalDetailDocument'),
-                    value: hit.documentName,
-                },
-                {
-                    label: t('knowledge.retrievalDetailMode'),
-                    value: t(getModeLabelKey(mode)),
-                },
-                {
-                    label: t('knowledge.retrievalDetailChunkId'),
-                    value: hit.chunkId,
-                    code: true,
-                },
-                ...(mode === 'hybrid'
-                    ? []
-                    : [{
-                        label: t('knowledge.retrievalModeScoreLabel'),
-                        value: formatScore(hit.displayScore),
-                    }]),
-                {
-                    label: t('knowledge.retrievalLexicalScoreLabel'),
-                    value: formatScore(hit.lexicalScore),
-                },
-                {
-                    label: t('knowledge.retrievalSemanticScoreLabel'),
-                    value: formatScore(hit.semanticScore),
-                },
-                {
-                    label: t('knowledge.retrievalFusionScoreLabel'),
-                    value: formatScore(hit.fusionScore),
-                },
-                {
-                    label: t('knowledge.retrievalDetailPageRange'),
-                    value: buildPageRange(detail?.pageFrom ?? hit.pageFrom, detail?.pageTo ?? hit.pageTo, t('knowledge.notAvailable')),
-                },
-                {
-                    label: t('knowledge.retrievalDetailTitlePath'),
-                    value: (detail?.titlePath || hit.titlePath).length > 0
-                        ? (detail?.titlePath || hit.titlePath).join(' / ')
-                        : t('knowledge.notAvailable'),
-                },
-            ]}
-            keywordsTitle={t('knowledge.retrievalDetailKeywords')}
-            keywordsContent={detail?.keywords && detail.keywords.length > 0 ? (
-                <div className="resource-card-tags knowledge-retrieval-keywords">
-                    {detail.keywords.map(keyword => (
-                        <span key={keyword} className="resource-card-tag">#{keyword}</span>
-                    ))}
-                </div>
+            mainSectionTitle={t('knowledge.retrievalDetailContent')}
+            mainSectionContent={isEditing ? (
+                <>
+                    <label className="knowledge-visually-hidden" htmlFor="knowledge-retrieval-chunk-content">
+                        {t('knowledge.chunkContentTitle')}
+                    </label>
+                    <textarea
+                        id="knowledge-retrieval-chunk-content"
+                        className="form-input knowledge-chunk-content-input"
+                        rows={18}
+                        value={draft?.text || ''}
+                        onChange={event => setDraft(current => current
+                            ? {
+                                ...current,
+                                text: event.target.value,
+                            }
+                            : current
+                        )}
+                        disabled={saving}
+                    />
+                </>
             ) : (
-                <p className="knowledge-section-empty">{t('knowledge.notAvailable')}</p>
-            )}
-            contentTitle={t('knowledge.retrievalDetailContent')}
-            contentContent={(
                 <div className="knowledge-retrieval-detail-content-panel">
                     <div className="knowledge-retrieval-detail-content-text">{content || t('knowledge.notAvailable')}</div>
+                </div>
+            )}
+            sidebarSections={[
+                {
+                    key: 'metadata',
+                    title: t('knowledge.retrievalDetailMetadata'),
+                    content: (
+                        <div className="knowledge-chunk-detail-meta-list">
+                            {metadataItems.map(item => (
+                                <div key={item.label} className="knowledge-kv-item knowledge-chunk-detail-meta-row">
+                                    <span className="knowledge-kv-label">{item.label}</span>
+                                    <span className={`knowledge-kv-value ${item.code ? 'knowledge-kv-code' : ''}`.trim()}>
+                                        {item.value}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ),
+                },
+                {
+                    key: 'keywords',
+                    title: t('knowledge.retrievalDetailKeywords'),
+                    content: isEditing ? (
+                        <div className="form-group knowledge-chunk-detail-form-group">
+                            <label className="form-label" htmlFor="knowledge-retrieval-chunk-keywords">
+                                {t('knowledge.chunkKeywordsLabel')}
+                            </label>
+                            <div className="knowledge-chunk-keyword-surface">
+                                <div className="knowledge-chunk-keyword-list">
+                                    {draft?.keywords && draft.keywords.length > 0 ? (
+                                        draft.keywords.map(keyword => (
+                                            <span key={keyword} className="knowledge-chunk-keyword-pill">
+                                                <span>{keyword}</span>
+                                                <button
+                                                    type="button"
+                                                    className="knowledge-chunk-keyword-pill-remove"
+                                                    onClick={() => handleRemoveKeyword(keyword)}
+                                                    disabled={saving}
+                                                    aria-label={`${t('common.delete')} ${keyword}`}
+                                                >
+                                                    &times;
+                                                </button>
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="knowledge-inline-empty">{t('knowledge.notAvailable')}</span>
+                                    )}
+                                </div>
+                                <input
+                                    id="knowledge-retrieval-chunk-keywords"
+                                    className="knowledge-chunk-keyword-inline-input"
+                                    type="text"
+                                    placeholder={t('knowledge.chunkKeywordsPlaceholder')}
+                                    value={draft?.keywordInput || ''}
+                                    onChange={event => setDraft(current => current
+                                        ? {
+                                            ...current,
+                                            keywordInput: event.target.value,
+                                        }
+                                        : current
+                                    )}
+                                    onBlur={commitPendingKeyword}
+                                    onKeyDown={event => {
+                                        if (event.key === 'Enter' || event.key === ',' || event.key === '，') {
+                                            event.preventDefault()
+                                            commitPendingKeyword()
+                                        }
+                                    }}
+                                    disabled={saving}
+                                />
+                            </div>
+                        </div>
+                    ) : detail?.keywords && detail.keywords.length > 0 ? (
+                        <div className="knowledge-chunk-keyword-surface knowledge-chunk-keyword-surface-readonly knowledge-retrieval-keywords">
+                            {detail.keywords.map(keyword => (
+                                <span key={keyword} className="knowledge-chunk-keyword-pill">{keyword}</span>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="knowledge-section-empty">{t('knowledge.notAvailable')}</p>
+                    ),
+                },
+                {
+                    key: 'retrieval-context',
+                    title: t('knowledge.retrievalDetailMode'),
+                    content: (
+                        <div className="knowledge-chunk-detail-meta-list">
+                            {retrievalContextItems.map(item => (
+                                <div key={item.label} className="knowledge-kv-item knowledge-chunk-detail-meta-row">
+                                    <span className="knowledge-kv-label">{item.label}</span>
+                                    <span className="knowledge-kv-value">{item.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ),
+                },
+            ]}
+            footer={(
+                <div className="knowledge-chunk-detail-footer-actions">
+                    <div className="knowledge-chunk-detail-footer-danger" />
+                    <div className="knowledge-chunk-detail-footer-primary">
+                        <button
+                            type="button"
+                            className="btn btn-secondary btn-subtle"
+                            onClick={() => {
+                                if (isEditing) {
+                                    setPanelMode('view')
+                                    setSaveError(null)
+                                    setDraft(detail ? {
+                                        keywords: detail.keywords,
+                                        keywordInput: '',
+                                        text: detail.text || detail.markdown || '',
+                                    } : null)
+                                    return
+                                }
+
+                                onClear()
+                            }}
+                            disabled={saving}
+                        >
+                            {isEditing ? t('common.cancel') : t('common.close')}
+                        </button>
+                        {canEdit ? (
+                            isEditing ? (
+                                <button type="button" className="btn btn-primary" onClick={() => void handleSave()} disabled={saving}>
+                                    {saving ? t('knowledge.saving') : t('common.save')}
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={() => setPanelMode('edit')}
+                                    disabled={loading || !detail}
+                                >
+                                    {t('common.edit')}
+                                </button>
+                            )
+                        ) : null}
+                    </div>
                 </div>
             )}
             onClose={onClear}
@@ -784,6 +1075,7 @@ export default function KnowledgeRetrievalTab({
     capabilities,
     defaults,
     retrievalProfileDetail,
+    disabled = false,
 }: KnowledgeRetrievalTabProps) {
     const { t } = useTranslation()
     const { showToast } = useToast()
@@ -930,7 +1222,7 @@ export default function KnowledgeRetrievalTab({
     const hasSearchedVisibleModes = orderedModes.some(mode => searchedModes.includes(mode))
     const hasActiveVisibleModes = orderedModes.some(mode => activeSearchModes.includes(mode))
     const effectiveQuery = query.trim()
-    const testButtonDisabled = activeSearchModes.length > 0
+    const testButtonDisabled = disabled || activeSearchModes.length > 0
         || !effectiveQuery
         || (effectiveQuery === lastExecutedQuery && compareCache !== null)
     const compareDiagnostic = useMemo(() => {
@@ -1231,6 +1523,7 @@ export default function KnowledgeRetrievalTab({
                                         placeholder={t('knowledge.retrievalQueryPlaceholder')}
                                         value={query}
                                         onChange={event => setQuery(event.target.value)}
+                                        disabled={disabled}
                                     />
                                     <span className="knowledge-retrieval-query-count">
                                         {query.length}/{QUERY_MAX_LENGTH}
@@ -1469,6 +1762,23 @@ export default function KnowledgeRetrievalTab({
                 detail={detail}
                 loading={detailLoading}
                 error={detailError}
+                canEdit={capabilities?.featureFlags.allowChunkEdit ?? true}
+                onReload={async () => {
+                    if (!selection) return
+
+                    const response = await fetch(`${KNOWLEDGE_SERVICE_URL}/ops-knowledge/fetch/${selection.hit.chunkId}?includeNeighbors=true&neighborWindow=1`)
+                    const data = await response.json().catch(() => null) as RetrievalFetchResponse | { message?: string } | null
+
+                    if (!response.ok) {
+                        throw new Error(
+                            data && typeof data === 'object' && 'message' in data
+                                ? String(data.message || response.statusText)
+                                : response.statusText
+                        )
+                    }
+
+                    setDetail(data as RetrievalFetchResponse)
+                }}
                 onClear={() => setSelection(null)}
             />
         </>

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
-interface KnowledgeChunkDetailMetaItem {
-    label: string
-    value: ReactNode
-    code?: boolean
+interface KnowledgeChunkDetailSidebarSection {
+    key: string
+    title: string
+    content: ReactNode
+    className?: string
 }
 
 interface KnowledgeChunkDetailModalProps {
@@ -12,15 +13,13 @@ interface KnowledgeChunkDetailModalProps {
     subtitle?: string | null
     badges?: string[]
     headerMeta?: ReactNode
+    notice?: ReactNode
     error?: string | null
     loading?: boolean
     loadingLabel?: string
-    metadataTitle: string
-    metadataItems: KnowledgeChunkDetailMetaItem[]
-    keywordsTitle: string
-    keywordsContent: ReactNode
-    contentTitle: string
-    contentContent: ReactNode
+    mainSectionTitle: string
+    mainSectionContent: ReactNode
+    sidebarSections: KnowledgeChunkDetailSidebarSection[]
     footer?: ReactNode
     onClose: () => void
     widthClassName?: string
@@ -31,15 +30,13 @@ export default function KnowledgeChunkDetailModal({
     subtitle,
     badges = [],
     headerMeta,
+    notice,
     error,
     loading = false,
     loadingLabel,
-    metadataTitle,
-    metadataItems,
-    keywordsTitle,
-    keywordsContent,
-    contentTitle,
-    contentContent,
+    mainSectionTitle,
+    mainSectionContent,
+    sidebarSections,
     footer,
     onClose,
     widthClassName = '',
@@ -81,37 +78,37 @@ export default function KnowledgeChunkDetailModal({
                     <div className="agents-alert agents-alert-error">{error}</div>
                 ) : null}
 
+                {notice ? (
+                    <div className="knowledge-chunk-detail-notice">
+                        {notice}
+                    </div>
+                ) : null}
+
                 {loading ? (
                     <div className="knowledge-doc-empty">{loadingLabel || t('common.loading')}</div>
                 ) : (
                     <div className="modal-body knowledge-chunk-detail-modal-body knowledge-chunk-detail-body">
-                        <section className="knowledge-chunk-detail-section knowledge-chunk-detail-section-metadata">
-                            <h4 className="knowledge-chunk-detail-section-title">{metadataTitle}</h4>
-                            <div className="knowledge-chunk-detail-metadata-grid">
-                                {metadataItems.map(item => (
-                                    <div key={item.label} className="knowledge-kv-item knowledge-chunk-detail-meta-item">
-                                        <span className="knowledge-kv-label">{item.label}</span>
-                                        <span className={`knowledge-kv-value ${item.code ? 'knowledge-kv-code' : ''}`.trim()}>
-                                            {item.value}
-                                        </span>
+                        <div className="knowledge-chunk-detail-main">
+                            <section className="knowledge-chunk-detail-section knowledge-chunk-detail-section-content">
+                                <h4 className="knowledge-chunk-detail-section-title">{mainSectionTitle}</h4>
+                                <div className="knowledge-chunk-detail-section-body">
+                                    {mainSectionContent}
+                                </div>
+                            </section>
+                        </div>
+                        <aside className="knowledge-chunk-detail-sidebar">
+                            {sidebarSections.map(section => (
+                                <section
+                                    key={section.key}
+                                    className={`knowledge-chunk-detail-section knowledge-chunk-detail-sidebar-section ${section.className || ''}`.trim()}
+                                >
+                                    <h4 className="knowledge-chunk-detail-section-title">{section.title}</h4>
+                                    <div className="knowledge-chunk-detail-section-body">
+                                        {section.content}
                                     </div>
-                                ))}
-                            </div>
-                        </section>
-
-                        <section className="knowledge-chunk-detail-section">
-                            <h4 className="knowledge-chunk-detail-section-title">{keywordsTitle}</h4>
-                            <div className="knowledge-chunk-detail-section-body">
-                                {keywordsContent}
-                            </div>
-                        </section>
-
-                        <section className="knowledge-chunk-detail-section knowledge-chunk-detail-section-content">
-                            <h4 className="knowledge-chunk-detail-section-title">{contentTitle}</h4>
-                            <div className="knowledge-chunk-detail-section-body">
-                                {contentContent}
-                            </div>
-                        </section>
+                                </section>
+                            ))}
+                        </aside>
                     </div>
                 )}
 

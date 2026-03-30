@@ -21,16 +21,34 @@ public class JobRepository {
 
     public void insert(JobRecord record) {
         jdbcTemplate.update(
-            "insert into ingestion_job (id, job_type, source_id, document_id, status, progress, message, started_at, finished_at, created_at, updated_at) values (?,?,?,?,?,?,?,?,?,?,?)",
+            """
+                insert into ingestion_job (
+                    id, job_type, source_id, document_id, status, progress, stage, message, created_by,
+                    total_documents, processed_documents, success_documents, failed_documents,
+                    current_document_id, current_document_name, error_summary,
+                    started_at, finished_at, created_at, updated_at
+                ) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
             record.id(), record.jobType(), record.sourceId(), record.documentId(), record.status(), record.progress(),
-            record.message(), stringify(record.startedAt()), stringify(record.finishedAt()), record.createdAt().toString(), record.updatedAt().toString()
+            record.stage(), record.message(), record.createdBy(), record.totalDocuments(), record.processedDocuments(),
+            record.successDocuments(), record.failedDocuments(), record.currentDocumentId(), record.currentDocumentName(),
+            record.errorSummary(), stringify(record.startedAt()), stringify(record.finishedAt()), record.createdAt().toString(),
+            record.updatedAt().toString()
         );
     }
 
     public void update(JobRecord record) {
         jdbcTemplate.update(
-            "update ingestion_job set status=?, progress=?, message=?, started_at=?, finished_at=?, updated_at=? where id=?",
-            record.status(), record.progress(), record.message(), stringify(record.startedAt()), stringify(record.finishedAt()),
+            """
+                update ingestion_job set
+                    status=?, progress=?, stage=?, message=?, created_by=?, total_documents=?,
+                    processed_documents=?, success_documents=?, failed_documents=?, current_document_id=?,
+                    current_document_name=?, error_summary=?, started_at=?, finished_at=?, updated_at=?
+                where id=?
+                """,
+            record.status(), record.progress(), record.stage(), record.message(), record.createdBy(), record.totalDocuments(),
+            record.processedDocuments(), record.successDocuments(), record.failedDocuments(), record.currentDocumentId(),
+            record.currentDocumentName(), record.errorSummary(), stringify(record.startedAt()), stringify(record.finishedAt()),
             record.updatedAt().toString(), record.id()
         );
     }
@@ -43,7 +61,16 @@ public class JobRepository {
         return jdbcTemplate.query("select * from ingestion_job where id = ?", mapper, id).stream().findFirst();
     }
 
+    public Optional<JobRecord> findLatestCompletedBySourceId(String sourceId) {
+        return jdbcTemplate.query(
+            "select * from ingestion_job where source_id = ? and finished_at is not null order by finished_at desc limit 1",
+            mapper,
+            sourceId
+        ).stream().findFirst();
+    }
+
     public void deleteBySourceId(String sourceId) {
+        jdbcTemplate.update("delete from maintenance_job_failure where source_id = ?", sourceId);
         jdbcTemplate.update("delete from ingestion_job where source_id = ?", sourceId);
     }
 
@@ -63,7 +90,16 @@ public class JobRepository {
             rs.getString("document_id"),
             rs.getString("status"),
             rs.getInt("progress"),
+            rs.getString("stage"),
             rs.getString("message"),
+            rs.getString("created_by"),
+            rs.getInt("total_documents"),
+            rs.getInt("processed_documents"),
+            rs.getInt("success_documents"),
+            rs.getInt("failed_documents"),
+            rs.getString("current_document_id"),
+            rs.getString("current_document_name"),
+            rs.getString("error_summary"),
             parse(rs.getString("started_at")),
             parse(rs.getString("finished_at")),
             Instant.parse(rs.getString("created_at")),
@@ -82,7 +118,16 @@ public class JobRepository {
         String documentId,
         String status,
         int progress,
+        String stage,
         String message,
+        String createdBy,
+        int totalDocuments,
+        int processedDocuments,
+        int successDocuments,
+        int failedDocuments,
+        String currentDocumentId,
+        String currentDocumentName,
+        String errorSummary,
         Instant startedAt,
         Instant finishedAt,
         Instant createdAt,

@@ -1,4 +1,0 @@
-metric,value
-ingested_documents,8
-chunk_count,24
-retrieval_mode,hybrid

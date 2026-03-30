@@ -5,6 +5,7 @@ import { useToast } from '../contexts/ToastContext'
 import { usePreview } from '../contexts/PreviewContext'
 import { KNOWLEDGE_SERVICE_URL } from '../config/runtime'
 import { useKnowledgeSourceDetail } from '../hooks/useKnowledgeSourceDetail'
+import { getErrorMessage } from '../utils/errorMessages'
 import KnowledgeChunksTab from '../components/knowledge/KnowledgeChunksTab'
 import KnowledgeRetrievalTab from '../components/knowledge/KnowledgeRetrievalTab'
 import type { ResourceStatusTone } from '../components/ResourceCard'
@@ -14,13 +15,21 @@ import type {
     KnowledgeDocumentSummary,
     KnowledgeIngestResponse,
     KnowledgeJobResponse,
+    KnowledgeMaintenanceFailure,
+    KnowledgeMaintenanceJobSummary,
     KnowledgeProfileDetail,
     KnowledgeSource,
     PagedResponse,
 } from '../types/knowledge'
 
-type KnowledgeConfigureTab = 'basic' | 'documents' | 'chunks' | 'retrieval' | 'config'
-type KnowledgeConfigRow = { key: string; value: unknown }
+type KnowledgeConfigureTab = 'basic' | 'documents' | 'chunks' | 'retrieval' | 'config' | 'maintenance'
+type KnowledgeConfigRow = {
+    key: string
+    path?: string
+    value: unknown
+    descriptionKey?: string
+    sourceKey?: string
+}
 type KnowledgeConfigGroup = { title: string; rows: KnowledgeConfigRow[] }
 type KnowledgeConfigMeta = {
     sourceKey: string
@@ -28,6 +37,9 @@ type KnowledgeConfigMeta = {
 type KnowledgeDocumentFilterStatus = 'ALL' | 'READY' | 'ATTENTION' | 'PROCESSING' | 'ERROR'
 type UploadQueueStatus = 'pending' | 'uploading' | 'completed' | 'failed'
 type UploadSessionState = 'idle' | 'uploading' | 'finished'
+
+const UPLOAD_BATCH_MAX_FILES = 10
+const UPLOAD_BATCH_MAX_SIZE_MB = 100
 
 interface UploadQueueItem {
     id: string
@@ -47,8 +59,17 @@ function formatDateTime(value?: string | null): string {
     })
 }
 
-function getKnowledgeStatusTone(status?: string): ResourceStatusTone {
-    switch (status?.toUpperCase()) {
+function getKnowledgeStatusTone(source?: Pick<KnowledgeSource, 'status' | 'runtimeStatus'> | null): ResourceStatusTone {
+    switch (source?.runtimeStatus?.toUpperCase()) {
+    case 'MAINTENANCE':
+        return 'warning'
+    case 'ERROR':
+        return 'danger'
+    default:
+        break
+    }
+
+    switch (source?.status?.toUpperCase()) {
     case 'ACTIVE':
         return 'success'
     case 'DISABLED':
@@ -58,14 +79,26 @@ function getKnowledgeStatusTone(status?: string): ResourceStatusTone {
     }
 }
 
-function getKnowledgeStatusLabel(status: string | undefined, t: (key: string) => string): string {
-    switch (status?.toUpperCase()) {
+function getKnowledgeStatusLabel(
+    source: Pick<KnowledgeSource, 'status' | 'runtimeStatus'> | null | undefined,
+    t: (key: string) => string
+): string {
+    switch (source?.runtimeStatus?.toUpperCase()) {
+    case 'MAINTENANCE':
+        return t('knowledge.runtimeStatusMaintenance')
+    case 'ERROR':
+        return t('knowledge.runtimeStatusError')
+    default:
+        break
+    }
+
+    switch (source?.status?.toUpperCase()) {
     case 'ACTIVE':
         return t('knowledge.statusActive')
     case 'DISABLED':
         return t('knowledge.statusDisabled')
     default:
-        return status || t('knowledge.statusUnknown')
+        return source?.status || t('knowledge.statusUnknown')
     }
 }
 
@@ -76,9 +109,58 @@ function parseTab(value: string | null): KnowledgeConfigureTab {
     case 'chunks':
     case 'retrieval':
     case 'config':
+    case 'maintenance':
         return value
     default:
         return 'basic'
+    }
+}
+
+function getMaintenanceJobTone(job: KnowledgeMaintenanceJobSummary | null | undefined): ResourceStatusTone {
+    switch (job?.status?.toUpperCase()) {
+    case 'FAILED':
+        return 'danger'
+    case 'RUNNING':
+    case 'PENDING':
+        return 'warning'
+    case 'SUCCEEDED':
+        return 'success'
+    default:
+        return 'neutral'
+    }
+}
+
+function getMaintenanceJobStatusLabel(job: KnowledgeMaintenanceJobSummary | null | undefined, t: (key: string) => string): string {
+    switch (job?.status?.toUpperCase()) {
+    case 'PENDING':
+        return t('knowledge.maintenanceStatusPending')
+    case 'RUNNING':
+        return t('knowledge.maintenanceStatusRunning')
+    case 'SUCCEEDED':
+        return t('knowledge.maintenanceStatusSucceeded')
+    case 'FAILED':
+        return t('knowledge.maintenanceStatusFailed')
+    default:
+        return t('knowledge.notAvailable')
+    }
+}
+
+function getMaintenanceStageLabel(stage: string | null | undefined, t: (key: string) => string): string {
+    switch ((stage || '').toUpperCase()) {
+    case 'PREPARING':
+        return t('knowledge.maintenanceStagePreparing')
+    case 'CLEANING':
+        return t('knowledge.maintenanceStageCleaning')
+    case 'PARSING':
+        return t('knowledge.maintenanceStageParsing')
+    case 'CHUNKING':
+        return t('knowledge.maintenanceStageChunking')
+    case 'INDEXING':
+        return t('knowledge.maintenanceStageIndexing')
+    case 'COMPLETED':
+        return t('knowledge.maintenanceStageCompleted')
+    default:
+        return t('knowledge.notAvailable')
     }
 }
 
@@ -87,6 +169,72 @@ function humanizeKey(value: string): string {
         .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
         .replace(/[-_]/g, ' ')
         .replace(/^\w/, char => char.toUpperCase())
+}
+
+function stripSectionPrefix(path: string): string {
+    const segments = path.split('.')
+    return segments.length > 1 ? segments.slice(1).join('.') : path
+}
+
+const INDEX_PARAM_DESCRIPTION_KEYS: Record<string, string> = {
+    'convert.engine': 'knowledge.configDescConvertEngine',
+    'analysis.language': 'knowledge.configDescAnalysisLanguage',
+    'analysis.indexAnalyzer': 'knowledge.configDescIndexAnalyzer',
+    'analysis.queryAnalyzer': 'knowledge.configDescQueryAnalyzer',
+    'chunking.mode': 'knowledge.configDescChunkingMode',
+    'chunking.targetTokens': 'knowledge.configDescChunkingTargetTokens',
+    'chunking.overlapTokens': 'knowledge.configDescChunkingOverlapTokens',
+    'chunking.respectHeadings': 'knowledge.configDescChunkingRespectHeadings',
+    'chunking.keepTablesWhole': 'knowledge.configDescChunkingKeepTablesWhole',
+    'indexing.titleBoost': 'knowledge.configDescTitleBoost',
+    'indexing.titlePathBoost': 'knowledge.configDescTitlePathBoost',
+    'indexing.keywordBoost': 'knowledge.configDescKeywordBoost',
+    'indexing.contentBoost': 'knowledge.configDescContentBoost',
+    'indexing.bm25.k1': 'knowledge.configDescBm25K1',
+    'indexing.bm25.b': 'knowledge.configDescBm25B',
+}
+
+const RETRIEVAL_PARAM_DESCRIPTION_KEYS: Record<string, string> = {
+    'retrieval.mode': 'knowledge.configDescRetrievalMode',
+    'retrieval.lexicalTopK': 'knowledge.configDescLexicalTopK',
+    'retrieval.semanticTopK': 'knowledge.configDescSemanticTopK',
+    'retrieval.rrfK': 'knowledge.configDescRrfK',
+    'retrieval.strategy': 'knowledge.configDescRetrievalStrategy',
+    'result.finalTopK': 'knowledge.configDescFinalTopK',
+    'result.snippetLength': 'knowledge.configDescSnippetLength',
+}
+
+const DEFAULTS_PARAM_DESCRIPTION_KEYS: Record<string, string> = {
+    'ingest.maxFileSizeMb': 'knowledge.configDescIngestMaxFileSizeMb',
+    'ingest.allowedContentTypes': 'knowledge.configDescIngestAllowedContentTypes',
+    'ingest.deduplication': 'knowledge.configDescIngestDeduplication',
+    'ingest.skipExistingByDefault': 'knowledge.configDescIngestSkipExisting',
+    'chunking.mode': 'knowledge.configDescChunkingMode',
+    'chunking.targetTokens': 'knowledge.configDescChunkingTargetTokens',
+    'chunking.overlapTokens': 'knowledge.configDescChunkingOverlapTokens',
+    'chunking.respectHeadings': 'knowledge.configDescChunkingRespectHeadings',
+    'chunking.keepTablesWhole': 'knowledge.configDescChunkingKeepTablesWhole',
+    'retrieval.mode': 'knowledge.configDescRetrievalMode',
+    'retrieval.lexicalTopK': 'knowledge.configDescLexicalTopK',
+    'retrieval.semanticTopK': 'knowledge.configDescSemanticTopK',
+    'retrieval.finalTopK': 'knowledge.configDescFinalTopK',
+    'retrieval.rrfK': 'knowledge.configDescRrfK',
+    'features.allowChunkEdit': 'knowledge.configDescFeatureAllowChunkEdit',
+    'features.allowChunkDelete': 'knowledge.configDescFeatureAllowChunkDelete',
+    'features.allowExplain': 'knowledge.configDescFeatureAllowExplain',
+    'features.allowRequestOverride': 'knowledge.configDescFeatureAllowRequestOverride',
+}
+
+const CAPABILITY_PARAM_DESCRIPTION_KEYS: Record<string, string> = {
+    'retrievalModes': 'knowledge.configDescCapabilityRetrievalModes',
+    'chunkModes': 'knowledge.configDescCapabilityChunkModes',
+    'expandModes': 'knowledge.configDescCapabilityExpandModes',
+    'analyzers': 'knowledge.configDescCapabilityAnalyzers',
+    'editableChunkFields': 'knowledge.configDescCapabilityEditableChunkFields',
+    'featureFlags.allowChunkEdit': 'knowledge.configDescFeatureAllowChunkEdit',
+    'featureFlags.allowChunkDelete': 'knowledge.configDescFeatureAllowChunkDelete',
+    'featureFlags.allowExplain': 'knowledge.configDescFeatureAllowExplain',
+    'featureFlags.allowRequestOverride': 'knowledge.configDescFeatureAllowRequestOverride',
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -133,6 +281,7 @@ function buildConfigGroups(config: Record<string, unknown> | null | undefined): 
                     title: humanizeKey(key),
                     rows: flattenConfigRows(value).map(row => ({
                         key: row.key,
+                        path: `${key}.${row.key}`,
                         value: row.value,
                     })),
                 }
@@ -142,11 +291,31 @@ function buildConfigGroups(config: Record<string, unknown> | null | undefined): 
                 title: humanizeKey(key),
                 rows: [{
                     key,
+                    path: key,
                     value,
                 }],
             }
         })
         .filter(group => group.rows.length > 0)
+}
+
+function withConfigRowMetadata(
+    groups: KnowledgeConfigGroup[],
+    meta: KnowledgeConfigMeta,
+    descriptionKeys: Record<string, string>
+): KnowledgeConfigGroup[] {
+    return groups.map(group => ({
+        ...group,
+        rows: group.rows.map(row => {
+            const rowPath = row.path || row.key
+            const normalizedKey = stripSectionPrefix(rowPath)
+            return {
+                ...row,
+                descriptionKey: descriptionKeys[rowPath] || descriptionKeys[normalizedKey] || 'knowledge.configDescriptionFallback',
+                sourceKey: meta.sourceKey,
+            }
+        }),
+    }))
 }
 
 function getProfileName(profile: KnowledgeProfileDetail | null, fallbackId: string | null | undefined, fallback: string): string {
@@ -216,18 +385,18 @@ function ProfileReadonlyCard({
     bindingName,
     bindingId,
     groups,
-    sourceLabel,
     actionLabel,
     onEdit,
+    actionDisabled = false,
 }: {
     title: string
     description?: string
     bindingName: string
     bindingId: string
     groups: KnowledgeConfigGroup[]
-    sourceLabel: string
     actionLabel: string
     onEdit: () => void
+    actionDisabled?: boolean
 }) {
     const { t } = useTranslation()
 
@@ -238,7 +407,7 @@ function ProfileReadonlyCard({
                     <h2 className="knowledge-section-title">{title}</h2>
                     {description ? <p className="knowledge-section-description">{description}</p> : null}
                 </div>
-                <button type="button" className="btn btn-secondary knowledge-section-action" onClick={onEdit}>
+                <button type="button" className="btn btn-secondary knowledge-section-action" onClick={onEdit} disabled={actionDisabled}>
                     {actionLabel}
                 </button>
             </div>
@@ -258,21 +427,24 @@ function ProfileReadonlyCard({
                 {groups.map(group => (
                     <section key={`${title}-${group.title}`} className="knowledge-config-readonly-group">
                         <h3 className="knowledge-config-group-title">{group.title}</h3>
+                        <div className="knowledge-config-head">
+                            <span className="knowledge-config-head-cell">{t('knowledge.configColumnParameter')}</span>
+                            <span className="knowledge-config-head-cell">{t('knowledge.configColumnValue')}</span>
+                            <span className="knowledge-config-head-cell">{t('knowledge.configColumnDetails')}</span>
+                            <span className="knowledge-config-head-cell">{t('knowledge.configSourceLabel')}</span>
+                        </div>
                         <div className="knowledge-config-readonly-rows">
                             {group.rows.map(row => (
                                 <div key={`${group.title}-${row.key}`} className="knowledge-config-readonly-row">
                                     <span className="knowledge-config-key">{row.key}</span>
                                     <div className="knowledge-config-value">{renderConfigValue(row.value, t)}</div>
+                                    <span className="knowledge-config-meta-cell">{t(row.descriptionKey || 'knowledge.configDescriptionFallback')}</span>
+                                    <span className="knowledge-config-meta-cell">{t(row.sourceKey || 'knowledge.configSourceUnknown')}</span>
                                 </div>
                             ))}
                         </div>
                     </section>
                 ))}
-            </div>
-
-            <div className="knowledge-config-source-note">
-                <span className="knowledge-kv-label">{t('knowledge.configSourceLabel')}</span>
-                <span className="knowledge-config-meta-cell">{sourceLabel}</span>
             </div>
         </section>
     )
@@ -295,6 +467,7 @@ function ConfigGroupRows({
             <div className="knowledge-config-head">
                 <span className="knowledge-config-head-cell">{t('knowledge.configColumnParameter')}</span>
                 <span className="knowledge-config-head-cell">{t('knowledge.configColumnValue')}</span>
+                <span className="knowledge-config-head-cell">{t('knowledge.configColumnDetails')}</span>
                 <span className="knowledge-config-head-cell">{t('knowledge.configSourceLabel')}</span>
             </div>
             <div className="knowledge-config-rows">
@@ -304,11 +477,219 @@ function ConfigGroupRows({
                         <div className="knowledge-config-value">
                             {renderConfigValue(row.value, t)}
                         </div>
-                        <span className="knowledge-config-meta-cell">{t(meta.sourceKey)}</span>
+                        <span className="knowledge-config-meta-cell">{t(row.descriptionKey || 'knowledge.configDescriptionFallback')}</span>
+                        <span className="knowledge-config-meta-cell">{t(row.sourceKey || meta.sourceKey)}</span>
                     </div>
                 ))}
             </div>
         </section>
+    )
+}
+
+function MaintenanceTab({
+    maintenance,
+    failureItems,
+    failuresLoading,
+    onToggleFailures,
+    rebuildRequired,
+    sourceUnavailable,
+    isMaintenanceMode,
+    isRuntimeError,
+    isRebuildingSource,
+    onRebuild,
+}: {
+    maintenance: { currentJob: KnowledgeMaintenanceJobSummary | null; lastCompletedJob: KnowledgeMaintenanceJobSummary | null } | null
+    failureItems: KnowledgeMaintenanceFailure[]
+    failuresLoading: boolean
+    onToggleFailures: () => void
+    rebuildRequired: boolean
+    sourceUnavailable: boolean
+    isMaintenanceMode: boolean
+    isRuntimeError: boolean
+    isRebuildingSource: boolean
+    onRebuild: () => void
+}) {
+    const { t } = useTranslation()
+    const currentJob = maintenance?.currentJob || null
+    const lastCompletedJob = maintenance?.lastCompletedJob || null
+    const isRunning = currentJob?.status?.toUpperCase() === 'RUNNING'
+    const totalDocuments = Math.max(currentJob?.totalDocuments || 0, 0)
+    const processedDocuments = Math.max(currentJob?.processedDocuments || 0, 0)
+    const progressPercent = totalDocuments > 0 ? Math.min(100, Math.round((processedDocuments / totalDocuments) * 100)) : 0
+
+    return (
+        <div className="knowledge-config-stack">
+            <section className="knowledge-section-card">
+                <div className="knowledge-section-header">
+                    <div>
+                        <h2 className="knowledge-section-title">{t('knowledge.maintenanceCurrentTaskTitle')}</h2>
+                        <p className="knowledge-section-description">{t('knowledge.maintenanceCurrentTaskDescription')}</p>
+                    </div>
+                </div>
+
+                {currentJob ? (
+                    <div className="knowledge-config-stack">
+                        <div className="knowledge-configure-title-line">
+                            <span className={`resource-status resource-status-${getMaintenanceJobTone(currentJob)}`}>
+                                {getMaintenanceJobStatusLabel(currentJob, t)}
+                            </span>
+                            <span className="knowledge-kv-meta">{getMaintenanceStageLabel(currentJob.stage, t)}</span>
+                        </div>
+                        <div>
+                            <div className="knowledge-progress-track" aria-hidden="true">
+                                <div className="knowledge-progress-fill" style={{ width: `${progressPercent}%` }} />
+                            </div>
+                            <div className="knowledge-kv-meta" style={{ marginTop: 'var(--spacing-2)' }}>
+                                {t('knowledge.maintenanceProgressValue', { processed: processedDocuments, total: totalDocuments })}
+                            </div>
+                        </div>
+
+                        <div className="knowledge-kv-grid knowledge-kv-grid-compact">
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.maintenanceCurrentDocument')}</span>
+                                <span className="knowledge-kv-value">{currentJob.currentDocumentName || t('knowledge.notAvailable')}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.failedDocuments')}</span>
+                                <span className="knowledge-kv-value">{currentJob.failedDocuments}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.maintenanceTriggeredBy')}</span>
+                                <span className="knowledge-kv-value">{currentJob.createdBy || t('knowledge.notAvailable')}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.maintenanceStartedAt')}</span>
+                                <span className="knowledge-kv-value">{formatDateTime(currentJob.startedAt)}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.maintenanceUpdatedAt')}</span>
+                                <span className="knowledge-kv-value">{formatDateTime(currentJob.updatedAt)}</span>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="knowledge-empty-state">
+                        <div className="knowledge-empty-title">{t('knowledge.maintenanceNoCurrentTask')}</div>
+                    </div>
+                )}
+            </section>
+
+            <section className="knowledge-section-card">
+                <div className="knowledge-section-header">
+                    <div>
+                        <h2 className="knowledge-section-title">{t('knowledge.maintenanceLastJobTitle')}</h2>
+                        <p className="knowledge-section-description">{t('knowledge.maintenanceLastJobDescription')}</p>
+                    </div>
+                </div>
+
+                {lastCompletedJob ? (
+                    <div className="knowledge-config-stack">
+                        <div className="knowledge-configure-title-line">
+                            <span className={`resource-status resource-status-${getMaintenanceJobTone(lastCompletedJob)}`}>
+                                {getMaintenanceJobStatusLabel(lastCompletedJob, t)}
+                            </span>
+                            <span className="knowledge-kv-meta">{getMaintenanceStageLabel(lastCompletedJob.stage, t)}</span>
+                        </div>
+                        <div className="knowledge-kv-grid knowledge-kv-grid-compact">
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.maintenanceStartedAt')}</span>
+                                <span className="knowledge-kv-value">{formatDateTime(lastCompletedJob.startedAt)}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.maintenanceFinishedAt')}</span>
+                                <span className="knowledge-kv-value">{formatDateTime(lastCompletedJob.finishedAt)}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.documents')}</span>
+                                <span className="knowledge-kv-value">{lastCompletedJob.totalDocuments}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.maintenanceSucceededDocuments')}</span>
+                                <span className="knowledge-kv-value">{lastCompletedJob.successDocuments}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.failedDocuments')}</span>
+                                <span className="knowledge-kv-value">{lastCompletedJob.failedDocuments}</span>
+                            </div>
+                            <div className="knowledge-kv-item">
+                                <span className="knowledge-kv-label">{t('knowledge.maintenanceErrorSummary')}</span>
+                                <span className="knowledge-kv-value">{lastCompletedJob.errorSummary || t('knowledge.notAvailable')}</span>
+                            </div>
+                        </div>
+
+                        {lastCompletedJob.failedDocuments > 0 && (
+                            <div className="knowledge-config-stack">
+                                <div className="knowledge-section-header knowledge-section-header-compact">
+                                    <div>
+                                        <h3 className="knowledge-config-group-title">{t('knowledge.maintenanceFailuresTitle')}</h3>
+                                    </div>
+                                    <button type="button" className="btn btn-secondary knowledge-section-action" onClick={onToggleFailures}>
+                                        {t('knowledge.maintenanceFailuresAction')}
+                                    </button>
+                                </div>
+                                {failuresLoading && (
+                                    <div className="knowledge-empty-state">
+                                        <div className="knowledge-empty-title">{t('common.loading')}</div>
+                                    </div>
+                                )}
+                                {!failuresLoading && failureItems.length > 0 && (
+                                    <div className="knowledge-action-list">
+                                        {failureItems.map(item => (
+                                            <div key={`${item.documentId || item.documentName}-${item.finishedAt}`} className="knowledge-action-item">
+                                                <div className="knowledge-action-copy">
+                                                    <span className="knowledge-kv-label">{item.documentName || item.documentId || t('knowledge.notAvailable')}</span>
+                                                    <p className="knowledge-action-text">
+                                                        {getMaintenanceStageLabel(item.stage, t)} · {item.errorCode || t('knowledge.notAvailable')}
+                                                    </p>
+                                                    <p className="knowledge-action-text">{item.message}</p>
+                                                    <p className="knowledge-kv-meta">{formatDateTime(item.finishedAt)}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="knowledge-empty-state">
+                        <div className="knowledge-empty-title">{t('knowledge.maintenanceNoHistory')}</div>
+                    </div>
+                )}
+            </section>
+
+            <section className="knowledge-section-card">
+                <div className="knowledge-section-header">
+                    <div>
+                        <h2 className="knowledge-section-title">{t('knowledge.maintenanceActionsTitle')}</h2>
+                        <p className="knowledge-section-description">{t('knowledge.maintenanceActionsDescription')}</p>
+                    </div>
+                    <button
+                        type="button"
+                        className="btn btn-secondary knowledge-section-action"
+                        onClick={onRebuild}
+                        disabled={sourceUnavailable || isRebuildingSource}
+                    >
+                        {isMaintenanceMode || isRebuildingSource ? t('knowledge.rebuilding') : isRuntimeError ? t('knowledge.rebuildRetryAction') : t('knowledge.rebuildAction')}
+                    </button>
+                </div>
+
+                {rebuildRequired && (
+                    <div className="conn-banner conn-banner-warning">
+                        {t('knowledge.configPendingRebuildNotice')}
+                    </div>
+                )}
+
+                <div className="knowledge-action-list">
+                    <div className="knowledge-action-item knowledge-action-item-single">
+                        <div className="knowledge-action-copy">
+                            <span className="knowledge-kv-label">{t('knowledge.rebuildTitle')}</span>
+                            <p className="knowledge-action-text">{t('knowledge.rebuildHint')}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
     )
 }
 
@@ -863,6 +1244,51 @@ function DeleteDocumentModal({
     )
 }
 
+function RebuildKnowledgeModal({
+    sourceName,
+    rebuilding,
+    onClose,
+    onConfirm,
+}: {
+    sourceName: string
+    rebuilding: boolean
+    onClose: () => void
+    onConfirm: () => void
+}) {
+    const { t } = useTranslation()
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={event => event.stopPropagation()}>
+                <div className="modal-header">
+                    <h2 className="modal-title">{t('knowledge.rebuildConfirmTitle')}</h2>
+                    <button className="modal-close" onClick={onClose}>&times;</button>
+                </div>
+
+                <div className="modal-body">
+                    <p style={{ fontSize: 'var(--font-size-base)', color: 'var(--color-text-primary)', marginBottom: 'var(--spacing-4)' }}>
+                        {t('knowledge.rebuildConfirmBody', { name: sourceName })}
+                    </p>
+
+                    <div className="agents-alert agents-alert-warning" style={{ marginBottom: 0 }}>
+                        <div>{t('knowledge.rebuildConfirmDowntime')}</div>
+                        <div style={{ marginTop: 'var(--spacing-2)' }}>{t('knowledge.rebuildConfirmChunkWarning')}</div>
+                    </div>
+                </div>
+
+                <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={onClose} disabled={rebuilding}>
+                        {t('common.cancel')}
+                    </button>
+                    <button className="btn btn-primary" onClick={onConfirm} disabled={rebuilding}>
+                        {rebuilding ? t('knowledge.rebuilding') : t('knowledge.rebuildConfirmAction')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 function RenameDocumentModal({
     document,
     error,
@@ -942,25 +1368,37 @@ function UploadDocumentsModal({
     const [requestError, setRequestError] = useState<string | null>(null)
 
     const handleAddFiles = useCallback((files: File[]) => {
-        setItems(current => appendFilesToQueue(files, current, maxFileSizeMb, allowedContentTypes))
-    }, [allowedContentTypes, maxFileSizeMb])
+        setRequestError(null)
+        setItems(current => {
+            const next = appendFilesToQueue(files, current, maxFileSizeMb, allowedContentTypes)
+            if (next.length > UPLOAD_BATCH_MAX_FILES) {
+                setRequestError(t('knowledge.uploadBatchTooMany', { max: UPLOAD_BATCH_MAX_FILES, count: next.length }))
+                return current
+            }
+            return next
+        })
+    }, [allowedContentTypes, maxFileSizeMb, t])
 
     const handleSubmit = useCallback(async () => {
-        if (items.length === 0) return
+        const pendingItems = items.filter(item => item.status === 'pending' && !item.error)
+        if (pendingItems.length === 0) return
+
+        const totalSizeMb = pendingItems.reduce((sum, item) => sum + item.file.size, 0) / (1024 * 1024)
+        if (totalSizeMb > UPLOAD_BATCH_MAX_SIZE_MB) {
+            setRequestError(t('knowledge.uploadBatchTooLarge', { size: Math.ceil(totalSizeMb), max: UPLOAD_BATCH_MAX_SIZE_MB }))
+            return
+        }
 
         setRequestError(null)
         setSummary(null)
         setSessionState('uploading')
-        setItems(current => current.map(item => ({
-            ...item,
-            status: item.error ? 'failed' : 'uploading',
-        })))
+        setItems(current => current.map(item =>
+            item.status === 'pending' ? { ...item, status: 'uploading' } : item,
+        ))
 
         const formData = new FormData()
-        for (const item of items) {
-            if (!item.error) {
-                formData.append('files', item.file)
-            }
+        for (const item of pendingItems) {
+            formData.append('files', item.file)
         }
 
         try {
@@ -975,39 +1413,32 @@ function UploadDocumentsModal({
             }
 
             const importedCount = (data as KnowledgeIngestResponse).documentCount
-            setItems(current => current.map(item => item.error ? item : ({
+            setItems(current => current.map(item => item.status === 'uploading' ? {
                 ...item,
                 status: 'completed',
-            })))
+            } : item))
             setSummary(
-                importedCount === items.filter(item => !item.error).length
+                importedCount === pendingItems.length
                     ? t('knowledge.uploadSummarySuccess', { count: importedCount })
-                    : t('knowledge.uploadSummaryPartial', { imported: importedCount, total: items.filter(item => !item.error).length })
+                    : t('knowledge.uploadSummaryPartial', { imported: importedCount, total: pendingItems.length })
             )
             setSessionState('finished')
             await onUploaded()
         } catch (err) {
             const message = err instanceof Error ? err.message : t('errors.unknown')
             setRequestError(t('knowledge.uploadRequestFailed', { error: message }))
-            setItems(current => current.map(item => item.error ? item : ({
+            setItems(current => current.map(item => item.status === 'uploading' ? {
                 ...item,
                 status: 'failed',
-            })))
+            } : item))
             setSessionState('finished')
         } finally {
         }
     }, [items, onUploaded, sourceId, t])
 
-    const pendingCount = items.filter(item => item.status === 'pending').length
+    const pendingCount = items.filter(item => item.status === 'pending' && !item.error).length
     const completedCount = items.filter(item => item.status === 'completed').length
     const failedCount = items.filter(item => item.status === 'failed').length
-
-    const handleReset = useCallback(() => {
-        setItems([])
-        setSummary(null)
-        setRequestError(null)
-        setSessionState('idle')
-    }, [])
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -1057,7 +1488,7 @@ function UploadDocumentsModal({
                         }}
                     >
                         <div className="knowledge-upload-dropzone-title">{t('knowledge.uploadDropTitle')}</div>
-                        <div className="knowledge-upload-dropzone-hint">{t('knowledge.uploadDropHint')}</div>
+                        <div className="knowledge-upload-dropzone-hint">{t('knowledge.uploadDropHint', { max: UPLOAD_BATCH_MAX_FILES, sizeMb: UPLOAD_BATCH_MAX_SIZE_MB })}</div>
                         <label className="btn btn-secondary knowledge-upload-select-btn">
                             {t('knowledge.uploadSelectFiles')}
                             <input
@@ -1102,21 +1533,15 @@ function UploadDocumentsModal({
 
                 <div className="modal-footer">
                     <button className="btn btn-secondary" onClick={onClose}>
-                        {sessionState === 'finished' ? t('knowledge.uploadClose') : t('common.cancel')}
+                        {t('knowledge.uploadClose')}
                     </button>
-                    {sessionState === 'finished' ? (
-                        <button className="btn btn-primary" onClick={handleReset}>
-                            {t('knowledge.uploadContinue')}
-                        </button>
-                    ) : (
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleSubmit}
-                            disabled={sessionState === 'uploading' || items.length === 0 || (pendingCount === 0 && !requestError)}
-                        >
-                            {sessionState === 'uploading' ? t('knowledge.uploadSubmitting') : t('knowledge.uploadStart')}
-                        </button>
-                    )}
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleSubmit}
+                        disabled={sessionState === 'uploading' || pendingCount === 0}
+                    >
+                        {sessionState === 'uploading' ? t('knowledge.uploadSubmitting') : t('knowledge.uploadStart')}
+                    </button>
                 </div>
             </div>
         </div>
@@ -1137,10 +1562,12 @@ export default function KnowledgeConfigure() {
         defaults,
         indexProfileDetail,
         retrievalProfileDetail,
+        maintenance,
         isLoading,
         error,
         hasSupportingDataError,
         reload,
+        loadMaintenanceFailures,
         saveSource,
         saveIndexProfile,
         saveRetrievalProfile,
@@ -1148,6 +1575,7 @@ export default function KnowledgeConfigure() {
     } = useKnowledgeSourceDetail(sourceId)
     const [showEditBasicInfoModal, setShowEditBasicInfoModal] = useState(false)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
+    const [showRebuildModal, setShowRebuildModal] = useState(false)
     const [deleteError, setDeleteError] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
     const [documents, setDocuments] = useState<KnowledgeDocumentSummary[]>([])
@@ -1185,8 +1613,15 @@ export default function KnowledgeConfigure() {
     const [rrfKInput, setRrfKInput] = useState('60')
     const [snippetLengthInput, setSnippetLengthInput] = useState('180')
     const [isSavingRetrievalProfile, setIsSavingRetrievalProfile] = useState(false)
+    const [maintenanceFailures, setMaintenanceFailures] = useState<KnowledgeMaintenanceFailure[]>([])
+    const [maintenanceFailuresLoading, setMaintenanceFailuresLoading] = useState(false)
+    const [expandedFailureJobId, setExpandedFailureJobId] = useState<string | null>(null)
 
     const activeTab = parseTab(searchParams.get('tab'))
+    const isMaintenanceMode = source?.runtimeStatus?.toUpperCase() === 'MAINTENANCE'
+    const isRuntimeError = source?.runtimeStatus?.toUpperCase() === 'ERROR'
+    const isSourceUnavailable = isMaintenanceMode || isRuntimeError
+    const runtimeBannerTone = isRuntimeError ? 'error' : 'warning'
 
     const tabs: { key: KnowledgeConfigureTab; label: string }[] = [
         { key: 'basic', label: t('knowledge.tabBasicInfo') },
@@ -1194,57 +1629,43 @@ export default function KnowledgeConfigure() {
         { key: 'chunks', label: t('knowledge.tabChunks') },
         { key: 'retrieval', label: t('knowledge.tabRetrieval') },
         { key: 'config', label: t('knowledge.tabConfigParams') },
+        { key: 'maintenance', label: t('knowledge.tabMaintenance') },
     ]
 
     const defaultsConfigGroups = useMemo(
-        () => defaults ? buildConfigGroups(defaults as unknown as Record<string, unknown>) : [],
+        () => defaults
+            ? withConfigRowMetadata(
+                buildConfigGroups(defaults as unknown as Record<string, unknown>),
+                { sourceKey: 'knowledge.configSourceConfigYaml' },
+                DEFAULTS_PARAM_DESCRIPTION_KEYS,
+            )
+            : [],
         [defaults]
     )
-    const indexReadonlyGroups = useMemo<KnowledgeConfigGroup[]>(() => ([
-        {
-            title: 'Analysis',
-            rows: [
-                { key: 'indexAnalyzer', value: getConfigString(indexProfileDetail?.config, 'analysis', 'indexAnalyzer', 'smartcn') },
-                { key: 'queryAnalyzer', value: getConfigString(indexProfileDetail?.config, 'analysis', 'queryAnalyzer', 'smartcn') },
-            ],
-        },
-        {
-            title: 'BM25',
-            rows: [
-                { key: 'k1', value: getConfigSection(getConfigSection(indexProfileDetail?.config, 'indexing'), 'bm25').k1 ?? 1.2 },
-                { key: 'b', value: getConfigSection(getConfigSection(indexProfileDetail?.config, 'indexing'), 'bm25').b ?? 0.75 },
-            ],
-        },
-        {
-            title: 'Field Boosts',
-            rows: [
-                { key: 'titleBoost', value: getConfigNumber(indexProfileDetail?.config, 'indexing', 'titleBoost', 4) },
-                { key: 'titlePathBoost', value: getConfigNumber(indexProfileDetail?.config, 'indexing', 'titlePathBoost', 2.5) },
-                { key: 'keywordBoost', value: getConfigNumber(indexProfileDetail?.config, 'indexing', 'keywordBoost', 2) },
-                { key: 'contentBoost', value: getConfigNumber(indexProfileDetail?.config, 'indexing', 'contentBoost', 1) },
-            ],
-        },
-    ]), [indexProfileDetail?.config])
-    const retrievalReadonlyGroups = useMemo<KnowledgeConfigGroup[]>(() => ([
-        {
-            title: 'Retrieval',
-            rows: [
-                { key: 'mode', value: getConfigString(retrievalProfileDetail?.config, 'retrieval', 'mode', 'hybrid') },
-                { key: 'lexicalTopK', value: getConfigNumber(retrievalProfileDetail?.config, 'retrieval', 'lexicalTopK', 50) },
-                { key: 'semanticTopK', value: getConfigNumber(retrievalProfileDetail?.config, 'retrieval', 'semanticTopK', 50) },
-                { key: 'rrfK', value: getConfigNumber(retrievalProfileDetail?.config, 'retrieval', 'rrfK', 60) },
-            ],
-        },
-        {
-            title: 'Result',
-            rows: [
-                { key: 'finalTopK', value: getConfigNumber(retrievalProfileDetail?.config, 'result', 'finalTopK', 10) },
-                { key: 'snippetLength', value: getConfigNumber(retrievalProfileDetail?.config, 'result', 'snippetLength', 180) },
-            ],
-        },
-    ]), [retrievalProfileDetail?.config])
+    const indexReadonlyGroups = useMemo<KnowledgeConfigGroup[]>(
+        () => withConfigRowMetadata(
+            buildConfigGroups(indexProfileDetail?.config || null),
+            { sourceKey: 'knowledge.configSourceBoundIndexProfile' },
+            INDEX_PARAM_DESCRIPTION_KEYS,
+        ),
+        [indexProfileDetail?.config]
+    )
+    const retrievalReadonlyGroups = useMemo<KnowledgeConfigGroup[]>(
+        () => withConfigRowMetadata(
+            buildConfigGroups(retrievalProfileDetail?.config || null),
+            { sourceKey: 'knowledge.configSourceBoundRetrievalProfile' },
+            RETRIEVAL_PARAM_DESCRIPTION_KEYS,
+        ),
+        [retrievalProfileDetail?.config]
+    )
     const capabilityGroups = useMemo(
-        () => capabilities ? buildConfigGroups(capabilities as unknown as Record<string, unknown>) : [],
+        () => capabilities
+            ? withConfigRowMetadata(
+                buildConfigGroups(capabilities as unknown as Record<string, unknown>),
+                { sourceKey: 'knowledge.configSourceServiceCapabilities' },
+                CAPABILITY_PARAM_DESCRIPTION_KEYS,
+            )
+            : [],
         [capabilities]
     )
     const retrievalModes = capabilities?.retrievalModes?.length
@@ -1323,6 +1744,38 @@ export default function KnowledgeConfigure() {
 
         setSearchParams(nextParams)
     }, [searchParams, setSearchParams])
+
+    useEffect(() => {
+        if (maintenance?.currentJob?.status?.toUpperCase() !== 'RUNNING') {
+            return
+        }
+        const timer = window.setInterval(() => {
+            void reload()
+        }, 3000)
+        return () => window.clearInterval(timer)
+    }, [maintenance?.currentJob?.id, maintenance?.currentJob?.status, reload])
+
+    const handleToggleMaintenanceFailures = useCallback(async () => {
+        const jobId = maintenance?.lastCompletedJob?.id
+        if (!jobId) {
+            return
+        }
+        if (expandedFailureJobId === jobId) {
+            setExpandedFailureJobId(null)
+            setMaintenanceFailures([])
+            return
+        }
+        setMaintenanceFailuresLoading(true)
+        try {
+            const items = await loadMaintenanceFailures(jobId)
+            setMaintenanceFailures(items)
+            setExpandedFailureJobId(jobId)
+        } catch (err) {
+            showToast('error', getErrorMessage(err))
+        } finally {
+            setMaintenanceFailuresLoading(false)
+        }
+    }, [expandedFailureJobId, loadMaintenanceFailures, maintenance?.lastCompletedJob?.id, showToast])
 
     const handleSaveBasicInfo = useCallback(async (updates: { name: string; description: string | null }) => {
         const result = await saveSource(updates)
@@ -1625,6 +2078,7 @@ export default function KnowledgeConfigure() {
             }
 
             showToast('success', t('knowledge.rebuildSuccess', { name: source.name }))
+            setShowRebuildModal(false)
             await reload()
         } catch (err) {
             showToast('error', t('knowledge.rebuildFailed', {
@@ -1727,8 +2181,8 @@ export default function KnowledgeConfigure() {
                     <div className="knowledge-configure-title-group">
                         <div className="knowledge-configure-title-line">
                             <h1 className="page-title knowledge-configure-title">{source.name}</h1>
-                            <span className={`resource-status resource-status-${getKnowledgeStatusTone(source.status)}`}>
-                                {getKnowledgeStatusLabel(source.status, t)}
+                            <span className={`resource-status resource-status-${getKnowledgeStatusTone(source)}`}>
+                                {getKnowledgeStatusLabel(source, t)}
                             </span>
                         </div>
                         <p className="page-subtitle knowledge-configure-subtitle">
@@ -1741,6 +2195,19 @@ export default function KnowledgeConfigure() {
             {error && (
                 <div className="conn-banner conn-banner-error">
                     {t('common.connectionError', { error })}
+                </div>
+            )}
+
+            {source.runtimeMessage && (
+                <div className={`conn-banner conn-banner-${runtimeBannerTone}`}>
+                    {source.runtimeMessage}
+                    {source.lastJobError ? ` ${source.lastJobError}` : ''}
+                </div>
+            )}
+
+            {source.rebuildRequired && (
+                <div className="conn-banner conn-banner-warning">
+                    {t('knowledge.configPendingRebuildNotice')}
                 </div>
             )}
 
@@ -1808,6 +2275,7 @@ export default function KnowledgeConfigure() {
                                             type="button"
                                             className="btn btn-secondary knowledge-section-action"
                                             onClick={() => setShowEditBasicInfoModal(true)}
+                                            disabled={isSourceUnavailable}
                                         >
                                             {t('knowledge.editBasicInfo')}
                                         </button>
@@ -1829,31 +2297,6 @@ export default function KnowledgeConfigure() {
                                     </div>
                                 </section>
 
-                                <section className="knowledge-section-card">
-                                    <div className="knowledge-section-header">
-                                        <div>
-                                            <h2 className="knowledge-section-title">{t('knowledge.maintenanceActionsTitle')}</h2>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            className="btn btn-secondary knowledge-section-action"
-                                            onClick={() => void handleRebuildSource()}
-                                            disabled={isRebuildingSource}
-                                        >
-                                            {isRebuildingSource ? t('knowledge.rebuilding') : t('knowledge.rebuildAction')}
-                                        </button>
-                                    </div>
-
-                                    <div className="knowledge-action-list">
-                                        <div className="knowledge-action-item knowledge-action-item-single">
-                                            <div className="knowledge-action-copy">
-                                                <span className="knowledge-kv-label">{t('knowledge.rebuildTitle')}</span>
-                                                <p className="knowledge-action-text">{t('knowledge.rebuildHint')}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </section>
-
                                 <section className="knowledge-section-card knowledge-section-card-danger">
                                     <div className="knowledge-section-header">
                                         <div>
@@ -1863,6 +2306,7 @@ export default function KnowledgeConfigure() {
                                             type="button"
                                             className="btn btn-danger knowledge-section-action"
                                             onClick={() => setShowDeleteModal(true)}
+                                            disabled={isSourceUnavailable}
                                         >
                                             {t('common.delete')}
                                         </button>
@@ -1910,9 +2354,9 @@ export default function KnowledgeConfigure() {
                                 bindingName={getProfileName(indexProfileDetail, source.indexProfileId, t('knowledge.profileUnavailable'))}
                                 bindingId={source.indexProfileId || t('knowledge.notBound')}
                                 groups={indexReadonlyGroups}
-                                sourceLabel={t('knowledge.configSourceBoundProfile')}
                                 actionLabel={t('knowledge.editConfig')}
                                 onEdit={() => setShowEditIndexProfileModal(true)}
+                                actionDisabled={isSourceUnavailable}
                             />
 
                             <ProfileReadonlyCard
@@ -1921,9 +2365,9 @@ export default function KnowledgeConfigure() {
                                 bindingName={getProfileName(retrievalProfileDetail, source.retrievalProfileId, t('knowledge.profileUnavailable'))}
                                 bindingId={source.retrievalProfileId || t('knowledge.notBound')}
                                 groups={retrievalReadonlyGroups}
-                                sourceLabel={t('knowledge.configSourceBoundProfile')}
                                 actionLabel={t('knowledge.editConfig')}
                                 onEdit={() => setShowEditRetrievalProfileModal(true)}
+                                actionDisabled={isSourceUnavailable}
                             />
 
                             <section className="knowledge-section-card">
@@ -1968,7 +2412,7 @@ export default function KnowledgeConfigure() {
                                                 title={group.title}
                                                 rows={group.rows}
                                                 meta={{
-                                                    sourceKey: 'knowledge.configSourceRuntimeView',
+                                                    sourceKey: 'knowledge.configSourceServiceCapabilities',
                                                 }}
                                             />
                                         ))}
@@ -1978,6 +2422,21 @@ export default function KnowledgeConfigure() {
                                 )}
                             </section>
                         </div>
+                    )}
+
+                    {activeTab === 'maintenance' && (
+                        <MaintenanceTab
+                            maintenance={maintenance}
+                            failureItems={expandedFailureJobId === maintenance?.lastCompletedJob?.id ? maintenanceFailures : []}
+                            failuresLoading={maintenanceFailuresLoading}
+                            onToggleFailures={handleToggleMaintenanceFailures}
+                            rebuildRequired={source.rebuildRequired}
+                            sourceUnavailable={isSourceUnavailable}
+                            isMaintenanceMode={isMaintenanceMode}
+                            isRuntimeError={isRuntimeError}
+                            isRebuildingSource={isRebuildingSource}
+                            onRebuild={() => setShowRebuildModal(true)}
+                        />
                     )}
 
                     {activeTab === 'documents' && (
@@ -2000,6 +2459,7 @@ export default function KnowledgeConfigure() {
                                         type="button"
                                         className="btn btn-primary"
                                         onClick={() => setShowUploadModal(true)}
+                                        disabled={isSourceUnavailable}
                                     >
                                         {t('knowledge.docUpload')}
                                     </button>
@@ -2110,6 +2570,7 @@ export default function KnowledgeConfigure() {
                                                                         setRenameDocumentError(null)
                                                                         setRenameDocumentTarget(document)
                                                                     }}
+                                                                    disabled={isSourceUnavailable}
                                                                 >
                                                                     {t('knowledge.docRename')}
                                                                 </button>
@@ -2150,6 +2611,7 @@ export default function KnowledgeConfigure() {
                                                                         setDeleteDocumentError(null)
                                                                         setDeleteDocumentTarget(document)
                                                                     }}
+                                                                    disabled={isSourceUnavailable}
                                                                 >
                                                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
                                                                         <polyline points="3 6 5 6 21 6" />
@@ -2178,6 +2640,7 @@ export default function KnowledgeConfigure() {
                             documentFilter={searchParams.get('documentId')}
                             onDocumentFilterChange={(documentId) => updateRouteState('chunks', { documentId })}
                             onChunksMutated={reload}
+                            readOnly={isSourceUnavailable}
                         />
                     )}
 
@@ -2187,6 +2650,7 @@ export default function KnowledgeConfigure() {
                             capabilities={capabilities}
                             defaults={defaults}
                             retrievalProfileDetail={retrievalProfileDetail}
+                            disabled={isSourceUnavailable}
                         />
                     )}
                 </div>
@@ -2321,6 +2785,19 @@ export default function KnowledgeConfigure() {
                         }
                     }}
                     onConfirm={() => void handleDelete()}
+                />
+            )}
+
+            {showRebuildModal && (
+                <RebuildKnowledgeModal
+                    sourceName={source.name}
+                    rebuilding={isRebuildingSource}
+                    onClose={() => {
+                        if (!isRebuildingSource) {
+                            setShowRebuildModal(false)
+                        }
+                    }}
+                    onConfirm={() => void handleRebuildSource()}
                 />
             )}
         </div>

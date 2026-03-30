@@ -61,6 +61,16 @@ public class SourceController {
         return facade.sourceStats(sourceId);
     }
 
+    @PostMapping("/{sourceId}:rebuild")
+    public RebuildSourceResponse rebuildSource(@PathVariable("sourceId") String sourceId) {
+        return facade.rebuildSource(sourceId);
+    }
+
+    @GetMapping("/{sourceId}/maintenance")
+    public MaintenanceOverviewResponse getMaintenance(@PathVariable("sourceId") String sourceId) {
+        return facade.maintenanceOverview(sourceId);
+    }
+
     public record CreateSourceRequest(
         @NotBlank @Size(max = 64) String name,
         @Size(max = 256) String description,
@@ -86,6 +96,11 @@ public class SourceController {
         String storageMode,
         String indexProfileId,
         String retrievalProfileId,
+        String runtimeStatus,
+        String runtimeMessage,
+        String currentJobId,
+        String lastJobError,
+        boolean rebuildRequired,
         Instant createdAt,
         Instant updatedAt
     ) {
@@ -106,6 +121,40 @@ public class SourceController {
     public record DeleteSourceResponse(
         String sourceId,
         boolean deleted
+    ) {
+    }
+
+    public record RebuildSourceResponse(
+        String jobId,
+        String sourceId,
+        String status
+    ) {
+    }
+
+    public record MaintenanceOverviewResponse(
+        String sourceId,
+        MaintenanceJobSummary currentJob,
+        MaintenanceJobSummary lastCompletedJob
+    ) {
+    }
+
+    public record MaintenanceJobSummary(
+        String id,
+        String type,
+        String status,
+        String stage,
+        String createdBy,
+        Instant startedAt,
+        Instant updatedAt,
+        Instant finishedAt,
+        int totalDocuments,
+        int processedDocuments,
+        int successDocuments,
+        int failedDocuments,
+        String currentDocumentId,
+        String currentDocumentName,
+        String message,
+        String errorSummary
     ) {
     }
 }

@@ -35,6 +35,7 @@
 
 - 业务配置：`ops-knowledge.*`
 - 运行时存储配置：`knowledge.runtime.*`
+- 数据库连接配置：`knowledge.database.*`
 
 ### 2.2 本地启动
 
@@ -60,6 +61,7 @@ java -jar target/knowledge-service.jar
 - `upload/<sourceId>/<documentId>/original/`：上传原始文件
 - `artifacts/<sourceId>/<documentId>/`：转换产物，当前为 `content.md`
 - `indexes/`：索引目录
+- `meta/knowledge.db`：默认 SQLite 模式下的元数据与 embedding 内容缓存
 
 建议：
 
@@ -77,12 +79,65 @@ java -jar target/knowledge-service.jar
 knowledge:
   runtime:
     base-dir: "./data"
+  database:
+    type: sqlite
+    url: ""
+    driver-class-name: ""
+    username: ""
+    password: ""
+    pool:
+      max-size: 5
+      min-idle: 1
 ```
 
 - `knowledge.runtime.base-dir`
   - 含义：知识服务运行时文件根目录
   - 默认值：`./data`
   - 影响：上传原件、转换产物、索引都会写入这里
+
+- `knowledge.database.type`
+  - 含义：数据库类型
+  - 当前支持：`sqlite`、`postgresql`
+  - 默认值：`sqlite`
+
+- `knowledge.database.url`
+  - 含义：JDBC 连接地址
+  - 默认行为：当 `type=sqlite` 且该值为空时，自动使用 `${knowledge.runtime.base-dir}/meta/knowledge.db`
+  - `postgresql` 模式下必须显式配置
+
+- `knowledge.database.driver-class-name`
+  - 含义：JDBC Driver 类名
+  - 默认行为：按 `type` 自动推导，通常无需手工配置
+
+- `knowledge.database.username`
+- `knowledge.database.password`
+  - 含义：外部数据库认证信息
+  - SQLite 模式通常留空
+
+- `knowledge.database.pool.max-size`
+- `knowledge.database.pool.min-idle`
+  - 含义：数据库连接池参数
+  - 说明：默认值面向本地和轻量部署，生产环境可按实际并发调整
+
+### 3.1.1 Schema 初始化与迁移
+
+服务启动时使用 Flyway 执行数据库迁移。
+
+- 迁移目录：`knowledge-service/src/main/resources/db/migration/common`
+- 当前迁移职责：
+  - `V1__init.sql`：初始化基础表结构
+  - `V2/V3`：补齐 source/job 运行态字段
+  - `V4`：清理历史遗留表 `embedding_record`
+
+兼容策略：
+
+- 新空库：按版本顺序完整执行迁移
+- 已有 SQLite 库：启动时会基线到 `1`，再执行后续增量迁移
+
+建议：
+
+- 后续任何 schema 变化都新增 migration，不要再在 Java 启动代码里做 `alter table` 补丁
+- 生产环境切库前先在目标数据库验证 Flyway 迁移链路
 
 ### 3.2 业务配置
 
@@ -145,7 +200,11 @@ knowledge:
 - `batch-size`：批处理大小
 - `dimensions`：向量维度
 
-说明：这些字段已经在配置模型中定义，但当前仓库里的搜索实现仍以词法检索为主，语义检索相关字段主要作为后续扩展入口。
+说明：
+
+- 语义检索向量主索引存放在 Lucene `indexes/vectors/`
+- 数据库中只保留按 `content_hash + model + dimension` 复用的 embedding 缓存
+- 文档、chunk、source 删除不会级联清空 embedding 缓存，因为缓存不再绑定单个 chunk id
 
 #### `ops-knowledge.indexing`
 

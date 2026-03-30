@@ -1,12 +1,17 @@
 package com.huawei.opsfactory.knowledge.config;
 
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
-public class WebConfig implements WebMvcConfigurer {
+public class WebConfig {
 
     private final KnowledgeProperties properties;
 
@@ -14,17 +19,25 @@ public class WebConfig implements WebMvcConfigurer {
         this.properties = properties;
     }
 
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
+    @Bean
+    public CorsFilter corsFilter() {
+        CorsConfiguration config = new CorsConfiguration();
+
         String corsOrigin = properties.getCorsOrigin();
         if (StringUtils.hasText(corsOrigin)) {
             String[] origins = StringUtils.commaDelimitedListToStringArray(corsOrigin);
-            registry.addMapping("/**")
-                    .allowedOriginPatterns(origins)
-                    .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                    .allowedHeaders("*")
-                    .allowCredentials(true)
-                    .maxAge(3600);
+            config.setAllowedOriginPatterns(Arrays.asList(origins));
+        } else {
+            config.setAllowedOriginPatterns(List.of("*"));
         }
+
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return new CorsFilter(source);
     }
 }

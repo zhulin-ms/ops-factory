@@ -27,6 +27,14 @@ public class ApiExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(ApiConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleConflict(ApiConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+            "code", ex.code(),
+            "message", ex.getMessage()
+        ));
+    }
+
     @ExceptionHandler(RetrievalConfigurationException.class)
     public ResponseEntity<Map<String, Object>> handleRetrievalConfiguration(RetrievalConfigurationException ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(

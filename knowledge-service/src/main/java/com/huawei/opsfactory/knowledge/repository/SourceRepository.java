@@ -21,9 +21,16 @@ public class SourceRepository {
 
     public void insert(SourceRecord record) {
         jdbcTemplate.update(
-            "insert into knowledge_source (id, name, description, status, storage_mode, index_profile_id, retrieval_profile_id, created_at, updated_at) values (?,?,?,?,?,?,?,?,?)",
+            """
+            insert into knowledge_source (
+                id, name, description, status, storage_mode, index_profile_id, retrieval_profile_id,
+                runtime_status, runtime_message, current_job_id, last_job_error, rebuild_required, created_at, updated_at
+            ) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
             record.id(), record.name(), record.description(), record.status(), record.storageMode(),
-            record.indexProfileId(), record.retrievalProfileId(), record.createdAt().toString(), record.updatedAt().toString()
+            record.indexProfileId(), record.retrievalProfileId(), record.runtimeStatus(), record.runtimeMessage(),
+            record.currentJobId(), record.lastJobError(), record.rebuildRequired() ? 1 : 0,
+            record.createdAt().toString(), record.updatedAt().toString()
         );
     }
 
@@ -37,9 +44,15 @@ public class SourceRepository {
 
     public void update(SourceRecord record) {
         jdbcTemplate.update(
-            "update knowledge_source set name=?, description=?, status=?, index_profile_id=?, retrieval_profile_id=?, updated_at=? where id=?",
+            """
+            update knowledge_source
+            set name=?, description=?, status=?, index_profile_id=?, retrieval_profile_id=?, runtime_status=?,
+                runtime_message=?, current_job_id=?, last_job_error=?, rebuild_required=?, updated_at=?
+            where id=?
+            """,
             record.name(), record.description(), record.status(), record.indexProfileId(), record.retrievalProfileId(),
-            record.updatedAt().toString(), record.id()
+            record.runtimeStatus(), record.runtimeMessage(), record.currentJobId(), record.lastJobError(),
+            record.rebuildRequired() ? 1 : 0, record.updatedAt().toString(), record.id()
         );
     }
 
@@ -56,6 +69,11 @@ public class SourceRepository {
             rs.getString("storage_mode"),
             rs.getString("index_profile_id"),
             rs.getString("retrieval_profile_id"),
+            rs.getString("runtime_status"),
+            rs.getString("runtime_message"),
+            rs.getString("current_job_id"),
+            rs.getString("last_job_error"),
+            rs.getInt("rebuild_required") != 0,
             Instant.parse(rs.getString("created_at")),
             Instant.parse(rs.getString("updated_at"))
         );
@@ -69,6 +87,11 @@ public class SourceRepository {
         String storageMode,
         String indexProfileId,
         String retrievalProfileId,
+        String runtimeStatus,
+        String runtimeMessage,
+        String currentJobId,
+        String lastJobError,
+        boolean rebuildRequired,
         Instant createdAt,
         Instant updatedAt
     ) {

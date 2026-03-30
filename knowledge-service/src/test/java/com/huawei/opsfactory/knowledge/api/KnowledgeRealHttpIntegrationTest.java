@@ -4,16 +4,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.huawei.opsfactory.knowledge.service.EmbeddingService;
+import com.huawei.opsfactory.knowledge.service.LexicalIndexService;
+import com.huawei.opsfactory.knowledge.service.SearchService;
+import com.huawei.opsfactory.knowledge.service.VectorIndexService;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -34,7 +40,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import com.huawei.opsfactory.knowledge.service.VectorIndexService;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class KnowledgeRealHttpIntegrationTest {
@@ -57,6 +62,12 @@ class KnowledgeRealHttpIntegrationTest {
 
     @Autowired
     private VectorIndexService vectorIndexService;
+
+    @Autowired
+    private LexicalIndexService lexicalIndexService;
+
+    @Autowired
+    private EmbeddingService embeddingService;
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
@@ -161,16 +172,11 @@ class KnowledgeRealHttpIntegrationTest {
             """);
 
         String vectorJson = objectMapper.writeValueAsString(createVector(2560, 0.01d));
-        jdbcTemplate.update(
-            "update embedding_record set model = ?, dimension = ?, vector_json = ?",
-            "qwen/qwen3-embedding-4b",
-            2560,
-            vectorJson
-        );
+        jdbcTemplate.update("update embedding_cache set dimension = ?, vector_json = ?", 2560, vectorJson);
 
         vectorIndexService.rebuildOnStartup();
 
-        Integer maxDimension = jdbcTemplate.queryForObject("select max(dimension) from embedding_record", Integer.class);
+        Integer maxDimension = jdbcTemplate.queryForObject("select max(dimension) from embedding_cache", Integer.class);
         assertThat(maxDimension).isEqualTo(1024);
 
         JsonNode compareResponse = postJson("/ops-knowledge/search/compare", """
@@ -182,8 +188,109 @@ class KnowledgeRealHttpIntegrationTest {
         assertThat(compareResponse.path("semantic").path("hits").isArray()).isTrue();
     }
 
+    @Test
+    void shouldHitContentLevelEmbeddingCacheAcrossDifferentChunkIds() throws Exception {
+        String sourceId = createSourceOverHttp();
+        uploadMarkdownOverHttp(sourceId, "cache-hit.md", """
+            # Cache hit
+
+            Shared embedding content for cache reuse.
+            """);
+
+        JsonNode documents = getJson("/ops-knowledge/documents?sourceId=" + sourceId);
+        String documentId = documents.path("items").get(0).path("id").asText();
+
+        int initialCacheCount = jdbcTemplate.queryForObject("select count(*) from embedding_cache", Integer.class);
+
+        JsonNode firstChunk = postJson("/ops-knowledge/documents/" + documentId + "/chunks", """
+            {
+              "ordinal": 900,
+              "title": "Shared chunk",
+              "titlePath": ["Shared", "Chunk"],
+              "keywords": ["cache-hit"],
+              "text": "Shared embedding content for cache reuse.",
+              "markdown": "Shared embedding content for cache reuse.",
+              "pageFrom": 1,
+              "pageTo": 1
+            }
+            """);
+        int afterFirstInsert = jdbcTemplate.queryForObject("select count(*) from embedding_cache", Integer.class);
+
+        JsonNode secondChunk = postJson("/ops-knowledge/documents/" + documentId + "/chunks", """
+            {
+              "ordinal": 901,
+              "title": "Shared chunk",
+              "titlePath": ["Shared", "Chunk"],
+              "keywords": ["cache-hit"],
+              "text": "Shared embedding content for cache reuse.",
+              "markdown": "Shared embedding content for cache reuse.",
+              "pageFrom": 1,
+              "pageTo": 1
+            }
+            """);
+        int afterSecondInsert = jdbcTemplate.queryForObject("select count(*) from embedding_cache", Integer.class);
+        String contentHash = embeddingHash(embeddingService.buildChunkEmbeddingText(new SearchService.SearchableChunk(
+            secondChunk.path("id").asText(),
+            documentId,
+            sourceId,
+            "Shared chunk",
+            List.of("Shared", "Chunk"),
+            List.of("cache-hit"),
+            "Shared embedding content for cache reuse.",
+            "Shared embedding content for cache reuse.",
+            1,
+            1,
+            901,
+            "ACTIVE",
+            "tester"
+        )));
+        Integer contentHashRows = jdbcTemplate.queryForObject(
+            "select count(*) from embedding_cache where content_hash = ?",
+            Integer.class,
+            contentHash
+        );
+
+        assertThat(firstChunk.path("id").asText()).isNotEqualTo(secondChunk.path("id").asText());
+        assertThat(afterFirstInsert).isEqualTo(initialCacheCount + 1);
+        assertThat(afterSecondInsert)
+            .withFailMessage("Expected content-level embedding cache hit, but cache row count changed from %s to %s", afterFirstInsert, afterSecondInsert)
+            .isEqualTo(afterFirstInsert);
+        assertThat(contentHashRows)
+            .withFailMessage("Expected exactly one embedding_cache row for identical content hash %s", contentHash)
+            .isEqualTo(1);
+    }
+
+    @Test
+    void shouldRebuildIndexesForMiguKnowledgeBaseUsingUploadedDocuments() throws Exception {
+        String sourceId = createSourceOverHttp("咪咕运维知识库 —— 测试");
+        uploadFilesOverHttp(sourceId, inputFiles());
+
+        int cacheCountBeforeRebuild = jdbcTemplate.queryForObject("select count(*) from embedding_cache", Integer.class);
+
+        lexicalIndexService.rebuildOnStartup();
+        vectorIndexService.rebuildOnStartup();
+
+        int cacheCountAfterRebuild = jdbcTemplate.queryForObject("select count(*) from embedding_cache", Integer.class);
+        JsonNode compareResponse = postJson("/ops-knowledge/search/compare", """
+            {
+              "query": "incident deployment topology",
+              "sourceIds": ["%s"]
+            }
+            """.formatted(sourceId));
+
+        assertThat(cacheCountBeforeRebuild).isGreaterThan(0);
+        assertThat(cacheCountAfterRebuild)
+            .withFailMessage("Expected rebuild to reuse content-level embedding cache for uploaded documents in source %s", sourceId)
+            .isEqualTo(cacheCountBeforeRebuild);
+        assertThat(compareResponse.path("semantic").path("hits").size()).isGreaterThan(0);
+        assertThat(compareResponse.path("lexical").path("hits").size()).isGreaterThan(0);
+    }
+
     private String createSourceOverHttp() throws Exception {
-        String sourceName = "http-source-" + UUID.randomUUID();
+        return createSourceOverHttp("http-source-" + UUID.randomUUID());
+    }
+
+    private String createSourceOverHttp(String sourceName) throws Exception {
         JsonNode json = postJson("/ops-knowledge/sources", """
             {
               "name": "%s",
@@ -280,7 +387,7 @@ class KnowledgeRealHttpIntegrationTest {
     }
 
     private void resetDatabase() {
-        jdbcTemplate.update("delete from embedding_record");
+        jdbcTemplate.update("delete from embedding_cache");
         jdbcTemplate.update("delete from source_profile_binding");
         jdbcTemplate.update("delete from document_chunk");
         jdbcTemplate.update("delete from knowledge_document");
@@ -317,5 +424,14 @@ class KnowledgeRealHttpIntegrationTest {
             values[index] = value;
         }
         return List.of(values);
+    }
+
+    private String embeddingHash(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

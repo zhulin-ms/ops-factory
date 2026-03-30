@@ -16,7 +16,7 @@ import type {
 } from '../../types/knowledge'
 
 type ChunkEditStatusFilter = 'ALL' | 'USER_EDITED' | 'SYSTEM_GENERATED'
-type ChunkPanelMode = 'closed' | 'view' | 'create'
+type ChunkPanelMode = 'closed' | 'view' | 'edit' | 'create'
 
 interface ChunkEditorDraft {
     documentId: string
@@ -31,6 +31,7 @@ interface KnowledgeChunksTabProps {
     documentFilter: string | null
     onDocumentFilterChange: (documentId: string | null) => void
     onChunksMutated?: () => Promise<void> | void
+    readOnly?: boolean
 }
 
 const CHUNK_PAGE_SIZE = 100
@@ -214,6 +215,7 @@ export default function KnowledgeChunksTab({
     documentFilter,
     onDocumentFilterChange,
     onChunksMutated,
+    readOnly = false,
 }: KnowledgeChunksTabProps) {
     const { t } = useTranslation()
     const { showToast } = useToast()
@@ -240,8 +242,8 @@ export default function KnowledgeChunksTab({
     const [deletingChunkId, setDeletingChunkId] = useState<string | null>(null)
 
     const editableFields = useMemo(() => new Set(capabilities?.editableChunkFields || []), [capabilities?.editableChunkFields])
-    const canEditChunks = capabilities?.featureFlags.allowChunkEdit ?? true
-    const canDeleteChunks = capabilities?.featureFlags.allowChunkDelete ?? true
+    const canEditChunks = (capabilities?.featureFlags.allowChunkEdit ?? true) && !readOnly
+    const canDeleteChunks = (capabilities?.featureFlags.allowChunkDelete ?? true) && !readOnly
     const canEditKeywords = canEditChunks && (editableFields.size === 0 || editableFields.has('keywords'))
     const canEditText = canEditChunks && (editableFields.size === 0 || editableFields.has('text'))
     const canCreateChunks = canEditChunks && canEditText
@@ -364,7 +366,7 @@ export default function KnowledgeChunksTab({
     }, [documentFilter, documents, onDocumentFilterChange])
 
     useEffect(() => {
-        if (panelMode !== 'view' || !selectedChunkId) return
+        if ((panelMode !== 'view' && panelMode !== 'edit') || !selectedChunkId) return
         if (!chunks.some(chunk => chunk.id === selectedChunkId)) {
             setPanelMode('closed')
             setSelectedChunkId(null)
@@ -460,6 +462,19 @@ export default function KnowledgeChunksTab({
             text: '',
         })
     }, [documentFilter, documents])
+
+    const handleStartEdit = useCallback(() => {
+        if (!selectedChunkId || !selectedChunkDetail) return
+
+        setPanelMode('edit')
+        setFormError(null)
+        setDraft({
+            documentId: selectedChunkDetail.documentId,
+            keywords: selectedChunkDetail.keywords,
+            keywordInput: '',
+            text: selectedChunkDetail.text || selectedChunkDetail.markdown || '',
+        })
+    }, [selectedChunkDetail, selectedChunkId])
 
     const handleClosePanel = useCallback(() => {
         setPanelMode('closed')
@@ -571,6 +586,7 @@ export default function KnowledgeChunksTab({
 
             await refreshCollections()
             await loadChunkDetail(selectedChunkId)
+            setPanelMode('view')
             showToast('success', t('knowledge.chunkSaveSuccess'))
         } catch (err) {
             const message = err instanceof Error ? err.message : t('errors.unknown')
@@ -621,6 +637,58 @@ export default function KnowledgeChunksTab({
         }
     }, [deleteTarget, handleClosePanel, refreshCollections, showToast, t])
 
+    const isEditingPanel = panelMode === 'edit' || panelMode === 'create'
+    const panelEditStatusLabel = panelMode === 'create'
+        ? t('knowledge.chunkEditStatusUserEdited')
+        : getChunkEditStatusMeta(selectedChunkDetail?.editStatus, t).label
+    const panelOrdinal = panelMode === 'create'
+        ? chunks
+            .filter(chunk => chunk.documentId === draft?.documentId)
+            .reduce((maxOrdinal, chunk) => Math.max(maxOrdinal, chunk.ordinal), 0) + 1
+        : selectedChunkDetail?.ordinal ?? t('knowledge.notAvailable')
+    const panelPageRange = panelMode === 'create'
+        ? t('knowledge.notAvailable')
+        : buildPageRange(selectedChunkDetail?.pageFrom ?? null, selectedChunkDetail?.pageTo ?? null, t('knowledge.notAvailable'))
+    const metadataItems = [
+        {
+            label: t('knowledge.chunkDocumentLabel'),
+            value: panelDocumentLabel,
+        },
+        {
+            label: t('knowledge.retrievalDetailChunkId'),
+            value: panelMode === 'create' ? t('knowledge.notAvailable') : selectedChunkId || t('knowledge.notAvailable'),
+            code: true,
+        },
+        {
+            label: t('knowledge.retrievalDetailPageRange'),
+            value: panelPageRange,
+        },
+        {
+            label: t('knowledge.chunkOrdinal'),
+            value: panelOrdinal,
+        },
+        {
+            label: t('knowledge.chunkEditStatusLabel'),
+            value: panelEditStatusLabel,
+        },
+        {
+            label: t('knowledge.updatedAt'),
+            value: panelMode === 'create' ? '—' : formatDateTime(selectedChunkDetail?.updatedAt),
+        },
+        {
+            label: t('knowledge.chunkUpdatedBy'),
+            value: panelMode === 'create' ? '—' : selectedChunkDetail?.updatedBy || t('knowledge.notAvailable'),
+        },
+        {
+            label: t('common.tokens'),
+            value: panelMode === 'create' ? '—' : selectedChunkDetail?.tokenCount ?? t('knowledge.notAvailable'),
+        },
+        {
+            label: t('knowledge.chunkTextLength'),
+            value: panelMode === 'create' ? '—' : selectedChunkDetail?.textLength ?? t('knowledge.notAvailable'),
+        },
+    ]
+
     return (
         <>
             <div className="knowledge-detail-layout">
@@ -647,7 +715,7 @@ export default function KnowledgeChunksTab({
                                         type="button"
                                         className="btn btn-primary"
                                         onClick={handleStartCreate}
-                                        disabled={documentsLoading || documents.length === 0}
+                                        disabled={readOnly || documentsLoading || documents.length === 0}
                                     >
                                         {t('knowledge.chunkCreate')}
                                     </button>
@@ -803,185 +871,166 @@ export default function KnowledgeChunksTab({
                         ? t('knowledge.chunkCreateDescription')
                         : selectedChunkId || t('knowledge.notAvailable')}
                     headerMeta={(
+                        <span className="resource-card-tag">{panelDocumentLabel}</span>
+                    )}
+                    badges={[
+                        `${t('knowledge.retrievalPageShort')} ${panelPageRange}`,
+                        panelEditStatusLabel,
+                        `${t('knowledge.chunkOrdinal')} ${panelOrdinal}`,
+                    ]}
+                    error={formError || (!isEditingPanel ? detailError : null)}
+                    loading={!isEditingPanel && detailLoading}
+                    loadingLabel={t('knowledge.chunkDetailLoading')}
+                    mainSectionTitle={t('knowledge.chunkContentTitle')}
+                    mainSectionContent={(
                         <>
-                            <span className="resource-card-tag">{panelDocumentLabel}</span>
-                            <span className="resource-card-tag">
-                                {panelMode === 'create'
-                                    ? t('knowledge.chunkEditStatusUserEdited')
-                                    : getChunkEditStatusMeta(selectedChunkDetail?.editStatus, t).label}
-                            </span>
-                            <span className="resource-card-tag">
-                                {t('knowledge.retrievalPageShort')} {panelMode === 'create'
-                                    ? t('knowledge.notAvailable')
-                                    : buildPageRange(selectedChunkDetail?.pageFrom ?? null, selectedChunkDetail?.pageTo ?? null, t('knowledge.notAvailable'))}
-                            </span>
-                            <span className="resource-card-tag">
-                                {t('knowledge.chunkOrdinal')} {panelMode === 'create'
-                                    ? chunks
-                                        .filter(chunk => chunk.documentId === draft.documentId)
-                                        .reduce((maxOrdinal, chunk) => Math.max(maxOrdinal, chunk.ordinal), 0) + 1
-                                    : selectedChunkDetail?.ordinal ?? t('knowledge.notAvailable')}
-                            </span>
+                            {isEditingPanel ? (
+                                <>
+                                    <label className="knowledge-visually-hidden" htmlFor="knowledge-chunk-content">
+                                        {t('knowledge.chunkContentTitle')}
+                                    </label>
+                                    <textarea
+                                        id="knowledge-chunk-content"
+                                        className="form-input knowledge-chunk-content-input"
+                                        rows={18}
+                                        placeholder={t('knowledge.chunkContentPlaceholder')}
+                                        value={draft.text}
+                                        onChange={event => setDraft(current => current
+                                            ? {
+                                                ...current,
+                                                text: event.target.value,
+                                            }
+                                            : current
+                                        )}
+                                        disabled={saving || !canEditText}
+                                    />
+                                </>
+                            ) : (
+                                <div className="knowledge-retrieval-detail-content-panel">
+                                    <div className="knowledge-retrieval-detail-content-text">
+                                        {draft.text || t('knowledge.notAvailable')}
+                                    </div>
+                                </div>
+                            )}
                         </>
                     )}
-                    error={formError || (panelMode === 'view' ? detailError : null)}
-                    loading={panelMode === 'view' && detailLoading}
-                    loadingLabel={t('knowledge.chunkDetailLoading')}
-                    metadataTitle={t('knowledge.chunkMetadataTitle')}
-                    metadataItems={[
+                    sidebarSections={[
                         {
-                            label: t('knowledge.chunkDocumentLabel'),
-                            value: panelDocumentLabel,
+                            key: 'metadata',
+                            title: t('knowledge.chunkMetadataTitle'),
+                            content: (
+                                <div className="knowledge-chunk-detail-meta-list">
+                                    {metadataItems.map(item => (
+                                        <div key={item.label} className="knowledge-kv-item knowledge-chunk-detail-meta-row">
+                                            <span className="knowledge-kv-label">{item.label}</span>
+                                            <span className={`knowledge-kv-value ${item.code ? 'knowledge-kv-code' : ''}`.trim()}>
+                                                {item.value}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ),
                         },
                         {
-                            label: t('knowledge.chunkEditStatusLabel'),
-                            value: panelMode === 'create'
-                                ? t('knowledge.chunkEditStatusUserEdited')
-                                : getChunkEditStatusMeta(selectedChunkDetail?.editStatus, t).label,
-                        },
-                        {
-                            label: t('knowledge.chunkOrdinal'),
-                            value: panelMode === 'create'
-                                ? chunks
-                                    .filter(chunk => chunk.documentId === draft.documentId)
-                                    .reduce((maxOrdinal, chunk) => Math.max(maxOrdinal, chunk.ordinal), 0) + 1
-                                : selectedChunkDetail?.ordinal ?? t('knowledge.notAvailable'),
-                        },
-                        {
-                            label: t('knowledge.retrievalDetailPageRange'),
-                            value: panelMode === 'create'
-                                ? t('knowledge.notAvailable')
-                                : buildPageRange(selectedChunkDetail?.pageFrom ?? null, selectedChunkDetail?.pageTo ?? null, t('knowledge.notAvailable')),
-                        },
-                        {
-                            label: t('common.tokens'),
-                            value: panelMode === 'create' ? '—' : selectedChunkDetail?.tokenCount ?? t('knowledge.notAvailable'),
-                        },
-                        {
-                            label: t('knowledge.chunkTextLength'),
-                            value: panelMode === 'create' ? '—' : selectedChunkDetail?.textLength ?? t('knowledge.notAvailable'),
-                        },
-                        {
-                            label: t('knowledge.updatedAt'),
-                            value: panelMode === 'create' ? '—' : formatDateTime(selectedChunkDetail?.updatedAt),
-                        },
-                        {
-                            label: t('knowledge.chunkUpdatedBy'),
-                            value: panelMode === 'create' ? '—' : selectedChunkDetail?.updatedBy || t('knowledge.notAvailable'),
+                            key: 'keywords',
+                            title: t('knowledge.chunkKeywordsTitle'),
+                            content: (
+                                <>
+                                    {panelMode === 'create' && !documentFilter ? (
+                                        <div className="form-group knowledge-chunk-detail-form-group">
+                                            <label className="form-label" htmlFor="knowledge-chunk-document">
+                                                {t('knowledge.chunkDocumentLabel')}
+                                            </label>
+                                            <select
+                                                id="knowledge-chunk-document"
+                                                className="form-input"
+                                                value={draft.documentId}
+                                                onChange={event => setDraft(current => current
+                                                    ? {
+                                                        ...current,
+                                                        documentId: event.target.value,
+                                                    }
+                                                    : current
+                                                )}
+                                                disabled={saving}
+                                            >
+                                                <option value="">{t('knowledge.chunkDocumentSelectPlaceholder')}</option>
+                                                {documentOptions.map(option => (
+                                                    <option key={option.id} value={option.id}>{option.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ) : null}
+
+                                    {isEditingPanel ? (
+                                        <div className="form-group knowledge-chunk-detail-form-group">
+                                            <label className="form-label" htmlFor="knowledge-chunk-keywords">
+                                                {t('knowledge.chunkKeywordsLabel')}
+                                            </label>
+                                            <div className="knowledge-chunk-keyword-surface">
+                                                <div className="knowledge-chunk-keyword-list">
+                                                    {draft.keywords.length > 0 ? (
+                                                        draft.keywords.map(keyword => (
+                                                            <span key={keyword} className="knowledge-chunk-keyword-pill">
+                                                                <span>{keyword}</span>
+                                                                <button
+                                                                    type="button"
+                                                                    className="knowledge-chunk-keyword-pill-remove"
+                                                                    onClick={() => handleRemoveKeyword(keyword)}
+                                                                    disabled={saving || !canEditKeywords}
+                                                                    aria-label={`${t('common.delete')} ${keyword}`}
+                                                                >
+                                                                    &times;
+                                                                </button>
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span className="knowledge-inline-empty">{t('knowledge.notAvailable')}</span>
+                                                    )}
+                                                </div>
+                                                <input
+                                                    id="knowledge-chunk-keywords"
+                                                    className="knowledge-chunk-keyword-inline-input"
+                                                    type="text"
+                                                    placeholder={t('knowledge.chunkKeywordsPlaceholder')}
+                                                    value={draft.keywordInput}
+                                                    onChange={event => setDraft(current => current
+                                                        ? {
+                                                            ...current,
+                                                            keywordInput: event.target.value,
+                                                        }
+                                                        : current
+                                                    )}
+                                                    onBlur={commitPendingKeyword}
+                                                    onKeyDown={event => {
+                                                        if (event.key === 'Enter' || event.key === ',' || event.key === '，') {
+                                                            event.preventDefault()
+                                                            commitPendingKeyword()
+                                                        }
+                                                    }}
+                                                    disabled={saving || !canEditKeywords}
+                                                />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="knowledge-chunk-keyword-surface knowledge-chunk-keyword-surface-readonly">
+                                            {draft.keywords.length > 0 ? (
+                                                draft.keywords.map(keyword => (
+                                                    <span key={keyword} className="knowledge-chunk-keyword-pill">{keyword}</span>
+                                                ))
+                                            ) : (
+                                                <span className="knowledge-inline-empty">{t('knowledge.notAvailable')}</span>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
+                            ),
                         },
                     ]}
-                    keywordsTitle={t('knowledge.chunkKeywordsTitle')}
-                    keywordsContent={(
-                        <>
-                            {panelMode === 'create' && !documentFilter ? (
-                                <div className="form-group knowledge-chunk-detail-form-group">
-                                    <label className="form-label" htmlFor="knowledge-chunk-document">
-                                        {t('knowledge.chunkDocumentLabel')}
-                                    </label>
-                                    <select
-                                        id="knowledge-chunk-document"
-                                        className="form-input"
-                                        value={draft.documentId}
-                                        onChange={event => setDraft(current => current
-                                            ? {
-                                                ...current,
-                                                documentId: event.target.value,
-                                            }
-                                            : current
-                                        )}
-                                        disabled={saving}
-                                    >
-                                        <option value="">{t('knowledge.chunkDocumentSelectPlaceholder')}</option>
-                                        {documentOptions.map(option => (
-                                            <option key={option.id} value={option.id}>{option.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            ) : documentFilter ? (
-                                <div className="knowledge-chunk-document-lock">
-                                    <span className="knowledge-kv-label">{t('knowledge.chunkDocumentLabel')}</span>
-                                    <span className="knowledge-kv-value">{panelDocumentLabel}</span>
-                                </div>
-                            ) : null}
-
-                            <div className="form-group knowledge-chunk-detail-form-group">
-                                <label className="form-label" htmlFor="knowledge-chunk-keywords">
-                                    {t('knowledge.chunkKeywordsLabel')}
-                                </label>
-                                <div className="knowledge-chunk-keyword-editor">
-                                    <div className="knowledge-chunk-keyword-list">
-                                        {draft.keywords.length > 0 ? (
-                                            draft.keywords.map(keyword => (
-                                                <span key={keyword} className="knowledge-chunk-keyword-pill">
-                                                    <span>{keyword}</span>
-                                                    <button
-                                                        type="button"
-                                                        className="knowledge-chunk-keyword-pill-remove"
-                                                        onClick={() => handleRemoveKeyword(keyword)}
-                                                        disabled={saving || !canEditKeywords}
-                                                        aria-label={`${t('common.delete')} ${keyword}`}
-                                                    >
-                                                        &times;
-                                                    </button>
-                                                </span>
-                                            ))
-                                        ) : (
-                                            <span className="knowledge-inline-empty">{t('knowledge.notAvailable')}</span>
-                                        )}
-                                    </div>
-                                    <input
-                                        id="knowledge-chunk-keywords"
-                                        className="form-input knowledge-chunk-keyword-input"
-                                        type="text"
-                                        placeholder={t('knowledge.chunkKeywordsPlaceholder')}
-                                        value={draft.keywordInput}
-                                        onChange={event => setDraft(current => current
-                                            ? {
-                                                ...current,
-                                                keywordInput: event.target.value,
-                                            }
-                                            : current
-                                        )}
-                                        onBlur={commitPendingKeyword}
-                                        onKeyDown={event => {
-                                            if (event.key === 'Enter' || event.key === ',' || event.key === '，') {
-                                                event.preventDefault()
-                                                commitPendingKeyword()
-                                            }
-                                        }}
-                                        disabled={saving || !canEditKeywords}
-                                    />
-                                </div>
-                            </div>
-                        </>
-                    )}
-                    contentTitle={t('knowledge.chunkContentTitle')}
-                    contentContent={(
-                        <>
-                            <label className="knowledge-visually-hidden" htmlFor="knowledge-chunk-content">
-                                {t('knowledge.chunkContentTitle')}
-                            </label>
-                            <textarea
-                                id="knowledge-chunk-content"
-                                className="form-input knowledge-chunk-content-input"
-                                rows={14}
-                                placeholder={t('knowledge.chunkContentPlaceholder')}
-                                value={draft.text}
-                                onChange={event => setDraft(current => current
-                                    ? {
-                                        ...current,
-                                        text: event.target.value,
-                                    }
-                                    : current
-                                )}
-                                disabled={saving || !canEditText}
-                            />
-                        </>
-                    )}
                     footer={(
                         <div className="knowledge-chunk-detail-footer-actions">
                             <div className="knowledge-chunk-detail-footer-danger">
-                                {panelMode === 'view' && selectedChunkSummary && canDeleteChunks && (
+                                {isEditingPanel && selectedChunkSummary && canDeleteChunks && (
                                     <button
                                         type="button"
                                         className="btn btn-danger btn-quiet-danger"
@@ -996,17 +1045,49 @@ export default function KnowledgeChunksTab({
                                 )}
                             </div>
                             <div className="knowledge-chunk-detail-footer-primary">
-                                <button type="button" className="btn btn-secondary btn-subtle" onClick={handleClosePanel} disabled={saving}>
-                                    {t('common.cancel')}
-                                </button>
                                 <button
                                     type="button"
-                                    className="btn btn-primary"
-                                    onClick={() => void handleSave()}
-                                    disabled={saving || (!canEditText && !canEditKeywords)}
+                                    className="btn btn-secondary btn-subtle"
+                                    onClick={() => {
+                                        if (panelMode === 'edit' && selectedChunkDetail) {
+                                            setPanelMode('view')
+                                            setFormError(null)
+                                            setDraft({
+                                                documentId: selectedChunkDetail.documentId,
+                                                keywords: selectedChunkDetail.keywords,
+                                                keywordInput: '',
+                                                text: selectedChunkDetail.text || selectedChunkDetail.markdown || '',
+                                            })
+                                            return
+                                        }
+
+                                        handleClosePanel()
+                                    }}
+                                    disabled={saving}
                                 >
-                                    {saving ? t('knowledge.saving') : t('common.save')}
+                                    {isEditingPanel ? t('common.cancel') : t('common.close')}
                                 </button>
+                                {isEditingPanel ? (
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        onClick={() => void handleSave()}
+                                        disabled={saving || (!canEditText && !canEditKeywords)}
+                                    >
+                                        {saving ? t('knowledge.saving') : t('common.save')}
+                                    </button>
+                                ) : (
+                                    canEditChunks && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary"
+                                            onClick={handleStartEdit}
+                                            disabled={detailLoading || !selectedChunkDetail}
+                                        >
+                                            {t('common.edit')}
+                                        </button>
+                                    )
+                                )}
                             </div>
                         </div>
                     )}

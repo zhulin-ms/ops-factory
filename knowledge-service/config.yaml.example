@@ -1,6 +1,15 @@
 knowledge:
   runtime:
     base-dir: "./data"
+  database:
+    type: sqlite
+    url: ""
+    driver-class-name: ""
+    username: ""
+    password: ""
+    pool:
+      max-size: 5
+      min-idle: 1
 
 ops-knowledge:
   ingest:

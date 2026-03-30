@@ -23,6 +23,7 @@ dist/
 build/
 coverage/
 .vite/
+**/target/
 
 # TypeScript
 *.tsbuildinfo
@@ -62,7 +63,6 @@ knowledge-service/config.yaml
 knowledge-service/data/
 knowledge-service/data/**
 knowledge-service/logs/
-knowledge-service/target/
 
 # Agents runtime artifacts
 gateway/agents/*/artifacts/

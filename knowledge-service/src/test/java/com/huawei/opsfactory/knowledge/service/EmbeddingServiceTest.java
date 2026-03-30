@@ -1,6 +1,7 @@
 package com.huawei.opsfactory.knowledge.service;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
@@ -45,22 +46,22 @@ class EmbeddingServiceTest {
             "tester"
         );
 
-        when(repository.findByChunkIds(anyCollection())).thenReturn(Map.of(
-            "chk-1",
+        when(repository.findByContentHashes(eq(properties.getEmbedding().getModel()), eq(1024), anyCollection())).thenReturn(Map.of(
+            embeddingHash(service.buildChunkEmbeddingText(chunk)),
             new EmbeddingRepository.EmbeddingRecord(
                 "emb-1",
-                "chk-1",
+                embeddingHash(service.buildChunkEmbeddingText(chunk)),
                 properties.getEmbedding().getModel(),
                 2560,
-                embeddingHash(service.buildChunkEmbeddingText(chunk)),
                 createVector(2560, 0.1d),
+                Instant.now(),
                 Instant.now()
             )
         ));
 
         Map<String, List<Double>> resolved = service.ensureChunkEmbeddings(List.of(chunk));
 
-        verify(repository).upsert(eq("chk-1"), eq(properties.getEmbedding().getModel()), any(), any());
+        verify(repository).upsert(eq(embeddingHash(service.buildChunkEmbeddingText(chunk))), eq(properties.getEmbedding().getModel()), eq(1024), any());
         org.assertj.core.api.Assertions.assertThat(resolved.get("chk-1")).hasSize(1024);
     }
 
@@ -89,22 +90,22 @@ class EmbeddingServiceTest {
         );
 
         List<Double> vector = createVector(1024, 0.1d);
-        when(repository.findByChunkIds(anyCollection())).thenReturn(Map.of(
-            "chk-1",
+        when(repository.findByContentHashes(eq(properties.getEmbedding().getModel()), eq(1024), anyCollection())).thenReturn(Map.of(
+            embeddingHash(service.buildChunkEmbeddingText(chunk)),
             new EmbeddingRepository.EmbeddingRecord(
                 "emb-1",
-                "chk-1",
+                embeddingHash(service.buildChunkEmbeddingText(chunk)),
                 properties.getEmbedding().getModel(),
                 1024,
-                embeddingHash(service.buildChunkEmbeddingText(chunk)),
                 vector,
+                Instant.now(),
                 Instant.now()
             )
         ));
 
         Map<String, List<Double>> resolved = service.ensureChunkEmbeddings(List.of(chunk));
 
-        verify(repository, never()).upsert(eq("chk-1"), eq(properties.getEmbedding().getModel()), any(), any());
+        verify(repository, never()).upsert(any(), any(), anyInt(), any());
         org.assertj.core.api.Assertions.assertThat(resolved.get("chk-1")).isEqualTo(vector);
     }
 
@@ -132,23 +133,60 @@ class EmbeddingServiceTest {
             "tester"
         );
 
-        when(repository.findByChunkIds(anyCollection())).thenReturn(Map.of(
-            "chk-1",
+        when(repository.findByContentHashes(eq(properties.getEmbedding().getModel()), eq(1024), anyCollection())).thenReturn(Map.of(
+            embeddingHash(service.buildChunkEmbeddingText(chunk)),
             new EmbeddingRepository.EmbeddingRecord(
                 "emb-1",
-                "chk-1",
+                embeddingHash(service.buildChunkEmbeddingText(chunk)),
                 "legacy-embedding-model",
                 1024,
-                embeddingHash(service.buildChunkEmbeddingText(chunk)),
                 createVector(1024, 0.1d),
+                Instant.now(),
                 Instant.now()
             )
         ));
 
         Map<String, List<Double>> resolved = service.ensureChunkEmbeddings(List.of(chunk));
 
-        verify(repository).upsert(eq("chk-1"), eq(properties.getEmbedding().getModel()), any(), any());
+        verify(repository).upsert(eq(embeddingHash(service.buildChunkEmbeddingText(chunk))), eq(properties.getEmbedding().getModel()), eq(1024), any());
         org.assertj.core.api.Assertions.assertThat(resolved.get("chk-1")).hasSize(1024);
+    }
+
+    @Test
+    void shouldReuseCachedEmbeddingAcrossDifferentChunkIdsWhenContentMatches() {
+        KnowledgeProperties properties = new KnowledgeProperties();
+        properties.getEmbedding().setApiKey("");
+        properties.getEmbedding().setDimensions(1024);
+        EmbeddingRepository repository = mock(EmbeddingRepository.class);
+        EmbeddingService service = new EmbeddingService(properties, repository, new ObjectMapper());
+
+        SearchService.SearchableChunk chunk = new SearchService.SearchableChunk(
+            "chk-2",
+            "doc-2",
+            "src-2",
+            "ITSM",
+            List.of("Operations"),
+            List.of("itsm"),
+            "ITSM deployment guide",
+            "ITSM deployment guide",
+            1,
+            1,
+            1,
+            "ACTIVE",
+            "tester"
+        );
+
+        List<Double> vector = createVector(1024, 0.2d);
+        String hash = embeddingHash(service.buildChunkEmbeddingText(chunk));
+        when(repository.findByContentHashes(eq(properties.getEmbedding().getModel()), eq(1024), anyCollection())).thenReturn(Map.of(
+            hash,
+            new EmbeddingRepository.EmbeddingRecord("emb-2", hash, properties.getEmbedding().getModel(), 1024, vector, Instant.now(), Instant.now())
+        ));
+
+        Map<String, List<Double>> resolved = service.ensureChunkEmbeddings(List.of(chunk));
+
+        verify(repository, never()).upsert(any(), any(), anyInt(), any());
+        org.assertj.core.api.Assertions.assertThat(resolved.get("chk-2")).isEqualTo(vector);
     }
 
     @Test

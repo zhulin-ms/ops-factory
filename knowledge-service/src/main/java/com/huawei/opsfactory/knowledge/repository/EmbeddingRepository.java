@@ -9,7 +9,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -30,66 +30,71 @@ public class EmbeddingRepository {
         this.objectMapper = objectMapper;
     }
 
-    public Optional<EmbeddingRecord> findByChunkId(String chunkId) {
-        return jdbcTemplate.query("select * from embedding_record where chunk_id = ?", mapper, chunkId).stream().findFirst();
-    }
-
-    public Map<String, EmbeddingRecord> findByChunkIds(Collection<String> chunkIds) {
-        if (chunkIds == null || chunkIds.isEmpty()) {
+    public Map<String, EmbeddingRecord> findByContentHashes(String model, int dimension, Collection<String> contentHashes) {
+        if (contentHashes == null || contentHashes.isEmpty()) {
             return Map.of();
         }
 
-        String placeholders = chunkIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        List<String> hashes = contentHashes.stream()
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+        if (hashes.isEmpty()) {
+            return Map.of();
+        }
+
+        String placeholders = hashes.stream().map(id -> "?").collect(Collectors.joining(","));
         List<EmbeddingRecord> records = jdbcTemplate.query(
-            "select * from embedding_record where chunk_id in (" + placeholders + ")",
+            "select * from embedding_cache where model = ? and dimension = ? and content_hash in (" + placeholders + ")",
             mapper,
-            chunkIds.toArray()
+            concatParams(model, dimension, hashes)
         );
-        return records.stream().collect(Collectors.toMap(EmbeddingRecord::chunkId, record -> record));
+        return records.stream().collect(Collectors.toMap(EmbeddingRecord::contentHash, record -> record));
     }
 
-    public void upsert(String chunkId, String model, List<Double> vector, String vectorHash) {
+    public void upsert(String contentHash, String model, int dimension, List<Double> vector) {
         Instant now = Instant.now();
         String vectorJson = writeVector(vector);
-        int dimension = vector == null ? 0 : vector.size();
-        Optional<EmbeddingRecord> existing = findByChunkId(chunkId);
-
-        if (existing.isPresent()) {
-            jdbcTemplate.update(
-                "update embedding_record set model = ?, dimension = ?, vector_hash = ?, vector_json = ?, created_at = ? where chunk_id = ?",
-                model, dimension, vectorHash, vectorJson, now.toString(), chunkId
-            );
+        jdbcTemplate.update(
+            "delete from embedding_cache where content_hash = ? and model = ? and dimension <> ?",
+            contentHash,
+            model,
+            dimension
+        );
+        int updated = jdbcTemplate.update(
+            "update embedding_cache set vector_json = ?, updated_at = ? where content_hash = ? and model = ? and dimension = ?",
+            vectorJson, now.toString(), contentHash, model, dimension
+        );
+        if (updated > 0) {
             return;
         }
 
         jdbcTemplate.update(
-            "insert into embedding_record (id, chunk_id, model, dimension, vector_hash, vector_json, created_at) values (?,?,?,?,?,?,?)",
-            Ids.newId("emb"), chunkId, model, dimension, vectorHash, vectorJson, now.toString()
+            "insert into embedding_cache (id, content_hash, model, dimension, vector_json, created_at, updated_at) values (?,?,?,?,?,?,?)",
+            Ids.newId("emb"), contentHash, model, dimension, vectorJson, now.toString(), now.toString()
         );
-    }
-
-    public void deleteByChunkId(String chunkId) {
-        jdbcTemplate.update("delete from embedding_record where chunk_id = ?", chunkId);
-    }
-
-    public void deleteByDocumentId(String documentId) {
-        jdbcTemplate.update("delete from embedding_record where chunk_id in (select id from document_chunk where document_id = ?)", documentId);
-    }
-
-    public void deleteBySourceId(String sourceId) {
-        jdbcTemplate.update("delete from embedding_record where chunk_id in (select id from document_chunk where source_id = ?)", sourceId);
     }
 
     private EmbeddingRecord map(ResultSet rs, int rowNum) throws SQLException {
         return new EmbeddingRecord(
             rs.getString("id"),
-            rs.getString("chunk_id"),
+            rs.getString("content_hash"),
             rs.getString("model"),
             rs.getInt("dimension"),
-            rs.getString("vector_hash"),
             readVector(rs.getString("vector_json")),
-            Instant.parse(rs.getString("created_at"))
+            Instant.parse(rs.getString("created_at")),
+            Instant.parse(rs.getString("updated_at"))
         );
+    }
+
+    private Object[] concatParams(String model, int dimension, List<String> hashes) {
+        Object[] params = new Object[hashes.size() + 2];
+        params[0] = model;
+        params[1] = dimension;
+        for (int index = 0; index < hashes.size(); index++) {
+            params[index + 2] = hashes.get(index);
+        }
+        return params;
     }
 
     private List<Double> readVector(String json) {
@@ -110,12 +115,12 @@ public class EmbeddingRepository {
 
     public record EmbeddingRecord(
         String id,
-        String chunkId,
+        String contentHash,
         String model,
         int dimension,
-        String vectorHash,
         List<Double> vector,
-        Instant createdAt
+        Instant createdAt,
+        Instant updatedAt
     ) {
     }
 }

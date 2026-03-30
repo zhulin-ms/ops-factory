@@ -49,6 +49,11 @@ public class JobController {
         return facade.logs(jobId);
     }
 
+    @GetMapping("/{jobId}/failures")
+    public JobFailuresResponse getFailures(@PathVariable("jobId") String jobId) {
+        return facade.jobFailures(jobId);
+    }
+
     public record JobResponse(
         String id,
         String jobType,
@@ -56,7 +61,16 @@ public class JobController {
         String documentId,
         String status,
         int progress,
+        String stage,
         String message,
+        String createdBy,
+        int totalDocuments,
+        int processedDocuments,
+        int successDocuments,
+        int failedDocuments,
+        String currentDocumentId,
+        String currentDocumentName,
+        String errorSummary,
         Instant startedAt,
         Instant finishedAt,
         Instant createdAt,
@@ -74,5 +88,18 @@ public class JobController {
     }
 
     public record JobLogEntry(Instant time, String level, String message) {
+    }
+
+    public record JobFailuresResponse(String jobId, List<JobFailureEntry> items) {
+    }
+
+    public record JobFailureEntry(
+        String documentId,
+        String documentName,
+        String stage,
+        String errorCode,
+        String message,
+        Instant finishedAt
+    ) {
     }
 }

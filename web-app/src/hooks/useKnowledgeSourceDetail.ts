@@ -4,6 +4,8 @@ import { getErrorMessage } from '../utils/errorMessages'
 import type {
     KnowledgeCapabilities,
     KnowledgeDefaults,
+    KnowledgeMaintenanceFailure,
+    KnowledgeMaintenanceOverview,
     KnowledgeProfileDetail,
     KnowledgeSource,
     KnowledgeSourceStats,
@@ -34,10 +36,12 @@ interface UseKnowledgeSourceDetailResult {
     defaults: KnowledgeDefaults | null
     indexProfileDetail: KnowledgeProfileDetail | null
     retrievalProfileDetail: KnowledgeProfileDetail | null
+    maintenance: KnowledgeMaintenanceOverview | null
     isLoading: boolean
     error: string | null
     hasSupportingDataError: boolean
     reload: () => Promise<void>
+    loadMaintenanceFailures: (jobId: string) => Promise<KnowledgeMaintenanceFailure[]>
     saveSource: (updates: KnowledgeSourceUpdateRequest) => Promise<SaveSourceResult>
     saveIndexProfile: (updates: { name?: string; config?: Record<string, unknown> }) => Promise<SaveProfileResult>
     saveRetrievalProfile: (updates: { name?: string; config?: Record<string, unknown> }) => Promise<SaveProfileResult>
@@ -81,6 +85,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
     const [defaults, setDefaults] = useState<KnowledgeDefaults | null>(null)
     const [indexProfileDetail, setIndexProfileDetail] = useState<KnowledgeProfileDetail | null>(null)
     const [retrievalProfileDetail, setRetrievalProfileDetail] = useState<KnowledgeProfileDetail | null>(null)
+    const [maintenance, setMaintenance] = useState<KnowledgeMaintenanceOverview | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [hasSupportingDataError, setHasSupportingDataError] = useState(false)
@@ -93,6 +98,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
             setDefaults(null)
             setIndexProfileDetail(null)
             setRetrievalProfileDetail(null)
+            setMaintenance(null)
             setError(null)
             setHasSupportingDataError(false)
             setIsLoading(false)
@@ -114,6 +120,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                 defaultsResult,
                 indexProfileDetailResult,
                 retrievalProfileDetailResult,
+                maintenanceResult,
             ] = await Promise.allSettled([
                 requestJson<KnowledgeSourceStats>(
                     `${KNOWLEDGE_SERVICE_URL}/ops-knowledge/sources/${sourceId}/stats`
@@ -134,6 +141,9 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                         `${KNOWLEDGE_SERVICE_URL}/ops-knowledge/profiles/retrieval/${sourceData.retrievalProfileId}`
                     )
                     : Promise.resolve(null),
+                requestJson<KnowledgeMaintenanceOverview>(
+                    `${KNOWLEDGE_SERVICE_URL}/ops-knowledge/sources/${sourceId}/maintenance`
+                ),
             ])
 
             const supportingDataFailed = [
@@ -142,6 +152,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                 defaultsResult,
                 indexProfileDetailResult,
                 retrievalProfileDetailResult,
+                maintenanceResult,
             ].some(result => result.status === 'rejected')
 
             setSource(sourceData)
@@ -150,6 +161,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
             setDefaults(defaultsResult.status === 'fulfilled' ? defaultsResult.value : null)
             setIndexProfileDetail(indexProfileDetailResult.status === 'fulfilled' ? indexProfileDetailResult.value : null)
             setRetrievalProfileDetail(retrievalProfileDetailResult.status === 'fulfilled' ? retrievalProfileDetailResult.value : null)
+            setMaintenance(maintenanceResult.status === 'fulfilled' ? maintenanceResult.value : null)
             setHasSupportingDataError(supportingDataFailed)
         } catch (err) {
             setSource(null)
@@ -158,6 +170,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
             setDefaults(null)
             setIndexProfileDetail(null)
             setRetrievalProfileDetail(null)
+            setMaintenance(null)
             setError(getErrorMessage(err))
         } finally {
             setIsLoading(false)
@@ -233,6 +246,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                 `${KNOWLEDGE_SERVICE_URL}/ops-knowledge/profiles/index/${profileId}`
             )
             setIndexProfileDetail(detail)
+            await reload()
             return {
                 success: true,
                 data: detail,
@@ -245,7 +259,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                 error: message,
             }
         }
-    }, [source?.indexProfileId])
+    }, [reload, source?.indexProfileId])
 
     const saveRetrievalProfile = useCallback(async (updates: { name?: string; config?: Record<string, unknown> }): Promise<SaveProfileResult> => {
         const profileId = source?.retrievalProfileId
@@ -274,6 +288,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                 `${KNOWLEDGE_SERVICE_URL}/ops-knowledge/profiles/retrieval/${profileId}`
             )
             setRetrievalProfileDetail(detail)
+            await reload()
             return {
                 success: true,
                 data: detail,
@@ -286,7 +301,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                 error: message,
             }
         }
-    }, [source?.retrievalProfileId])
+    }, [reload, source?.retrievalProfileId])
 
     const deleteSource = useCallback(async (): Promise<DeleteSourceResult> => {
         if (!sourceId) {
@@ -317,6 +332,13 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
         }
     }, [sourceId])
 
+    const loadMaintenanceFailures = useCallback(async (jobId: string): Promise<KnowledgeMaintenanceFailure[]> => {
+        const response = await requestJson<{ jobId: string; items: KnowledgeMaintenanceFailure[] }>(
+            `${KNOWLEDGE_SERVICE_URL}/ops-knowledge/jobs/${jobId}/failures`
+        )
+        return response.items || []
+    }, [])
+
     return {
         source,
         stats,
@@ -324,10 +346,12 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
         defaults,
         indexProfileDetail,
         retrievalProfileDetail,
+        maintenance,
         isLoading,
         error,
         hasSupportingDataError,
         reload,
+        loadMaintenanceFailures,
         saveSource,
         saveIndexProfile,
         saveRetrievalProfile,
