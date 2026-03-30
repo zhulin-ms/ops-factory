@@ -1,5 +1,7 @@
 package com.huawei.opsfactory.knowledge.common.util;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -7,20 +9,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.cn.smart.SmartChineseAnalyzer;
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 
 public final class KeywordExtractor {
-
-    // Separate patterns for Chinese runs and Latin/digit runs.
-    // Chinese: 2+ contiguous Han characters
-    // Latin: letter followed by 1+ letters/digits/underscores (min 2 chars total, no hyphens)
-    private static final Pattern TOKEN_PATTERN = Pattern.compile(
-        "[\\p{IsHan}]{2,}|[A-Za-z][A-Za-z0-9_]{1,}"
-    );
-
-    // Token is pure digits/underscores — not meaningful
-    private static final Pattern DECORATION_PATTERN = Pattern.compile("^[0-9_]+$");
 
     private static final Set<String> STOP_WORDS_EN = Set.of(
         "the", "and", "for", "with", "that", "this", "from", "was", "are", "but",
@@ -58,34 +53,32 @@ public final class KeywordExtractor {
         "然后", "接着", "首先", "其次", "最后", "例如", "比如"
     );
 
-    // Minimum meaningful length for Latin tokens
-    private static final int MIN_LATIN_LENGTH = 3;
-
     private KeywordExtractor() {
     }
 
     public static List<String> extract(String text, int maxKeywords) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+
         Map<String, Integer> counts = new HashMap<>();
-        Matcher matcher = TOKEN_PATTERN.matcher(text == null ? "" : text);
-        while (matcher.find()) {
-            String token = matcher.group();
-            if (isStopWord(token)) {
-                continue;
-            }
-            // Skip pure-decoration tokens (only digits/underscores)
-            if (DECORATION_PATTERN.matcher(token).matches()) {
-                continue;
-            }
-            // For Latin tokens: use lowercase as key, enforce minimum length
-            if (!isChinese(token)) {
-                String lower = token.toLowerCase(Locale.ROOT);
-                if (lower.length() < MIN_LATIN_LENGTH) {
+        try (Analyzer analyzer = new SmartChineseAnalyzer();
+             TokenStream tokenStream = analyzer.tokenStream("keywords", new StringReader(text))) {
+            tokenStream.reset();
+            CharTermAttribute attr = tokenStream.addAttribute(CharTermAttribute.class);
+            while (tokenStream.incrementToken()) {
+                String term = attr.toString().trim().toLowerCase(Locale.ROOT);
+                if (term.isBlank() || term.length() < 2) {
                     continue;
                 }
-                counts.merge(lower, 1, Integer::sum);
-            } else {
-                counts.merge(token, 1, Integer::sum);
+                if (STOP_WORDS_EN.contains(term) || STOP_WORDS_ZH.contains(term)) {
+                    continue;
+                }
+                counts.merge(term, 1, Integer::sum);
             }
+            tokenStream.end();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to tokenize text for keyword extraction", e);
         }
 
         List<String> tokens = new ArrayList<>(counts.keySet());
@@ -95,16 +88,5 @@ public final class KeywordExtractor {
             return new ArrayList<>(tokens.subList(0, maxKeywords));
         }
         return tokens;
-    }
-
-    private static boolean isChinese(String token) {
-        return Character.UnicodeScript.of(token.codePointAt(0)) == Character.UnicodeScript.HAN;
-    }
-
-    private static boolean isStopWord(String token) {
-        if (isChinese(token)) {
-            return STOP_WORDS_ZH.contains(token);
-        }
-        return STOP_WORDS_EN.contains(token.toLowerCase(Locale.ROOT));
     }
 }
