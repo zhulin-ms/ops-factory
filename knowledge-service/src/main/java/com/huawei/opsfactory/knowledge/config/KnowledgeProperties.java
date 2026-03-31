@@ -208,7 +208,7 @@ public class KnowledgeProperties {
         private String mode = "hybrid";
         private int lexicalTopK = 50;
         private int semanticTopK = 50;
-        private int finalTopK = 10;
+        private int finalTopK = 8;
         private int maxTopK = 64;
         private int rrfK = 60;
         private int snippetLength = 180;

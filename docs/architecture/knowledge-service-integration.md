@@ -640,7 +640,7 @@ knowledge:
   "sourceIds": ["src_xxx"],
   "documentIds": ["doc_xxx"],
   "retrievalProfileId": "rp_xxx",
-  "topK": 10,
+  "topK": 8,
   "filters": {
     "contentTypes": ["text/csv"]
   },

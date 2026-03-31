@@ -35,7 +35,7 @@ class KnowledgePropertiesTest {
         assertThat(properties.getRetrieval().getMode()).isEqualTo("hybrid");
         assertThat(properties.getRetrieval().getLexicalTopK()).isEqualTo(50);
         assertThat(properties.getRetrieval().getSemanticTopK()).isEqualTo(50);
-        assertThat(properties.getRetrieval().getFinalTopK()).isEqualTo(10);
+        assertThat(properties.getRetrieval().getFinalTopK()).isEqualTo(8);
         assertThat(properties.getRetrieval().getRrfK()).isEqualTo(60);
 
         assertThat(properties.getFeatures().isAllowChunkEdit()).isTrue();

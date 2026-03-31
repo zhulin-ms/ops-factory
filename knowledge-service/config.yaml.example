@@ -80,7 +80,7 @@ ops-knowledge:
     mode: hybrid
     lexical-top-k: 50
     semantic-top-k: 50
-    final-top-k: 10
+    final-top-k: 8
     max-top-k: 64
     rrf-k: 60
     snippet-length: 180
