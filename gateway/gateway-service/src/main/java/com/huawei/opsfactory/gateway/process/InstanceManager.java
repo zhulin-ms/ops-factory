@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
 @Component
 @org.springframework.context.annotation.DependsOn("systemUserMigrationService")
@@ -319,6 +320,8 @@ public class InstanceManager {
         long spawnStart = System.currentTimeMillis();
         ReentrantLock lock = spawnLocks.computeIfAbsent(key, k -> new ReentrantLock());
         lock.lock();
+        ManagedInstance instance = null;
+        Process process = null;
         try {
             // Double-check after acquiring lock
             ManagedInstance existing = instances.get(key);
@@ -363,8 +366,9 @@ public class InstanceManager {
             long processStart = System.currentTimeMillis();
             log.info("Spawning goosed for {}:{} on port {}, command: {} agent, TLS={}",
                     agentId, userId, port, properties.getGoosedBin(), env.get("GOOSE_TLS"));
-            Process process = pb.start();
-            long pid = ProcessUtil.getPid(process);
+            Process startedProcess = pb.start();
+            process = startedProcess;
+            long pid = ProcessUtil.getPid(startedProcess);
             long processStartMs = System.currentTimeMillis() - processStart;
             log.info("goosed process started for {}:{} on port {} with pid={}, GOOSE_TLS env={}",
                     agentId, userId, port, pid, env.get("GOOSE_TLS"));
@@ -373,7 +377,7 @@ public class InstanceManager {
             // goosed's tracing subscriber writes every log to both file and stderr; if the pipe buffer
             // (~64KB) fills up, the write() syscall blocks a tokio worker thread, freezing the runtime.
             Thread drainThread = new Thread(() -> {
-                try (var in = process.getInputStream()) {
+                try (var in = startedProcess.getInputStream()) {
                     byte[] buf = new byte[8192];
                     long totalBytes = 0;
                     int bytesRead;
@@ -390,13 +394,13 @@ public class InstanceManager {
             drainThread.setDaemon(true);
             drainThread.start();
 
-            ManagedInstance instance = new ManagedInstance(agentId, userId, port, pid, process, instanceSecret);
+            instance = new ManagedInstance(agentId, userId, port, pid, startedProcess, instanceSecret);
             instances.put(key, instance);
 
             long readyStart = System.currentTimeMillis();
             log.debug("Starting health check for {}:{} on port {} (pid={}), URL: {}",
                     agentId, userId, port, pid, goosedBaseUrl(port) + "/status");
-            waitForReady(port, process);
+            waitForReady(port, startedProcess);
             long readyMs = System.currentTimeMillis() - readyStart;
             instance.setStatus(ManagedInstance.Status.RUNNING);
             log.info("Instance {}:{} ready on port {} (pid={})", agentId, userId, port, pid);
@@ -406,6 +410,7 @@ public class InstanceManager {
 
             return instance;
         } catch (Exception e) {
+            cleanupFailedSpawn(key, instance, process, () -> "spawn " + agentId + ":" + userId, e);
             log.error("Failed to spawn {}:{}", agentId, userId, e);
             throw e;
         } finally {
@@ -624,12 +629,34 @@ public class InstanceManager {
             instance.setLastRestartTime(System.currentTimeMillis());
             return instance;
         }).subscribeOn(Schedulers.boundedElastic())
-          .subscribe(
-              inst -> log.info("Watchdog respawned {}:{} on port {} (restart #{})",
-                      agentId, userId, inst.getPort(), restartCount),
-              err -> log.error("Watchdog failed to respawn {}:{}: {}",
-                      agentId, userId, err.getMessage())
-          );
+                .subscribe(
+                        inst -> log.info("Watchdog respawned {}:{} on port {} (restart #{})",
+                                agentId, userId, inst.getPort(), restartCount),
+                        err -> log.error("Watchdog failed to respawn {}:{}: {}",
+                                agentId, userId, err.getMessage(), err)
+                );
+    }
+
+    private void cleanupFailedSpawn(String key, ManagedInstance instance, Process process,
+                                    Supplier<String> operation, Exception cause) {
+        ManagedInstance removed = instances.remove(key);
+        ManagedInstance failedInstance = removed != null ? removed : instance;
+        if (failedInstance != null) {
+            failedInstance.setStatus(ManagedInstance.Status.ERROR);
+            log.warn("Cleaned up failed {} entry key={} port={}",
+                    operation.get(), key, failedInstance.getPort());
+        }
+        Process failedProcess = failedInstance != null ? failedInstance.getProcess() : process;
+        if (failedProcess != null && ProcessUtil.isAlive(failedProcess)) {
+            try {
+                log.warn("Stopping process after failed {} key={}", operation.get(), key);
+                ProcessUtil.stopGracefully(failedProcess, GatewayConstants.STOP_GRACE_PERIOD_MS);
+            } catch (Exception stopError) {
+                log.error("Failed to stop process after {} key={}: {}",
+                        operation.get(), key, stopError.getMessage(), stopError);
+                cause.addSuppressed(stopError);
+            }
+        }
     }
 
     @PreDestroy

@@ -67,8 +67,9 @@ public class SessionController {
             bodyMap.put("working_dir", workingDir);
             modifiedBody = MAPPER.writeValueAsString(bodyMap);
         } catch (Exception e) {
-            modifiedBody = "{\"working_dir\":\"" + workingDir.replace("\\", "\\\\")
-                    .replace("\"", "\\\"") + "\"}";
+            log.warn("[SESSION-START] invalid start body agentId={} userId={}: {}",
+                    agentId, userId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid JSON body");
         }
         String finalBody = modifiedBody;
         boolean resident = agentConfigService.isResidentInstance(agentId, userId);
@@ -88,8 +89,9 @@ public class SessionController {
                             // Extensions must be loaded before the session is returned to the client.
                             // This matches Node.js legacy and Goose Desktop behavior.
                             String sessionId = extractSessionId(startResponse);
-                            String resumeBody = "{\"session_id\":\"" + sessionId
-                                    + "\",\"load_model_and_extensions\":true}";
+                            String resumeBody = writeJson(Map.of(
+                                    "session_id", sessionId,
+                                    "load_model_and_extensions", true));
                             log.info("[SESSION-START] goosed start complete agentId={} userId={} sessionId={} port={} startCallMs={}",
                                     agentId, userId, sessionId, instance.getPort(), startCallMs);
                             long resumeStart = System.currentTimeMillis();
@@ -112,7 +114,10 @@ public class SessionController {
             Map<String, Object> map = MAPPER.readValue(startResponse,
                     new TypeReference<Map<String, Object>>() {});
             Object id = map.get("id");
-            return id != null ? id.toString() : null;
+            if (id == null || id.toString().isBlank()) {
+                throw new IllegalStateException("Missing session id in goosed start response");
+            }
+            return id.toString();
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse session ID from start response", e);
         }
@@ -224,8 +229,8 @@ public class SessionController {
                                      @PathVariable String sessionId,
                                      ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
-        Mono.fromRunnable(() -> cleanupUploads(userId, agentId, sessionId))
-                .subscribeOn(Schedulers.boundedElastic()).subscribe();
+        fireAndForget("cleanup-uploads " + agentId + ":" + sessionId,
+                () -> cleanupUploads(userId, agentId, sessionId));
         return instanceManager.getOrSpawn(agentId, userId)
                 .flatMap(instance -> goosedProxy.proxy(
                         exchange.getRequest(), exchange.getResponse(),
@@ -240,8 +245,8 @@ public class SessionController {
                                            @RequestParam String agentId,
                                            ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
-        Mono.fromRunnable(() -> cleanupUploads(userId, agentId, sessionId))
-                .subscribeOn(Schedulers.boundedElastic()).subscribe();
+        fireAndForget("cleanup-uploads " + agentId + ":" + sessionId,
+                () -> cleanupUploads(userId, agentId, sessionId));
         return instanceManager.getOrSpawn(agentId, userId)
                 .flatMap(instance -> goosedProxy.proxy(
                         exchange.getRequest(), exchange.getResponse(),
@@ -276,6 +281,23 @@ public class SessionController {
         } catch (Exception e) {
             log.warn("Failed to clean up uploads for session {}: {}", sessionId, e.getMessage());
         }
+    }
+
+    private String writeJson(Map<String, Object> body) {
+        try {
+            return MAPPER.writeValueAsString(body);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize JSON body", e);
+        }
+    }
+
+    private void fireAndForget(String operation, Runnable task) {
+        Mono.fromRunnable(task)
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                        ignored -> log.debug("[SESSION] async task completed: {}", operation),
+                        err -> log.error("[SESSION] async task failed: {}: {}", operation, err.getMessage(), err)
+                );
     }
 
     /**

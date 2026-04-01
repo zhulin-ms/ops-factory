@@ -18,9 +18,12 @@ import org.springframework.web.reactive.function.client.WebClientRequestExceptio
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.netty.http.client.PrematureCloseException;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class SseRelayService {
 
     private static final Logger log = LogManager.getLogger(SseRelayService.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final GoosedProxy goosedProxy;
     private final WebClient webClient;
@@ -222,7 +226,7 @@ public class SseRelayService {
      * Extracts session_id from the original request body.
      */
     private void stopAgentAsync(int port, String body, String secretKey) {
-        Mono.fromRunnable(() -> {
+        fireAndForget("stop-agent port=" + port, () -> {
             try {
                 // Extract session_id from the reply body (JSON: {"session_id":"...","user_message":...})
                 String sessionId = JsonUtil.extractSessionId(body);
@@ -230,7 +234,7 @@ public class SseRelayService {
                     log.warn("[SSE-DIAG] Cannot stop agent: no session_id in body");
                     return;
                 }
-                String stopBody = "{\"session_id\":\"" + sessionId + "\"}";
+                String stopBody = MAPPER.writeValueAsString(Map.of("session_id", sessionId));
                 String target = goosedProxy.goosedBaseUrl(port) + "/agent/stop";
                 log.info("[SSE-DIAG] sending stop to goosed session={} port={} target={}", sessionId, port, target);
                 webClient.post()
@@ -251,19 +255,19 @@ public class SseRelayService {
                                 err -> log.warn("[SSE-DIAG] stop failed for session {}: {}", sessionId, err.getMessage())
                         );
             } catch (Exception e) {
-                log.warn("[SSE-DIAG] stopAgentAsync error: {}", e.getMessage());
+                throw new IllegalStateException("Failed to stop agent on port " + port, e);
             }
-        }).subscribeOn(Schedulers.boundedElastic()).subscribe();
+        });
     }
 
     /**
      * Kill the hung instance on a separate thread to avoid blocking the SSE response.
      */
     private void recycleAsync(String agentId, String userId, String reason) {
-        Mono.fromRunnable(() -> {
+        fireAndForget("recycle-instance " + agentId + ":" + userId, () -> {
             log.info("[SSE-DIAG] Recycling hung instance {}:{} reason={}", agentId, userId, reason);
             instanceManager.forceRecycle(agentId, userId);
-        }).subscribeOn(Schedulers.boundedElastic()).subscribe();
+        });
     }
 
     /**
@@ -287,22 +291,36 @@ public class SseRelayService {
      * This occurs when goosed is killed while an SSE stream is active.
      */
     private boolean isPrematureClose(Throwable e) {
-        // Direct PrematureCloseException
-        if (e.getClass().getSimpleName().equals("PrematureCloseException")) return true;
-        // Wrapped in WebClientResponseException
+        if (e instanceof PrematureCloseException) {
+            return true;
+        }
         Throwable cause = e.getCause();
-        return cause != null && cause.getClass().getSimpleName().equals("PrematureCloseException");
+        return cause instanceof PrematureCloseException;
     }
 
     /**
      * Create a synthetic SSE error event that the webapp can parse and display.
      */
     private Flux<DataBuffer> sseErrorEvent(String reason) {
-        String ssePayload = "data: {\"type\":\"Error\",\"error\":\"" +
-                reason.replace("\"", "\\\"") + "\"}\n\n";
-        DataBuffer buf = DefaultDataBufferFactory.sharedInstance
-                .wrap(ssePayload.getBytes(StandardCharsets.UTF_8));
-        return Flux.just(buf);
+        try {
+            String payload = MAPPER.writeValueAsString(Map.of("type", "Error", "error", reason));
+            String ssePayload = "data: " + payload + "\n\n";
+            DataBuffer buf = DefaultDataBufferFactory.sharedInstance
+                    .wrap(ssePayload.getBytes(StandardCharsets.UTF_8));
+            return Flux.just(buf);
+        } catch (Exception e) {
+            log.error("[SSE-DIAG] failed to serialize synthetic SSE error payload: {}", e.getMessage(), e);
+            return Flux.error(e);
+        }
+    }
+
+    private void fireAndForget(String operation, Runnable task) {
+        Mono.fromRunnable(task)
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                        ignored -> log.debug("[SSE-DIAG] async task completed: {}", operation),
+                        err -> log.error("[SSE-DIAG] async task failed: {}: {}", operation, err.getMessage(), err)
+                );
     }
 
     /**

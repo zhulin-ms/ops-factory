@@ -393,10 +393,11 @@ public class InstanceManagerExtendedTest {
 
         // Third spawn for user1 should fail with limit error
         try {
-            instanceManager.getOrSpawn("agent3", "user1").block();
+            invokeDoSpawn("agent3", "user1");
             fail("Expected per-user limit error");
         } catch (Exception e) {
-            assertTrue(e.getMessage().contains("Per-user instance limit"));
+            String message = allMessages(e);
+            assertTrue(message, message.contains("Per-user instance limit"));
         }
     }
 
@@ -417,10 +418,11 @@ public class InstanceManagerExtendedTest {
 
         // Third spawn should fail with global limit error
         try {
-            instanceManager.getOrSpawn("agent1", "user3").block();
+            invokeDoSpawn("agent1", "user3");
             fail("Expected global limit error");
         } catch (Exception e) {
-            assertTrue(e.getMessage().contains("Global instance limit"));
+            String message = allMessages(e);
+            assertTrue(message, message.contains("Global instance limit"));
         }
     }
 
@@ -445,6 +447,55 @@ public class InstanceManagerExtendedTest {
         } catch (Exception e) {
             // Should fail because goosed binary doesn't exist, not because of per-user limit
             assertFalse(e.getMessage().contains("Per-user instance limit"));
+        }
+    }
+
+    @Test
+    public void testCleanupFailedSpawn_removesEntryStopsProcessAndMarksError() throws Exception {
+        Process aliveProcess = mock(Process.class);
+        when(aliveProcess.isAlive()).thenReturn(true, true, false);
+
+        ManagedInstance failedInstance = new ManagedInstance("agent1", "user1", 8080, 1L, aliveProcess, "secret");
+        failedInstance.setStatus(ManagedInstance.Status.STARTING);
+        addInstanceDirectly(failedInstance);
+
+        Method cleanup = InstanceManager.class.getDeclaredMethod("cleanupFailedSpawn",
+                String.class, ManagedInstance.class, Process.class, java.util.function.Supplier.class, Exception.class);
+        cleanup.setAccessible(true);
+        cleanup.invoke(instanceManager, failedInstance.getKey(), failedInstance, aliveProcess,
+                (java.util.function.Supplier<String>) () -> "spawn agent1:user1", new RuntimeException("boom"));
+
+        assertNull(instanceManager.getInstance("agent1", "user1"));
+        assertEquals(ManagedInstance.Status.ERROR, failedInstance.getStatus());
+        org.mockito.Mockito.verify(aliveProcess).destroy();
+    }
+
+    private String allMessages(Throwable error) {
+        StringBuilder messages = new StringBuilder();
+        Throwable current = error;
+        while (current != null) {
+            if (current.getMessage() != null) {
+                if (!messages.isEmpty()) {
+                    messages.append(" | ");
+                }
+                messages.append(current.getMessage());
+            }
+            current = current.getCause();
+        }
+        return messages.toString();
+    }
+
+    private Object invokeDoSpawn(String agentId, String userId) throws Exception {
+        Method doSpawn = InstanceManager.class.getDeclaredMethod("doSpawn", String.class, String.class);
+        doSpawn.setAccessible(true);
+        try {
+            return doSpawn.invoke(instanceManager, agentId, userId);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable target = e.getTargetException();
+            if (target instanceof Exception ex) {
+                throw ex;
+            }
+            throw e;
         }
     }
 

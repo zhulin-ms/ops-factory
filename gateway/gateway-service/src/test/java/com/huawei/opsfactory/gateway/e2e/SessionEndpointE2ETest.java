@@ -14,6 +14,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,6 +67,29 @@ public class SessionEndpointE2ETest extends BaseE2ETest {
         verify(goosedProxy).fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/start"), anyString(), anyInt(), anyString());
         verify(goosedProxy).fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/resume"),
                 org.mockito.ArgumentMatchers.contains("\"load_model_and_extensions\":true"), anyInt(), anyString());
+    }
+
+    @Test
+    public void startSession_injectsWorkingDirWithoutDroppingExistingFields() {
+        when(instanceManager.getOrSpawn("test-agent", "alice"))
+                .thenReturn(Mono.just(runningInstance));
+        when(goosedProxy.fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/start"), anyString(), anyInt(), anyString()))
+                .thenReturn(Mono.just("{\"id\":\"session-123\"}"));
+        when(goosedProxy.fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/resume"), anyString(), anyInt(), anyString()))
+                .thenReturn(Mono.just("{\"session\":{\"id\":\"session-123\"},\"extension_results\":[]}"));
+
+        webClient.post().uri("/gateway/agents/test-agent/agent/start")
+                .header(HEADER_SECRET_KEY, SECRET_KEY)
+                .header(HEADER_USER_ID, "alice")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"session_name\":\"test-session\"}")
+                .exchange()
+                .expectStatus().isOk();
+
+        verify(goosedProxy).fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/start"),
+                argThat(body -> body.contains("\"session_name\":\"test-session\"")
+                        && body.contains("\"working_dir\":\"/tmp/test-users/alice/agents/test-agent\"")),
+                anyInt(), anyString());
     }
 
     @Test
@@ -139,6 +163,19 @@ public class SessionEndpointE2ETest extends BaseE2ETest {
                 .bodyValue("{}")
                 .exchange()
                 .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    public void startSession_invalidJson_returns400() {
+        webClient.post().uri("/gateway/agents/test-agent/agent/start")
+                .header(HEADER_SECRET_KEY, SECRET_KEY)
+                .header(HEADER_USER_ID, "alice")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{invalid")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.error").isEqualTo("Invalid JSON body");
     }
 
     // ====================== GET /sessions (Aggregated) ======================
