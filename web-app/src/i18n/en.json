@@ -622,6 +622,7 @@
     "lastRun": "Last run",
     "never": "Never",
     "source": "Source",
+    "summaryUnavailable": "No task summary is available yet.",
     "resume": "Resume",
     "pause": "Pause",
     "runNow": "Run now",

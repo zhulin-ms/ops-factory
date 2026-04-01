@@ -622,6 +622,7 @@
     "lastRun": "上次运行",
     "never": "从未",
     "source": "来源",
+    "summaryUnavailable": "暂无可展示的任务说明。",
     "resume": "恢复",
     "pause": "暂停",
     "runNow": "立即运行",
