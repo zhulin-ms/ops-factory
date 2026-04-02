@@ -25,22 +25,26 @@ export default function Diagnosis() {
                 </div>
             </div>
 
-            <div className="config-tabs">
-                {tabs.map(tab => (
-                    <button
-                        key={tab.key}
-                        type="button"
-                        className={`config-tab ${activeTab === tab.key ? 'config-tab-active' : ''}`}
-                        onClick={() => setActiveTab(tab.key)}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
+            <div className="knowledge-tab-bar remote-diagnosis-tab-bar">
+                <div className="config-tabs knowledge-config-tabs remote-diagnosis-tabs">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.key}
+                            type="button"
+                            className={`config-tab ${activeTab === tab.key ? 'config-tab-active' : ''}`}
+                            onClick={() => setActiveTab(tab.key)}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
-            {activeTab === 'hosts' && <HostsTab />}
-            {activeTab === 'sops' && <SopsTab />}
-            {activeTab === 'whitelist' && <WhitelistTab />}
+            <div className="remote-diagnosis-shell">
+                {activeTab === 'hosts' && <HostsTab />}
+                {activeTab === 'sops' && <SopsTab />}
+                {activeTab === 'whitelist' && <WhitelistTab />}
+            </div>
         </div>
     )
 }
