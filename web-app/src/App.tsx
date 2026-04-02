@@ -9,6 +9,7 @@ import AgentConfigure from './pages/AgentConfigure'
 import ScheduledActions from './pages/ScheduledActions'
 import Monitoring from './pages/Monitoring'
 import Inbox from './pages/Inbox'
+import BusinessIntelligence from './pages/BusinessIntelligence'
 import Diagnosis from './pages/remote-diagnosis/Diagnosis'
 import Knowledge from './pages/Knowledge'
 import KnowledgeConfigure from './pages/KnowledgeConfigure'
@@ -50,6 +51,7 @@ function AppContent() {
                         <Route path="/chat" element={<Chat />} />
                         <Route path="/history" element={<History />} />
                         <Route path="/files" element={<Files />} />
+                        <Route path="/business-intelligence" element={<AdminRoute><BusinessIntelligence /></AdminRoute>} />
                         <Route path="/scheduled-actions" element={<AdminRoute><ScheduledActions /></AdminRoute>} />
                         <Route path="/monitoring" element={<AdminRoute><Monitoring /></AdminRoute>} />
                         <Route path="/remote-diagnosis" element={<Diagnosis />} />

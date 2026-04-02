@@ -136,6 +136,24 @@ export default function Sidebar() {
 
     const businessNavItems: NavGroupItem[] = [
         {
+            key: 'business-intelligence',
+            element: (
+                <NavLink
+                    to="/business-intelligence"
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                    title={isCollapsed ? t('sidebar.businessIntelligence') : undefined}
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 19h16" />
+                        <path d="M7 16V9" />
+                        <path d="M12 16V5" />
+                        <path d="M17 16v-3" />
+                    </svg>
+                    <span className="nav-label">{t('sidebar.businessIntelligence')}</span>
+                </NavLink>
+            ),
+        },
+        {
             key: 'remote-diagnosis',
             element: (
                 <NavLink

@@ -4,6 +4,20 @@ import { useHosts } from '../../hooks/useHosts'
 import { useToast } from '../../contexts/ToastContext'
 import type { Host, HostCreateRequest } from '../../types/host'
 
+function TrashIcon() {
+    return (
+        <svg viewBox="0 0 20 20" fill="none" width="18" height="18" aria-hidden="true">
+            <path
+                d="M6.5 5.5h7m-6 0V4.75A1.75 1.75 0 0 1 9.25 3h1.5A1.75 1.75 0 0 1 12.5 4.75v.75m-8 0h11m-1 0-.6 8.39a1.75 1.75 0 0 1-1.75 1.61H7.85A1.75 1.75 0 0 1 6.1 13.89L5.5 5.5m2.75 2.5v4m4-4v4"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Tag Input sub-component (inline)
 // ---------------------------------------------------------------------------
@@ -564,206 +578,205 @@ export function HostsTab() {
 
     return (
         <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--spacing-4)' }}>
-                <div>
-                    <h2 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>{t('remoteDiagnosis.hosts.title')}</h2>
-                    <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>{t('remoteDiagnosis.hosts.subtitle')}</p>
-                </div>
-                <div style={{ display: 'flex', gap: 'var(--spacing-3)' }}>
-                    <button className="btn btn-secondary" onClick={handleExport} disabled={hosts.length === 0}>
-                        {t('remoteDiagnosis.hosts.exportJson')}
-                    </button>
-                    <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>
-                        {t('remoteDiagnosis.hosts.importJson')}
-                    </button>
-                    <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
-                    <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-                        {t('remoteDiagnosis.hosts.addHost')}
-                    </button>
-                </div>
-            </div>
-
-            {error && (
-                <div className="conn-banner conn-banner-error">
-                    {error}
-                </div>
-            )}
-
-            {allTags.length > 0 && (
-                <div
-                    style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: 'var(--spacing-2)',
-                        marginBottom: 'var(--spacing-5)',
-                        alignItems: 'center',
-                    }}
-                >
-                    <span
-                        style={{
-                            fontSize: 'var(--font-size-sm)',
-                            color: 'var(--color-text-muted)',
-                            marginRight: 'var(--spacing-2)',
-                        }}
-                    >
-                        {t('remoteDiagnosis.hosts.filterByTags')}:
-                    </span>
-                    <button
-                        type="button"
-                        className={`btn btn-secondary`}
-                        onClick={clearTagFilter}
-                        style={{
-                            padding: '2px 10px',
-                            fontSize: 'var(--font-size-xs)',
-                            opacity: selectedTags.length === 0 ? 1 : 0.6,
-                        }}
-                    >
-                        {t('remoteDiagnosis.hosts.allTags')}
-                    </button>
-                    {allTags.map(tag => (
+            <section className="knowledge-section-card remote-diagnosis-section-card">
+                <div className="knowledge-section-header remote-diagnosis-section-header">
+                    <div>
+                        <h2 className="knowledge-section-title">
+                            {t('remoteDiagnosis.hosts.title')}
+                        </h2>
+                        <p className="knowledge-section-description">
+                            {t('remoteDiagnosis.hosts.subtitle')}
+                        </p>
+                    </div>
+                    <div className="knowledge-doc-toolbar-actions remote-diagnosis-toolbar-actions">
                         <button
-                            key={tag}
-                            type="button"
-                            onClick={() => toggleTagFilter(tag)}
-                            style={{
-                                padding: '2px 10px',
-                                borderRadius: 'var(--radius-full)',
-                                fontSize: 'var(--font-size-xs)',
-                                border: '1px solid',
-                                borderColor: selectedTags.includes(tag)
-                                    ? 'var(--color-accent)'
-                                    : 'var(--color-border)',
-                                background: selectedTags.includes(tag)
-                                    ? 'var(--color-accent-subtle)'
-                                    : 'var(--color-bg-primary)',
-                                color: selectedTags.includes(tag)
-                                    ? 'var(--color-text-primary)'
-                                    : 'var(--color-text-secondary)',
-                                cursor: 'pointer',
-                                fontWeight: selectedTags.includes(tag) ? 600 : 400,
-                                transition: 'all var(--transition-fast)',
-                            }}
+                            className="btn btn-secondary"
+                            onClick={handleExport}
+                            disabled={hosts.length === 0}
                         >
-                            {tag}
+                            {t('remoteDiagnosis.hosts.exportJson')}
                         </button>
-                    ))}
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            {t('remoteDiagnosis.hosts.importJson')}
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".json"
+                            style={{ display: 'none' }}
+                            onChange={handleImport}
+                        />
+                        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+                            {t('remoteDiagnosis.hosts.addHost')}
+                        </button>
+                    </div>
                 </div>
-            )}
 
-            {isLoading ? (
-                <div className="empty-state">
-                    <h3 className="empty-state-title">{t('common.loading')}</h3>
-                </div>
-            ) : filteredHosts.length === 0 ? (
-                <div className="empty-state">
-                    <svg
-                        className="empty-state-icon"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                    >
-                        <rect x="2" y="3" width="20" height="18" rx="2" />
-                        <path d="M8 21V7m8 0v14" />
-                        <path d="M2 7h20" />
-                    </svg>
-                    <h3 className="empty-state-title">{t('remoteDiagnosis.hosts.noHosts')}</h3>
-                    <p className="empty-state-description">{t('remoteDiagnosis.hosts.noHostsHint')}</p>
-                </div>
-            ) : (
-                <div className="agents-grid">
-                    {filteredHosts.map(host => (
-                        <div key={host.id} className="agent-card" style={{ minHeight: 220 }}>
-                            {/* Card header: name + test status */}
-                            <div className="agent-card-header">
-                                <div className="agent-card-title">
+                {error && <div className="conn-banner conn-banner-error">{error}</div>}
+
+                {allTags.length > 0 && (
+                    <div className="remote-diagnosis-filters">
+                        <span className="remote-diagnosis-filter-label">
+                            {t('remoteDiagnosis.hosts.filterByTags')}:
+                        </span>
+                        <button
+                            type="button"
+                            className={`remote-diagnosis-filter-chip${selectedTags.length === 0 ? ' active' : ''}`}
+                            onClick={clearTagFilter}
+                        >
+                            {t('remoteDiagnosis.hosts.allTags')}
+                        </button>
+                        {allTags.map(tag => (
+                            <button
+                                key={tag}
+                                type="button"
+                                className={`remote-diagnosis-filter-chip${selectedTags.includes(tag) ? ' active' : ''}`}
+                                onClick={() => toggleTagFilter(tag)}
+                            >
+                                {tag}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {isLoading ? (
+                    <div className="remote-diagnosis-empty-shell">
+                        <div className="empty-state">
+                            <h3 className="empty-state-title">{t('common.loading')}</h3>
+                        </div>
+                    </div>
+                ) : filteredHosts.length === 0 ? (
+                    <div className="remote-diagnosis-empty-shell">
+                        <div className="empty-state">
+                            <svg
+                                className="empty-state-icon"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                            >
+                                <rect x="2" y="3" width="20" height="18" rx="2" />
+                                <path d="M8 21V7m8 0v14" />
+                                <path d="M2 7h20" />
+                            </svg>
+                            <h3 className="empty-state-title">{t('remoteDiagnosis.hosts.noHosts')}</h3>
+                            <p className="empty-state-description">
+                                {t('remoteDiagnosis.hosts.noHostsHint')}
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="remote-diagnosis-host-grid">
+                        {filteredHosts.map(host => (
+                            <div
+                                key={host.id}
+                                className="knowledge-section-card remote-diagnosis-host-card"
+                            >
+                                <div className="remote-diagnosis-host-head">
                                     <div>
-                                        <div className="agent-name">{host.name}</div>
+                                        <h3 className="knowledge-section-title" style={{ marginBottom: 0 }}>
+                                            {host.name}
+                                        </h3>
                                         {host.description && (
-                                            <div className="scheduled-cron">{host.description}</div>
+                                            <p className="knowledge-section-description">
+                                                {host.description}
+                                            </p>
                                         )}
                                     </div>
-                                </div>
-                                {testResults[host.id] && (
-                                    <span className={`status-pill ${testResults[host.id].ok ? 'status-running' : 'status-stopped'}`}>
-                                        {testResults[host.id].ok ? 'OK' : 'FAIL'}
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Tags */}
-                            {host.tags && host.tags.length > 0 && (
-                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 'var(--spacing-3)' }}>
-                                    {host.tags.map(tag => (
+                                    {testResults[host.id] && (
                                         <span
-                                            key={tag}
-                                            style={{
-                                                display: 'inline-block',
-                                                padding: '1px 8px',
-                                                borderRadius: 'var(--radius-full)',
-                                                fontSize: 'var(--font-size-xs)',
-                                                background: 'var(--color-accent-subtle)',
-                                                color: 'var(--color-text-primary)',
-                                            }}
+                                            className={`remote-diagnosis-meta-tag ${testResults[host.id].ok ? '' : ''}`}
                                         >
-                                            {tag}
+                                            {testResults[host.id].ok ? 'OK' : 'FAIL'}
                                         </span>
-                                    ))}
+                                    )}
                                 </div>
-                            )}
 
-                            {/* Meta rows */}
-                            <div className="agent-meta">
-                                <div className="agent-meta-row">
-                                    <span className="agent-meta-label">{t('remoteDiagnosis.hosts.ip')}</span>
-                                    <span className="agent-meta-value" style={{ fontFamily: 'monospace' }}>{host.ip}:{host.port}</span>
+                                {host.tags && host.tags.length > 0 && (
+                                    <div className="remote-diagnosis-host-tags">
+                                        {host.tags.map(tag => (
+                                            <span key={tag} className="remote-diagnosis-meta-tag">
+                                                {tag}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="remote-diagnosis-host-meta">
+                                    <div className="remote-diagnosis-host-meta-item">
+                                        <span className="remote-diagnosis-node-label">
+                                            {t('remoteDiagnosis.hosts.ip')}
+                                        </span>
+                                        <span className="remote-diagnosis-host-meta-value" style={{ fontFamily: 'monospace' }}>
+                                            {host.ip}:{host.port}
+                                        </span>
+                                    </div>
+                                    <div className="remote-diagnosis-host-meta-item">
+                                        <span className="remote-diagnosis-node-label">
+                                            {t('remoteDiagnosis.hosts.username')}
+                                        </span>
+                                        <span className="remote-diagnosis-host-meta-value">
+                                            {host.username}
+                                        </span>
+                                    </div>
+                                    <div className="remote-diagnosis-host-meta-item">
+                                        <span className="remote-diagnosis-node-label">
+                                            {t('remoteDiagnosis.hosts.authType')}
+                                        </span>
+                                        <span className="remote-diagnosis-host-meta-value">
+                                            {t(`remoteDiagnosis.hosts.${host.authType === 'key' ? 'key' : 'password'}`)}
+                                        </span>
+                                    </div>
+                                    {testResults[host.id] && (
+                                        <div className="remote-diagnosis-host-meta-item">
+                                            <span className="remote-diagnosis-node-label">
+                                                {t('remoteDiagnosis.hosts.testConnection')}
+                                            </span>
+                                            <span className="remote-diagnosis-host-test">
+                                                {testResults[host.id].msg}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="agent-meta-row">
-                                    <span className="agent-meta-label">{t('remoteDiagnosis.hosts.username')}</span>
-                                    <span className="agent-meta-value">{host.username}</span>
-                                </div>
-                                <div className="agent-meta-row">
-                                    <span className="agent-meta-label">{t('remoteDiagnosis.hosts.authType')}</span>
-                                    <span className="agent-meta-value">
-                                        {t(`remoteDiagnosis.hosts.${host.authType === 'key' ? 'key' : 'password'}`)}
-                                    </span>
+
+                                <div className="remote-diagnosis-card-actions">
+                                    <button
+                                        type="button"
+                                        className="btn btn-subtle"
+                                        onClick={() => handleTest(host)}
+                                        disabled={testingId === host.id}
+                                    >
+                                        {testingId === host.id
+                                            ? t('remoteDiagnosis.hosts.testing')
+                                            : t('remoteDiagnosis.hosts.testConnection')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-subtle"
+                                        onClick={() => {
+                                            setEditingHost(host)
+                                            setShowAddModal(true)
+                                        }}
+                                    >
+                                        {t('common.edit')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="knowledge-doc-action-btn knowledge-doc-action-icon danger"
+                                        onClick={() => handleDelete(host)}
+                                        aria-label={t('common.delete')}
+                                    >
+                                        <TrashIcon />
+                                    </button>
                                 </div>
                             </div>
-
-                            {/* Actions */}
-                            <div className="scheduled-actions">
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    onClick={() => handleTest(host)}
-                                    disabled={testingId === host.id}
-                                >
-                                    {testingId === host.id
-                                        ? t('remoteDiagnosis.hosts.testing')
-                                        : t('remoteDiagnosis.hosts.testConnection')}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary"
-                                    onClick={() => {
-                                        setEditingHost(host)
-                                        setShowAddModal(true)
-                                    }}
-                                >
-                                    {t('common.edit')}
-                                </button>
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary agent-delete-button"
-                                    onClick={() => handleDelete(host)}
-                                >
-                                    {t('common.delete')}
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+                        ))}
+                    </div>
+                )}
+            </section>
 
             {(showAddModal || editingHost) && (
                 <HostFormModal

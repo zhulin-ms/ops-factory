@@ -234,28 +234,29 @@ export default function BusinessIntelligence() {
     }, [activeTabId, overview])
 
     return (
-        <div className="page-container sidebar-top-page business-intelligence-page">
-            <div className="page-header business-intelligence-header">
-                <div className="business-intelligence-header-copy">
-                    <h1 className="page-title">{t('businessIntelligence.title')}</h1>
-                    <p className="page-subtitle">{t('businessIntelligence.subtitle')}</p>
-                </div>
-                <div className="business-intelligence-header-actions">
-                    <div className="business-intelligence-header-meta" aria-label={t('businessIntelligence.reportingPeriod')}>
-                        <span className="business-intelligence-header-meta-label">{t('businessIntelligence.reportingPeriod')}</span>
-                        <span className="business-intelligence-header-meta-value">{activeTab?.executiveSummary?.hero.periodLabel || '—'}</span>
+        <div className="page-container sidebar-top-page resource-page business-intelligence-page">
+            <div className="page-header">
+                <div className="business-intelligence-toolbar">
+                    <div>
+                        <h1 className="page-title">{t('businessIntelligence.title')}</h1>
+                        <p className="page-subtitle">{t('businessIntelligence.subtitle')}</p>
                     </div>
-                    <button
-                        type="button"
-                        className="btn btn-secondary business-intelligence-refresh-button"
-                        onClick={() => void loadOverview({ forceRefresh: true })}
-                        disabled={refreshing}
-                        aria-label={refreshing ? t('businessIntelligence.refreshing') : t('businessIntelligence.refresh')}
-                        title={refreshing ? t('businessIntelligence.refreshing') : t('businessIntelligence.refresh')}
-                    >
-                        <RefreshCw size={15} className={refreshing ? 'business-intelligence-refresh-icon spinning' : 'business-intelligence-refresh-icon'} />
-                        <span className="visually-hidden">{refreshing ? t('businessIntelligence.refreshing') : t('businessIntelligence.refresh')}</span>
-                    </button>
+                    <div className="business-intelligence-toolbar-actions">
+                        <div className="business-intelligence-header-meta" aria-label={t('businessIntelligence.reportingPeriod')}>
+                            <span className="business-intelligence-header-meta-label">{t('businessIntelligence.reportingPeriod')}</span>
+                            <span className="business-intelligence-header-meta-value">{activeTab?.executiveSummary?.hero.periodLabel || '—'}</span>
+                        </div>
+                        <button
+                            type="button"
+                            className="btn btn-secondary business-intelligence-refresh-button"
+                            onClick={() => void loadOverview({ forceRefresh: true })}
+                            disabled={refreshing}
+                            aria-label={refreshing ? t('businessIntelligence.refreshing') : t('businessIntelligence.refresh')}
+                            title={refreshing ? t('businessIntelligence.refreshing') : t('businessIntelligence.refresh')}
+                        >
+                            <RefreshCw size={15} className={refreshing ? 'business-intelligence-refresh-icon spinning' : 'business-intelligence-refresh-icon'} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -272,7 +273,7 @@ export default function BusinessIntelligence() {
                 </div>
             ) : overview && activeTab ? (
                 <>
-                    <div className="config-tabs business-intelligence-tabs" role="tablist" aria-label="业务智能分析标签">
+                    <div className="config-tabs" role="tablist" aria-label="业务智能分析标签">
                         {overview.tabs.map(tab => (
                             <button
                                 key={tab.id}

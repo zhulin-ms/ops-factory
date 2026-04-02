@@ -42,7 +42,7 @@
     "monitoring": "Monitoring",
     "businessIntelligence": "Business Intelligence",
     "remoteDiagnosis": "Remote Diagnosis",
-    "faultDiagnosis": "Remote Diagnosis",
+    "faultDiagnosis": "SOP Workflow",
     "hosts": "Hosts",
     "sops": "SOPs",
     "whitelist": "Whitelist",

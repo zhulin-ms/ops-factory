@@ -42,7 +42,7 @@
     "monitoring": "监控",
     "businessIntelligence": "业务智能",
     "remoteDiagnosis": "远程诊断管理",
-    "faultDiagnosis": "远程诊断",
+    "faultDiagnosis": "SOP 工作流",
     "hosts": "主机管理",
     "sops": "SOP管理",
     "whitelist": "命令白名单",
