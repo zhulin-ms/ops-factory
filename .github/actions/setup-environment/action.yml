@@ -1,0 +1,75 @@
+name: 'Setup Environment'
+description: 'Setup Node.js, Java, and Maven for the project'
+
+inputs:
+  node-version:
+    description: 'Node.js version'
+    required: false
+    default: '24'
+  
+  java-version:
+    description: 'Java version'
+    required: false
+    default: '21'
+  
+  cache-dependencies:
+    description: 'Cache dependencies'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.cache-dependencies == 'true' && 'npm' || '' }}
+    
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: ${{ inputs.java-version }}
+        cache: ${{ inputs.cache-dependencies == 'true' && 'maven' || '' }}
+    
+    - name: Verify environment
+      shell: bash
+      run: |
+        echo "=== Environment Verification ==="
+        echo "Node.js: $(node --version)"
+        echo "npm: $(npm --version)"
+        echo "Java: $(java -version 2>&1 | head -1)"
+        echo "Maven: $(mvn --version | head -1)"
+        echo "================================"
+    
+    - name: Install TypeScript dependencies
+      shell: bash
+      run: |
+        echo "=== Installing TypeScript dependencies ==="
+        
+        # web-app
+        if [ -f "web-app/package-lock.json" ]; then
+          echo "Installing web-app dependencies..."
+          cd web-app
+          npm ci
+          cd ..
+        fi
+        
+        # typescript-sdk
+        if [ -f "typescript-sdk/package-lock.json" ]; then
+          echo "Installing typescript-sdk dependencies..."
+          cd typescript-sdk
+          npm ci
+          cd ..
+        fi
+        
+        # test
+        if [ -f "test/package-lock.json" ]; then
+          echo "Installing test dependencies..."
+          cd test
+          npm ci
+          cd ..
+        fi
+        
+        echo "=== Dependencies installed successfully ==="

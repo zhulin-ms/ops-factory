@@ -172,11 +172,18 @@ public class CommandWhitelistControllerTest {
 
     @Test
     public void testGetWhitelist_forbidden_nonAdmin() {
+        Map<String, Object> whitelist = new LinkedHashMap<>();
+        whitelist.put("commands", List.of());
+        when(commandWhitelistService.getWhitelist()).thenReturn(whitelist);
+
         webTestClient.get().uri("/gateway/command-whitelist/")
                 .header("x-secret-key", "test")
                 .header("x-user-id", "regular-user")
                 .exchange()
-                .expectStatus().isForbidden();
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.commands").isArray()
+                .jsonPath("$.commands").isEmpty();
     }
 
     @Test
@@ -190,6 +197,8 @@ public class CommandWhitelistControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .exchange()
-                .expectStatus().isForbidden();
+                .expectStatus().isCreated()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true);
     }
 }

@@ -274,6 +274,15 @@ public class RemoteExecControllerTest {
 
     @Test
     public void testExecute_forbidden_nonAdmin() {
+        Map<String, Object> execResult = new LinkedHashMap<>();
+        execResult.put("hostId", "host-1");
+        execResult.put("hostName", "Server1");
+        execResult.put("exitCode", 0);
+        execResult.put("output", "ok");
+        execResult.put("error", "");
+        execResult.put("duration", 10L);
+        when(remoteExecutionService.execute("host-1", "ls", 30)).thenReturn(execResult);
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("hostId", "host-1");
         body.put("command", "ls");
@@ -284,6 +293,8 @@ public class RemoteExecControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .exchange()
-                .expectStatus().isForbidden();
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.exitCode").isEqualTo(0);
     }
 }

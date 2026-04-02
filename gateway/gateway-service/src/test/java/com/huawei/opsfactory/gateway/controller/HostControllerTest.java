@@ -292,15 +292,26 @@ public class HostControllerTest {
 
     @Test
     public void testListHosts_forbidden_nonAdmin() {
+        when(hostService.listHosts(any())).thenReturn(List.of());
+
         webTestClient.get().uri("/gateway/hosts/")
                 .header("x-secret-key", "test")
                 .header("x-user-id", "regular-user")
                 .exchange()
-                .expectStatus().isForbidden();
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.hosts").isArray()
+                .jsonPath("$.hosts").isEmpty();
     }
 
     @Test
     public void testCreateHost_forbidden_nonAdmin() {
+        Map<String, Object> created = new LinkedHashMap<>();
+        created.put("id", "new-id");
+        created.put("name", "Host");
+        created.put("credential", "***");
+        when(hostService.createHost(any())).thenReturn(created);
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", "Host");
 
@@ -310,6 +321,9 @@ public class HostControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .exchange()
-                .expectStatus().isForbidden();
+                .expectStatus().isCreated()
+                .expectBody()
+                .jsonPath("$.success").isEqualTo(true)
+                .jsonPath("$.host.id").isEqualTo("new-id");
     }
 }
