@@ -40,6 +40,7 @@
     "files": "文件",
     "scheduler": "定时任务",
     "monitoring": "监控",
+    "businessIntelligence": "业务智能",
     "remoteDiagnosis": "远程诊断管理",
     "faultDiagnosis": "远程诊断",
     "hosts": "主机管理",

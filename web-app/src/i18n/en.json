@@ -40,6 +40,7 @@
     "files": "Files",
     "scheduler": "Scheduler",
     "monitoring": "Monitoring",
+    "businessIntelligence": "Business Intelligence",
     "remoteDiagnosis": "Remote Diagnosis",
     "faultDiagnosis": "Remote Diagnosis",
     "hosts": "Hosts",
