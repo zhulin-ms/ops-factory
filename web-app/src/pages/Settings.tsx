@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useUser } from '../contexts/UserContext'
+import './Settings.css'
 
 const EMOJI_AVATARS = ['🦆', '🐱', '🐶', '🦊', '🐸', '🐼', '🐨', '🦉', '🐙', '🦄', '🐝', '🦋']
 
@@ -127,7 +128,7 @@ export default function SettingsModal({ isOpen, onClose }: { isOpen: boolean; on
                                     <div className="settings-row-label">
                                         <div className="settings-row-text">{t('settings.account')}</div>
                                     </div>
-                                    <button className="settings-logout-btn" onClick={handleLogout}>
+                                    <button className="btn btn-secondary" onClick={handleLogout}>
                                         {t('settings.logout')}
                                     </button>
                                 </div>

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useGoosed } from '../contexts/GoosedContext'
 import { useMonitoring, useMonitoringPlatform, type TimeRange, type DailyPoint, type TraceRow, type AgentInfo } from '../hooks/useMonitoring'
 import { useMetrics, type MetricsPoint, type AgentMetrics } from '../hooks/useMetrics'
+import './Monitoring.css'
 
 // --- Helpers --------------------------------------------------------------
 

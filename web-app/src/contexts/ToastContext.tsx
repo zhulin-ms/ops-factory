@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import './Toast.css'
 
 export interface Toast {
     id: string

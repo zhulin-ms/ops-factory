@@ -75,21 +75,21 @@ function VariableEditor({
     )
 
     return (
-        <div className="remote-diagnosis-inline-editor">
-            <div className="remote-diagnosis-inline-editor-head">
-                <p className="remote-diagnosis-inline-editor-title">
+        <div className="sop-workflow-inline-editor">
+            <div className="sop-workflow-inline-editor-head">
+                <p className="sop-workflow-inline-editor-title">
                     {t('remoteDiagnosis.sops.nodeVariables')}
                 </p>
                 <button
                     type="button"
-                    className="btn btn-subtle remote-diagnosis-inline-add"
+                    className="btn btn-subtle sop-workflow-inline-add"
                     onClick={addVar}
                 >
                     + {t('remoteDiagnosis.sops.addNode')}
                 </button>
             </div>
             {variables.map((v, i: number) => (
-                <div key={i} className="remote-diagnosis-inline-row">
+                <div key={i} className="sop-workflow-inline-row">
                     <input
                         className="form-input"
                         placeholder={t('remoteDiagnosis.sops.varName')}
@@ -108,7 +108,7 @@ function VariableEditor({
                         value={v.description ?? ''}
                         onChange={e => updateVar(i, 'description', e.target.value)}
                     />
-                    <label className="remote-diagnosis-next-option">
+                    <label className="sop-workflow-next-option">
                         <input
                             type="checkbox"
                             checked={v.required ?? false}
@@ -118,7 +118,7 @@ function VariableEditor({
                     </label>
                     <button
                         type="button"
-                        className="knowledge-doc-action-btn knowledge-doc-action-icon danger remote-diagnosis-inline-remove"
+                        className="knowledge-doc-action-btn knowledge-doc-action-icon danger sop-workflow-inline-remove"
                         onClick={() => removeVar(i)}
                         title={t('remoteDiagnosis.sops.removeNode')}
                     >
@@ -179,22 +179,22 @@ function TransitionEditor({
     )
 
     return (
-        <div className="remote-diagnosis-inline-editor">
-            <div className="remote-diagnosis-inline-editor-head">
-                <p className="remote-diagnosis-inline-editor-title">
+        <div className="sop-workflow-inline-editor">
+            <div className="sop-workflow-inline-editor-head">
+                <p className="sop-workflow-inline-editor-title">
                     {t('remoteDiagnosis.sops.nodeTransitions')}
                 </p>
                 <button
                     type="button"
-                    className="btn btn-subtle remote-diagnosis-inline-add"
+                    className="btn btn-subtle sop-workflow-inline-add"
                     onClick={addTransition}
                 >
                     + {t('remoteDiagnosis.sops.addNode')}
                 </button>
             </div>
             {transitions.map((tr, i) => (
-                <div key={i} className="remote-diagnosis-transition-card">
-                    <div className="remote-diagnosis-transition-head">
+                <div key={i} className="sop-workflow-transition-card">
+                    <div className="sop-workflow-transition-head">
                         <input
                             className="form-input"
                             placeholder={t('remoteDiagnosis.sops.transitionCondition')}
@@ -203,7 +203,7 @@ function TransitionEditor({
                         />
                         <button
                             type="button"
-                            className="knowledge-doc-action-btn knowledge-doc-action-icon danger remote-diagnosis-inline-remove"
+                            className="knowledge-doc-action-btn knowledge-doc-action-icon danger sop-workflow-inline-remove"
                             onClick={() => removeTransition(i)}
                             title={t('remoteDiagnosis.sops.removeNode')}
                         >
@@ -211,14 +211,14 @@ function TransitionEditor({
                         </button>
                     </div>
                     {nodeNames.length > 0 && (
-                        <div className="remote-diagnosis-next-nodes">
-                            <span className="remote-diagnosis-next-label">
+                        <div className="sop-workflow-next-nodes">
+                            <span className="sop-workflow-next-label">
                                 {t('remoteDiagnosis.sops.transitionNext')}:
                             </span>
                             {nodeNames.map(name => {
                                 const checked = (tr.nextNodes ?? []).includes(name)
                                 return (
-                                    <label key={name} className="remote-diagnosis-next-option">
+                                    <label key={name} className="sop-workflow-next-option">
                                         <input
                                             type="checkbox"
                                             checked={checked}
@@ -339,7 +339,7 @@ function SopFormModal({
     return (
         <div className="modal-overlay">
             <div
-                className="modal remote-diagnosis-modal-wide"
+                className="modal sop-workflow-modal-wide"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="modal-header">
@@ -351,14 +351,14 @@ function SopFormModal({
                     </button>
                 </div>
 
-                <div className="modal-body remote-diagnosis-modal-body">
+                <div className="modal-body sop-workflow-modal-body">
                     {error && (
                         <div className="agents-alert agents-alert-error">
                             {error}
                         </div>
                     )}
 
-                    <section className="knowledge-section-card remote-diagnosis-form-section">
+                    <section className="knowledge-section-card sop-workflow-form-section">
                         <div className="knowledge-section-header knowledge-section-header-compact">
                             <div>
                                 <h3 className="knowledge-section-title">
@@ -370,7 +370,7 @@ function SopFormModal({
                             </div>
                         </div>
 
-                        <div className="remote-diagnosis-modal-grid">
+                        <div className="sop-workflow-modal-grid">
                             <div className="form-group">
                                 <label className="form-label">{t('remoteDiagnosis.sops.name')}</label>
                                 <input
@@ -415,13 +415,13 @@ function SopFormModal({
                         </div>
                     </section>
 
-                    <section className="knowledge-section-card remote-diagnosis-node-editor">
-                        <div className="remote-diagnosis-node-editor-head">
-                            <div className="remote-diagnosis-node-editor-copy">
-                                <h3 className="remote-diagnosis-node-editor-title">
+                    <section className="knowledge-section-card sop-workflow-node-editor">
+                        <div className="sop-workflow-node-editor-head">
+                            <div className="sop-workflow-node-editor-copy">
+                                <h3 className="sop-workflow-node-editor-title">
                                     {t('remoteDiagnosis.sops.nodeEditor')}
                                 </h3>
-                                <p className="remote-diagnosis-node-editor-description">
+                                <p className="sop-workflow-node-editor-description">
                                     {t('remoteDiagnosis.sops.subtitle')}
                                 </p>
                             </div>
@@ -434,15 +434,15 @@ function SopFormModal({
                             </button>
                         </div>
                         {nodes.map((node, idx) => (
-                            <div key={node.id} className="remote-diagnosis-node-surface">
-                                <div className="remote-diagnosis-node-surface-head">
-                                    <span className="remote-diagnosis-node-index">
+                            <div key={node.id} className="sop-workflow-node-surface">
+                                <div className="sop-workflow-node-surface-head">
+                                    <span className="sop-workflow-node-index">
                                         #{idx + 1}
                                     </span>
                                     {nodes.length > 1 && (
                                         <button
                                             type="button"
-                                            className="btn btn-quiet-danger remote-diagnosis-inline-danger"
+                                            className="btn btn-quiet-danger sop-workflow-inline-danger"
                                             onClick={() => handleRemoveNode(idx)}
                                         >
                                             {t('remoteDiagnosis.sops.removeNode')}
@@ -450,8 +450,8 @@ function SopFormModal({
                                     )}
                                 </div>
 
-                                <div className="remote-diagnosis-modal-grid">
-                                    <div className="form-group remote-diagnosis-compact-field">
+                                <div className="sop-workflow-modal-grid">
+                                    <div className="form-group sop-workflow-compact-field">
                                         <label className="form-label">{t('remoteDiagnosis.sops.nodeName')}</label>
                                         <input
                                             className="form-input"
@@ -459,7 +459,7 @@ function SopFormModal({
                                             onChange={e => handleNodeChange(idx, 'name', e.target.value)}
                                         />
                                     </div>
-                                    <div className="form-group remote-diagnosis-compact-field">
+                                    <div className="form-group sop-workflow-compact-field">
                                         <label className="form-label">{t('remoteDiagnosis.sops.nodeType')}</label>
                                         <select
                                             className="form-input"
@@ -475,7 +475,7 @@ function SopFormModal({
 
                                 {node.type === 'browser' ? (
                                     <>
-                                        <div className="form-group remote-diagnosis-compact-field">
+                                        <div className="form-group sop-workflow-compact-field">
                                             <label className="form-label">{t('remoteDiagnosis.sops.browserUrl')}</label>
                                             <input
                                                 className="form-input"
@@ -484,7 +484,7 @@ function SopFormModal({
                                                 onChange={e => handleNodeChange(idx, 'browserUrl', e.target.value)}
                                             />
                                         </div>
-                                        <div className="form-group remote-diagnosis-compact-field">
+                                        <div className="form-group sop-workflow-compact-field">
                                             <label className="form-label">{t('remoteDiagnosis.sops.browserAction')}</label>
                                             <textarea
                                                 className="form-input"
@@ -494,7 +494,7 @@ function SopFormModal({
                                                 onChange={e => handleNodeChange(idx, 'browserAction', e.target.value)}
                                             />
                                         </div>
-                                        <div className="form-group remote-diagnosis-compact-field">
+                                        <div className="form-group sop-workflow-compact-field">
                                             <label className="form-label">{t('remoteDiagnosis.sops.browserMode')}</label>
                                             <select
                                                 className="form-input"
@@ -508,7 +508,7 @@ function SopFormModal({
                                     </>
                                 ) : (
                                     <>
-                                        <div className="form-group remote-diagnosis-compact-field">
+                                        <div className="form-group sop-workflow-compact-field">
                                             <label className="form-label">{t('remoteDiagnosis.sops.nodeTags')}</label>
                                             <input
                                                 className="form-input"
@@ -521,7 +521,7 @@ function SopFormModal({
                                             />
                                         </div>
 
-                                        <div className="form-group remote-diagnosis-compact-field remote-diagnosis-command-field">
+                                        <div className="form-group sop-workflow-compact-field sop-workflow-command-field">
                                             <label className="form-label">{t('remoteDiagnosis.sops.nodeCommand')}</label>
                                             <textarea
                                                 className="form-input"
@@ -550,7 +550,7 @@ function SopFormModal({
                                     </>
                                 )}
 
-                                <div className="form-group remote-diagnosis-compact-field">
+                                <div className="form-group sop-workflow-compact-field">
                                     <label className="form-label">{t('remoteDiagnosis.sops.nodeOutputFormat')}</label>
                                     <input
                                         className="form-input"
@@ -559,7 +559,7 @@ function SopFormModal({
                                     />
                                 </div>
 
-                                <div className="form-group remote-diagnosis-compact-field remote-diagnosis-analysis-field">
+                                <div className="form-group sop-workflow-compact-field sop-workflow-analysis-field">
                                     <label className="form-label">{t('remoteDiagnosis.sops.nodeAnalysis')}</label>
                                     <textarea
                                         className="form-input"
@@ -606,34 +606,34 @@ function SopExpandableRow({ sop, onEdit, onDelete }: {
 
     return (
         <>
-            <tr className="remote-diagnosis-table-row">
+            <tr className="sop-workflow-table-row">
                 <td>
                     <button
                         type="button"
-                        className="remote-diagnosis-expand-button"
+                        className="sop-workflow-expand-button"
                         onClick={() => setExpanded(prev => !prev)}
                     >
                         <svg
                             viewBox="0 0 20 20"
                             fill="currentColor"
-                            className={`remote-diagnosis-expand-icon${expanded ? ' expanded' : ''}`}
+                            className={`sop-workflow-expand-icon${expanded ? ' expanded' : ''}`}
                         >
                             <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
                         </svg>
                         <span style={{ fontWeight: 700 }}>{sop.name}</span>
                     </button>
                 </td>
-                <td className="remote-diagnosis-muted-text">
+                <td className="sop-workflow-muted-text">
                     {sop.description || '—'}
                 </td>
                 <td>
                     {sop.triggerCondition || '—'}
                 </td>
                 <td style={{ textAlign: 'center' }}>
-                    <span className="remote-diagnosis-count-pill">{sop.nodes?.length ?? 0}</span>
+                    <span className="sop-workflow-count-pill">{sop.nodes?.length ?? 0}</span>
                 </td>
                 <td>
-                    <div className="remote-diagnosis-table-actions">
+                    <div className="sop-workflow-table-actions">
                         <button
                             type="button"
                             className="btn btn-subtle"
@@ -653,24 +653,24 @@ function SopExpandableRow({ sop, onEdit, onDelete }: {
                 </td>
             </tr>
             {expanded && (
-                <tr className="remote-diagnosis-detail-row">
+                <tr className="sop-workflow-detail-row">
                     <td colSpan={5}>
-                        <div className="remote-diagnosis-detail-panel">
+                        <div className="sop-workflow-detail-panel">
                             {sop.nodes && sop.nodes.length > 0 ? (
-                                <div className="remote-diagnosis-node-list">
+                                <div className="sop-workflow-node-list">
                                     {sop.nodes.map((node, i) => (
-                                        <div key={node.id || i} className="remote-diagnosis-node-card">
-                                            <div className="remote-diagnosis-node-header">
-                                                <p className="remote-diagnosis-node-name">
+                                        <div key={node.id || i} className="sop-workflow-node-card">
+                                            <div className="sop-workflow-node-header">
+                                                <p className="sop-workflow-node-name">
                                                     {node.name || `Node ${i + 1}`}
                                                 </p>
                                                 <span
-                                                    className={`remote-diagnosis-node-type ${
+                                                    className={`sop-workflow-node-type ${
                                                         node.type === 'start'
-                                                            ? 'remote-diagnosis-node-type-start'
+                                                            ? 'sop-workflow-node-type-start'
                                                             : node.type === 'browser'
-                                                              ? 'remote-diagnosis-node-type-browser'
-                                                              : 'remote-diagnosis-node-type-analysis'
+                                                              ? 'sop-workflow-node-type-browser'
+                                                              : 'sop-workflow-node-type-analysis'
                                                     }`}
                                                 >
                                                     {node.type === 'start'
@@ -680,23 +680,23 @@ function SopExpandableRow({ sop, onEdit, onDelete }: {
                                                           : t('remoteDiagnosis.sops.analysisNode')}
                                                 </span>
                                             </div>
-                                            <div className="remote-diagnosis-node-grid">
+                                            <div className="sop-workflow-node-grid">
                                                 {node.type === 'browser' ? (
                                                     <>
-                                                        <div className="remote-diagnosis-node-item">
-                                                            <span className="remote-diagnosis-node-label">
+                                                        <div className="sop-workflow-node-item">
+                                                            <span className="sop-workflow-node-label">
                                                                 {t('remoteDiagnosis.sops.browserUrl')}
                                                             </span>
-                                                            <code className="remote-diagnosis-code-pill">
+                                                            <code className="sop-workflow-code-pill">
                                                                 {node.browserUrl || '—'}
                                                             </code>
                                                         </div>
                                                         {node.browserAction && (
-                                                            <div className="remote-diagnosis-node-item" style={{ gridColumn: '1 / -1' }}>
-                                                                <span className="remote-diagnosis-node-label">
+                                                            <div className="sop-workflow-node-item" style={{ gridColumn: '1 / -1' }}>
+                                                                <span className="sop-workflow-node-label">
                                                                     {t('remoteDiagnosis.sops.browserAction')}
                                                                 </span>
-                                                                <span className="remote-diagnosis-node-value">
+                                                                <span className="sop-workflow-node-value">
                                                                     {node.browserAction}
                                                                 </span>
                                                             </div>
@@ -705,33 +705,33 @@ function SopExpandableRow({ sop, onEdit, onDelete }: {
                                                 ) : (
                                                     <>
                                                         {node.hostTags && node.hostTags.length > 0 && (
-                                                            <div className="remote-diagnosis-node-item">
-                                                                <span className="remote-diagnosis-node-label">
+                                                            <div className="sop-workflow-node-item">
+                                                                <span className="sop-workflow-node-label">
                                                                     {t('remoteDiagnosis.sops.nodeTags')}
                                                                 </span>
-                                                                <div className="remote-diagnosis-host-tags">
+                                                                <div className="sop-workflow-host-tags">
                                                                 {node.hostTags.map(tag => (
-                                                                    <span key={tag} className="remote-diagnosis-meta-tag">
+                                                                    <span key={tag} className="sop-workflow-meta-tag">
                                                                         {tag}
                                                                     </span>
                                                                 ))}
                                                                 </div>
                                                             </div>
                                                         )}
-                                                        <div className="remote-diagnosis-node-item">
-                                                            <span className="remote-diagnosis-node-label">
+                                                        <div className="sop-workflow-node-item">
+                                                            <span className="sop-workflow-node-label">
                                                                 {t('remoteDiagnosis.sops.nodeCommand')}
                                                             </span>
-                                                            <code className="remote-diagnosis-code-pill">
+                                                            <code className="sop-workflow-code-pill">
                                                                 {node.command || '—'}
                                                             </code>
                                                         </div>
                                                         {node.variables && node.variables.length > 0 && (
-                                                            <div className="remote-diagnosis-node-item">
-                                                                <span className="remote-diagnosis-node-label">
+                                                            <div className="sop-workflow-node-item">
+                                                                <span className="sop-workflow-node-label">
                                                                     {t('remoteDiagnosis.sops.nodeVariables')}
                                                                 </span>
-                                                                <span className="remote-diagnosis-node-value">
+                                                                <span className="sop-workflow-node-value">
                                                                     {node.variables.map(v => v.name).join(', ')}
                                                                 </span>
                                                             </div>
@@ -739,11 +739,11 @@ function SopExpandableRow({ sop, onEdit, onDelete }: {
                                                     </>
                                                 )}
                                                 {node.transitions && node.transitions.length > 0 && (
-                                                    <div className="remote-diagnosis-node-item">
-                                                        <span className="remote-diagnosis-node-label">
+                                                    <div className="sop-workflow-node-item">
+                                                        <span className="sop-workflow-node-label">
                                                             {t('remoteDiagnosis.sops.nodeTransitions')}
                                                         </span>
-                                                        <span className="remote-diagnosis-node-value">
+                                                        <span className="sop-workflow-node-value">
                                                             {node.transitions
                                                                 .map(tr => `${tr.condition} -> ${tr.nextNodeId}`)
                                                                 .join('; ')}
@@ -865,15 +865,15 @@ export function SopsTab() {
 
     return (
         <>
-            <section className="knowledge-section-card remote-diagnosis-section-card">
-                <div className="knowledge-section-header remote-diagnosis-section-header">
+            <section className="knowledge-section-card sop-workflow-section-card">
+                <div className="knowledge-section-header sop-workflow-section-header">
                     <div>
                         <h2 className="knowledge-section-title">{t('remoteDiagnosis.sops.title')}</h2>
                         <p className="knowledge-section-description">
                             {t('remoteDiagnosis.sops.subtitle')}
                         </p>
                     </div>
-                    <div className="knowledge-doc-toolbar-actions remote-diagnosis-toolbar-actions">
+                    <div className="knowledge-doc-toolbar-actions sop-workflow-toolbar-actions">
                         <button
                             className="btn btn-secondary"
                             onClick={handleExport}
@@ -903,13 +903,13 @@ export function SopsTab() {
                 {error && <div className="conn-banner conn-banner-error">{error}</div>}
 
                 {isLoading ? (
-                    <div className="remote-diagnosis-empty-shell">
+                    <div className="sop-workflow-empty-shell">
                         <div className="empty-state">
                             <h3 className="empty-state-title">{t('common.loading')}</h3>
                         </div>
                     </div>
                 ) : sops.length === 0 ? (
-                    <div className="remote-diagnosis-empty-shell">
+                    <div className="sop-workflow-empty-shell">
                         <div className="empty-state">
                             <svg
                                 className="empty-state-icon"
@@ -927,9 +927,9 @@ export function SopsTab() {
                         </div>
                     </div>
                 ) : (
-                    <div className="remote-diagnosis-list-shell">
-                        <div className="remote-diagnosis-table-wrap">
-                            <table className="remote-diagnosis-table">
+                    <div className="sop-workflow-list-shell">
+                        <div className="sop-workflow-table-wrap">
+                            <table className="sop-workflow-table">
                                 <thead>
                                     <tr>
                                         <th>{t('remoteDiagnosis.sops.name')}</th>

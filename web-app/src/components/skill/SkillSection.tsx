@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSkills } from '../../hooks/useSkills'
 import SkillCard from './SkillCard'
+import './Skill.css'
 
 interface SkillSectionProps {
     agentId: string
@@ -22,10 +23,10 @@ export default function SkillSection({ agentId, onBrowseMarket }: SkillSectionPr
 
     return (
         <div className="skill-section">
-            <div className="skill-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h3 className="skill-section-title" style={{ margin: 0 }}>{t('skill.title')}</h3>
-                    <span className="skill-section-count" style={{ backgroundColor: '#f3f4f6', padding: '2px 8px', borderRadius: '12px', fontSize: '12px' }}>{skills.length}</span>
+            <div className="skill-section-header">
+                <div className="skill-section-heading">
+                    <h3 className="skill-section-title">{t('skill.title')}</h3>
+                    <span className="skill-section-count">{skills.length}</span>
                 </div>
             {onBrowseMarket && (
                 <button

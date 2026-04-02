@@ -1,0 +1,453 @@
+.business-intelligence-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-6);
+}
+
+.business-intelligence-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    flex-shrink: 0;
+}
+
+.business-intelligence-header-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    white-space: nowrap;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid rgba(226, 232, 240, 0.78);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.72);
+}
+
+.business-intelligence-header-meta-label {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+}
+
+.business-intelligence-header-meta-value {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.business-intelligence-refresh-button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    border-color: rgba(226, 232, 240, 0.78);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.72);
+    color: var(--color-text-secondary);
+}
+
+.business-intelligence-refresh-button:hover:not(:disabled) {
+    color: var(--color-text-primary);
+    background: rgba(241, 245, 249, 0.92);
+}
+
+.business-intelligence-refresh-icon {
+    flex-shrink: 0;
+}
+
+.business-intelligence-section {
+    margin-bottom: var(--spacing-6);
+}
+
+.business-intelligence-content-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+    padding: var(--spacing-5);
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+.business-intelligence-content-card-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+    padding-bottom: var(--spacing-1);
+}
+
+.business-intelligence-content-card-copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+}
+
+.business-intelligence-content-card-kicker {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.business-intelligence-content-card-title {
+    margin: 0;
+    font-size: 1.5rem;
+    line-height: 1.25;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.business-intelligence-content-card-description {
+    margin: 0;
+    max-width: 64ch;
+    font-size: var(--font-size-sm);
+    line-height: 1.7;
+    color: var(--color-text-secondary);
+}
+
+.business-intelligence-content-card-body {
+    padding-top: var(--spacing-1);
+}
+
+.business-intelligence-content-card-note {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+    padding: var(--spacing-4);
+    border: 1px solid rgba(226, 232, 240, 0.88);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.9));
+}
+
+.business-intelligence-content-card-note strong {
+    font-size: 1rem;
+    font-weight: 650;
+    color: var(--color-text-primary);
+}
+
+.business-intelligence-content-card-note span {
+    font-size: var(--font-size-sm);
+    line-height: 1.7;
+    color: var(--color-text-secondary);
+}
+
+.business-intelligence-dashboard-shell {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+}
+
+.business-intelligence-dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-4);
+}
+
+.business-intelligence-dashboard-stat-card {
+    min-width: 0;
+    height: 100%;
+}
+
+.business-intelligence-dashboard-stat-value-wide {
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+
+.business-intelligence-dashboard-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+    gap: var(--spacing-4);
+    align-items: stretch;
+}
+
+.business-intelligence-dashboard-side {
+    display: grid;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-4);
+}
+
+.business-intelligence-dashboard-panel {
+    min-width: 0;
+}
+
+.business-intelligence-dashboard-panel-primary,
+.business-intelligence-dashboard-side .business-intelligence-dashboard-panel {
+    height: 100%;
+}
+
+.business-intelligence-dashboard-panel-header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    line-height: 1.35;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.business-intelligence-dashboard-panel-body {
+    flex: 1;
+    min-height: 168px;
+    border-radius: var(--radius-xl);
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.82), rgba(255, 255, 255, 0.9));
+    border: 1px solid rgba(241, 245, 249, 0.92);
+}
+
+.business-intelligence-dashboard-panel-body-tall {
+    min-height: 0;
+}
+
+.business-intelligence-dashboard-panel-body-wide {
+    min-height: 220px;
+}
+
+.business-intelligence-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--spacing-4);
+}
+
+.business-intelligence-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-4);
+    background: rgba(255, 255, 255, 0.78);
+}
+
+.business-intelligence-card.tone-success {
+    border-color: var(--color-border);
+}
+
+.business-intelligence-card.tone-warning {
+    border-color: var(--color-border);
+}
+
+.business-intelligence-card.tone-danger {
+    border-color: var(--color-border);
+}
+
+.business-intelligence-card::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 3px;
+    margin-bottom: var(--spacing-4);
+    border-radius: 999px;
+    background: var(--color-bg-tertiary);
+}
+
+.business-intelligence-card.tone-success::before {
+    background: rgba(34, 197, 94, 0.6);
+}
+
+.business-intelligence-card.tone-warning::before {
+    background: rgba(245, 158, 11, 0.75);
+}
+
+.business-intelligence-card.tone-danger::before {
+    background: rgba(239, 68, 68, 0.72);
+}
+
+.business-intelligence-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-3);
+}
+
+.business-intelligence-card-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-2);
+}
+
+.business-intelligence-card-value {
+    font-size: 1.75rem;
+    line-height: 1.2;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.business-intelligence-inline-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.business-intelligence-inline-badge.tone-success {
+    color: #15803d;
+    background: rgba(34, 197, 94, 0.12);
+}
+
+.business-intelligence-inline-badge.tone-warning {
+    color: #b45309;
+    background: rgba(245, 158, 11, 0.14);
+}
+
+.business-intelligence-inline-badge.tone-danger {
+    color: #b91c1c;
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.business-intelligence-content-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: var(--spacing-6);
+    align-items: start;
+}
+
+.business-intelligence-chart-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+}
+
+.business-intelligence-chart-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.business-intelligence-chart-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing-3);
+    font-size: var(--font-size-sm);
+}
+
+.business-intelligence-chart-label {
+    color: var(--color-text-primary);
+}
+
+.business-intelligence-chart-value {
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.business-intelligence-chart-track {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--color-surface-secondary);
+    overflow: hidden;
+}
+
+.business-intelligence-chart-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #2563eb 0%, #60a5fa 100%);
+}
+
+.business-intelligence-table-section {
+    grid-column: 1 / -1;
+}
+
+.business-intelligence-table-shell {
+    overflow-x: auto;
+}
+
+.business-intelligence-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.business-intelligence-table th,
+.business-intelligence-table td {
+    text-align: left;
+    padding: var(--spacing-3);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--font-size-sm);
+    vertical-align: middle;
+}
+
+.business-intelligence-table th {
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    background: var(--color-surface-secondary);
+    white-space: nowrap;
+}
+
+.business-intelligence-table-number {
+    text-align: right !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.business-intelligence-table-title-cell {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.business-intelligence-col-order-number {
+    width: 110px;
+}
+
+.business-intelligence-col-order-title {
+    width: 34%;
+}
+
+.business-intelligence-col-priority {
+    width: 72px;
+}
+
+.business-intelligence-col-category {
+    width: 150px;
+}
+
+.business-intelligence-col-resolver {
+    width: 140px;
+}
+
+.business-intelligence-col-duration {
+    width: 104px;
+}
+
+.business-intelligence-col-violation-type {
+    width: 96px;
+}
+
+.business-intelligence-executive-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-6);
+}
+
+.business-intelligence-executive-redesign {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-6);
+}
+
+@media (max-width: 900px) {
+    .business-intelligence-toolbar {
+        flex-direction: column;
+    }
+
+    .business-intelligence-toolbar-actions {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+
+    .business-intelligence-shell-tabs-list {
+        min-width: max-content;
+    }
+
+    .business-intelligence-dashboard-stats,
+    .business-intelligence-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .business-intelligence-dashboard-side {
+        grid-template-rows: none;
+    }
+
+    .business-intelligence-dashboard-panel-body-tall,
+    .business-intelligence-dashboard-panel-body-wide {
+        min-height: 220px;
+    }
+}

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react
 import { createPortal } from 'react-dom'
 import { KNOWLEDGE_SERVICE_URL } from '../config/runtime'
 import type { Citation } from '../utils/citationParser'
+import './CitationMark.css'
 
 interface CitationMarkProps {
     citation: Citation

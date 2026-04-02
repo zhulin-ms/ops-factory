@@ -578,8 +578,8 @@ export function HostsTab() {
 
     return (
         <>
-            <section className="knowledge-section-card remote-diagnosis-section-card">
-                <div className="knowledge-section-header remote-diagnosis-section-header">
+            <section className="knowledge-section-card sop-workflow-section-card">
+                <div className="knowledge-section-header sop-workflow-section-header">
                     <div>
                         <h2 className="knowledge-section-title">
                             {t('remoteDiagnosis.hosts.title')}
@@ -588,7 +588,7 @@ export function HostsTab() {
                             {t('remoteDiagnosis.hosts.subtitle')}
                         </p>
                     </div>
-                    <div className="knowledge-doc-toolbar-actions remote-diagnosis-toolbar-actions">
+                    <div className="knowledge-doc-toolbar-actions sop-workflow-toolbar-actions">
                         <button
                             className="btn btn-secondary"
                             onClick={handleExport}
@@ -618,13 +618,13 @@ export function HostsTab() {
                 {error && <div className="conn-banner conn-banner-error">{error}</div>}
 
                 {allTags.length > 0 && (
-                    <div className="remote-diagnosis-filters">
-                        <span className="remote-diagnosis-filter-label">
+                    <div className="sop-workflow-filters">
+                        <span className="sop-workflow-filter-label">
                             {t('remoteDiagnosis.hosts.filterByTags')}:
                         </span>
                         <button
                             type="button"
-                            className={`remote-diagnosis-filter-chip${selectedTags.length === 0 ? ' active' : ''}`}
+                            className={`sop-workflow-filter-chip${selectedTags.length === 0 ? ' active' : ''}`}
                             onClick={clearTagFilter}
                         >
                             {t('remoteDiagnosis.hosts.allTags')}
@@ -633,7 +633,7 @@ export function HostsTab() {
                             <button
                                 key={tag}
                                 type="button"
-                                className={`remote-diagnosis-filter-chip${selectedTags.includes(tag) ? ' active' : ''}`}
+                                className={`sop-workflow-filter-chip${selectedTags.includes(tag) ? ' active' : ''}`}
                                 onClick={() => toggleTagFilter(tag)}
                             >
                                 {tag}
@@ -643,13 +643,13 @@ export function HostsTab() {
                 )}
 
                 {isLoading ? (
-                    <div className="remote-diagnosis-empty-shell">
+                    <div className="sop-workflow-empty-shell">
                         <div className="empty-state">
                             <h3 className="empty-state-title">{t('common.loading')}</h3>
                         </div>
                     </div>
                 ) : filteredHosts.length === 0 ? (
-                    <div className="remote-diagnosis-empty-shell">
+                    <div className="sop-workflow-empty-shell">
                         <div className="empty-state">
                             <svg
                                 className="empty-state-icon"
@@ -669,13 +669,13 @@ export function HostsTab() {
                         </div>
                     </div>
                 ) : (
-                    <div className="remote-diagnosis-host-grid">
+                    <div className="sop-workflow-host-grid">
                         {filteredHosts.map(host => (
                             <div
                                 key={host.id}
-                                className="knowledge-section-card remote-diagnosis-host-card"
+                                className="knowledge-section-card sop-workflow-host-card"
                             >
-                                <div className="remote-diagnosis-host-head">
+                                <div className="sop-workflow-host-head">
                                     <div>
                                         <h3 className="knowledge-section-title" style={{ marginBottom: 0 }}>
                                             {host.name}
@@ -688,7 +688,7 @@ export function HostsTab() {
                                     </div>
                                     {testResults[host.id] && (
                                         <span
-                                            className={`remote-diagnosis-meta-tag ${testResults[host.id].ok ? '' : ''}`}
+                                            className={`sop-workflow-meta-tag ${testResults[host.id].ok ? '' : ''}`}
                                         >
                                             {testResults[host.id].ok ? 'OK' : 'FAIL'}
                                         </span>
@@ -696,53 +696,53 @@ export function HostsTab() {
                                 </div>
 
                                 {host.tags && host.tags.length > 0 && (
-                                    <div className="remote-diagnosis-host-tags">
+                                    <div className="sop-workflow-host-tags">
                                         {host.tags.map(tag => (
-                                            <span key={tag} className="remote-diagnosis-meta-tag">
+                                            <span key={tag} className="sop-workflow-meta-tag">
                                                 {tag}
                                             </span>
                                         ))}
                                     </div>
                                 )}
 
-                                <div className="remote-diagnosis-host-meta">
-                                    <div className="remote-diagnosis-host-meta-item">
-                                        <span className="remote-diagnosis-node-label">
+                                <div className="sop-workflow-host-meta">
+                                    <div className="sop-workflow-host-meta-item">
+                                        <span className="sop-workflow-node-label">
                                             {t('remoteDiagnosis.hosts.ip')}
                                         </span>
-                                        <span className="remote-diagnosis-host-meta-value" style={{ fontFamily: 'monospace' }}>
+                                        <span className="sop-workflow-host-meta-value" style={{ fontFamily: 'monospace' }}>
                                             {host.ip}:{host.port}
                                         </span>
                                     </div>
-                                    <div className="remote-diagnosis-host-meta-item">
-                                        <span className="remote-diagnosis-node-label">
+                                    <div className="sop-workflow-host-meta-item">
+                                        <span className="sop-workflow-node-label">
                                             {t('remoteDiagnosis.hosts.username')}
                                         </span>
-                                        <span className="remote-diagnosis-host-meta-value">
+                                        <span className="sop-workflow-host-meta-value">
                                             {host.username}
                                         </span>
                                     </div>
-                                    <div className="remote-diagnosis-host-meta-item">
-                                        <span className="remote-diagnosis-node-label">
+                                    <div className="sop-workflow-host-meta-item">
+                                        <span className="sop-workflow-node-label">
                                             {t('remoteDiagnosis.hosts.authType')}
                                         </span>
-                                        <span className="remote-diagnosis-host-meta-value">
+                                        <span className="sop-workflow-host-meta-value">
                                             {t(`remoteDiagnosis.hosts.${host.authType === 'key' ? 'key' : 'password'}`)}
                                         </span>
                                     </div>
                                     {testResults[host.id] && (
-                                        <div className="remote-diagnosis-host-meta-item">
-                                            <span className="remote-diagnosis-node-label">
+                                        <div className="sop-workflow-host-meta-item">
+                                            <span className="sop-workflow-node-label">
                                                 {t('remoteDiagnosis.hosts.testConnection')}
                                             </span>
-                                            <span className="remote-diagnosis-host-test">
+                                            <span className="sop-workflow-host-test">
                                                 {testResults[host.id].msg}
                                             </span>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="remote-diagnosis-card-actions">
+                                <div className="sop-workflow-card-actions">
                                     <button
                                         type="button"
                                         className="btn btn-subtle"

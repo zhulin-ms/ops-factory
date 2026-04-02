@@ -1,9 +1,9 @@
 import type { MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Session } from '@goosed/sdk'
-import { isScheduledSession } from '../config/runtime'
+import { isScheduledSession } from '../../../../config/runtime'
 
-type SessionWithAgent = Session & { agentId?: string }
+export type SessionWithAgent = Session & { agentId?: string }
 
 interface SessionItemProps {
     session: SessionWithAgent

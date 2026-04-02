@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import './ResourceCard.css'
 
 export type ResourceStatusTone = 'neutral' | 'configured' | 'success' | 'warning' | 'danger'
 

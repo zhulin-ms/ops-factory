@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { HostsTab } from './Hosts'
 import { SopsTab } from './Sops'
 import { WhitelistTab } from './Whitelist'
+import './sop-workflow.css'
 
 type DiagnosisTab = 'hosts' | 'sops' | 'whitelist'
 
@@ -25,8 +26,8 @@ export default function Diagnosis() {
                 </div>
             </div>
 
-            <div className="knowledge-tab-bar remote-diagnosis-tab-bar">
-                <div className="config-tabs knowledge-config-tabs remote-diagnosis-tabs">
+            <div className="knowledge-tab-bar sop-workflow-tab-bar">
+                <div className="config-tabs knowledge-config-tabs sop-workflow-tabs">
                     {tabs.map(tab => (
                         <button
                             key={tab.key}
@@ -40,7 +41,7 @@ export default function Diagnosis() {
                 </div>
             </div>
 
-            <div className="remote-diagnosis-shell">
+            <div className="sop-workflow-shell">
                 {activeTab === 'hosts' && <HostsTab />}
                 {activeTab === 'sops' && <SopsTab />}
                 {activeTab === 'whitelist' && <WhitelistTab />}

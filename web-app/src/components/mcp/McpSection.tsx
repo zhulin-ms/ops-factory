@@ -4,6 +4,7 @@ import { useMcp } from '../../hooks/useMcp'
 import McpCard from './McpCard'
 import AddMcpModal from './AddMcpModal'
 import type { McpEntry } from '../../types/mcp'
+import './Mcp.css'
 
 interface McpSectionProps {
   agentId: string | null
@@ -64,9 +65,9 @@ export default function McpSection({ agentId, onBrowseMarket }: McpSectionProps)
 
   return (
     <div className="mcp-section">
-      <div className="mcp-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="mcp-section-header">
         <h3 className="mcp-section-title">{t('mcp.title')}</h3>
-        <div className="mcp-header-actions" style={{ display: 'flex', gap: '8px' }}>
+        <div className="mcp-header-actions">
           {onBrowseMarket && (
             <button
               type="button"

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { KNOWLEDGE_SERVICE_URL } from '../config/runtime'
 import { usePreview } from '../contexts/PreviewContext'
 import type { Citation } from '../utils/citationParser'
+import './ReferenceList.css'
 
 interface ReferenceListProps {
     citations: Citation[]

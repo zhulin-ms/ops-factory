@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { usePrompts } from '../../hooks/usePrompts'
 import { useToast } from '../../contexts/ToastContext'
 import type { SystemPromptContent } from '../../types/systemPrompt'
+import './PromptsSection.css'
 
 interface PromptsSectionProps {
     agentId: string | null

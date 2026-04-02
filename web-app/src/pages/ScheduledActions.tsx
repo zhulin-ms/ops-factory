@@ -6,8 +6,10 @@ import { useGoosed } from '../contexts/GoosedContext'
 import { useToast } from '../contexts/ToastContext'
 import { useInbox } from '../contexts/InboxContext'
 import { useUser } from '../contexts/UserContext'
+import PageHeader from '../components/PageHeader'
 import { slugify } from '../config/runtime'
 import ResourceCard, { type ResourceStatusTone } from '../components/ResourceCard'
+import './ScheduledActions.css'
 
 interface FormState {
     name: string
@@ -335,10 +337,15 @@ export default function ScheduledActions() {
                 </div>
             ) : (
                 <>
-                    <div className="page-header">
-                        <h1 className="page-title">{t('scheduler.title')}</h1>
-                        <p className="page-subtitle">{t('scheduler.subtitle')}</p>
-                    </div>
+                    <PageHeader
+                        title={t('scheduler.title')}
+                        subtitle={t('scheduler.subtitle')}
+                        action={(
+                            <button type="button" className="btn btn-primary" onClick={openCreateModal} disabled={!selectedAgent}>
+                                {t('scheduler.createAction')}
+                            </button>
+                        )}
+                    />
 
                     <div className="scheduled-toolbar">
                         <label className="scheduled-agent-select-wrap">
@@ -353,10 +360,6 @@ export default function ScheduledActions() {
                                 ))}
                             </select>
                         </label>
-
-                        <button type="button" className="btn btn-primary" onClick={openCreateModal} disabled={!selectedAgent}>
-                            {t('scheduler.createAction')}
-                        </button>
                     </div>
                 </>
             )}

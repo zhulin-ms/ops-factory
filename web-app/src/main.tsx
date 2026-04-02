@@ -9,6 +9,9 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { initializeRuntimeConfig } from './config/runtime'
 import './i18n'
 import './App.css'
+import './components/UIPrimitives.css'
+import './components/SharedStates.css'
+import './components/SegmentedFilter.css'
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)
 

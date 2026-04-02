@@ -10,6 +10,7 @@ import ChatInput from '../components/ChatInput'
 import type { Session, ImageData } from '@goosed/sdk'
 import type { AttachedFile } from '../types/message'
 import { isScheduledSession } from '../config/runtime'
+import './Chat.css'
 
 interface LocationState {
     initialMessage?: string

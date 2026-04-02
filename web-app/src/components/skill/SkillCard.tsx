@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { SkillEntry } from '../../types/skill'
+import './Skill.css'
 
 interface SkillCardProps {
     skill: SkillEntry

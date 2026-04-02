@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import './Memory.css'
+import '../prompt/PromptsSection.css'
 
 export interface MemoryEntry {
     tags: string[]

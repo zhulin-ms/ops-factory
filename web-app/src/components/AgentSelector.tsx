@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useGoosed } from '../contexts/GoosedContext'
+import './AgentSelector.css'
 
 interface AgentSelectorProps {
     selectedAgent: string

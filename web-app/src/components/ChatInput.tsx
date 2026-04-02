@@ -6,6 +6,7 @@ import { compressImageDataUrl, isImageFile, parseDataUrl, readFileAsDataUrl } fr
 import { useVoiceInput } from '../hooks/useVoiceInput'
 import { useToast } from '../contexts/ToastContext'
 import type { AttachedFile } from '../types/message'
+import './ChatInput.css'
 
 // File handling constants
 const MAX_IMAGES_PER_MESSAGE = 3

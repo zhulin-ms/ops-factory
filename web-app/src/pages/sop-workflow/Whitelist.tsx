@@ -192,7 +192,7 @@ function ToggleSwitch({
             type="button"
             role="switch"
             aria-checked={checked}
-            className={`remote-diagnosis-switch${checked ? ' is-on' : ''}`}
+            className={`sop-workflow-switch${checked ? ' is-on' : ''}`}
             onClick={() => onChange(!checked)}
             onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -201,7 +201,7 @@ function ToggleSwitch({
                 }
             }}
         >
-            <span className="remote-diagnosis-switch-thumb" />
+            <span className="sop-workflow-switch-thumb" />
         </button>
     )
 }
@@ -334,8 +334,8 @@ export function WhitelistTab() {
 
     return (
         <>
-            <section className="knowledge-section-card remote-diagnosis-section-card">
-                <div className="knowledge-section-header remote-diagnosis-section-header">
+            <section className="knowledge-section-card sop-workflow-section-card">
+                <div className="knowledge-section-header sop-workflow-section-header">
                     <div>
                         <h2 className="knowledge-section-title">
                             {t('remoteDiagnosis.whitelist.title')}
@@ -344,7 +344,7 @@ export function WhitelistTab() {
                             {t('remoteDiagnosis.whitelist.subtitle')}
                         </p>
                     </div>
-                    <div className="knowledge-doc-toolbar-actions remote-diagnosis-toolbar-actions">
+                    <div className="knowledge-doc-toolbar-actions sop-workflow-toolbar-actions">
                         <button
                             className="btn btn-secondary"
                             onClick={handleExport}
@@ -374,13 +374,13 @@ export function WhitelistTab() {
                 {error && <div className="conn-banner conn-banner-error">{error}</div>}
 
                 {isLoading ? (
-                    <div className="remote-diagnosis-empty-shell">
+                    <div className="sop-workflow-empty-shell">
                         <div className="empty-state">
                             <h3 className="empty-state-title">{t('common.loading')}</h3>
                         </div>
                     </div>
                 ) : commands.length === 0 ? (
-                    <div className="remote-diagnosis-empty-shell">
+                    <div className="sop-workflow-empty-shell">
                         <div className="empty-state">
                             <svg
                                 className="empty-state-icon"
@@ -400,9 +400,9 @@ export function WhitelistTab() {
                         </div>
                     </div>
                 ) : (
-                    <div className="remote-diagnosis-list-shell">
-                        <div className="remote-diagnosis-table-wrap">
-                            <table className="remote-diagnosis-table">
+                    <div className="sop-workflow-list-shell">
+                        <div className="sop-workflow-table-wrap">
+                            <table className="sop-workflow-table">
                                 <thead>
                                     <tr>
                                         <th>{t('remoteDiagnosis.whitelist.pattern')}</th>
@@ -415,13 +415,13 @@ export function WhitelistTab() {
                                 </thead>
                                 <tbody>
                                     {commands.map(cmd => (
-                                        <tr key={cmd.pattern} className="remote-diagnosis-table-row">
+                                        <tr key={cmd.pattern} className="sop-workflow-table-row">
                                             <td>
-                                                <code className="remote-diagnosis-code-pill">
+                                                <code className="sop-workflow-code-pill">
                                                     {cmd.pattern}
                                                 </code>
                                             </td>
-                                            <td className="remote-diagnosis-muted-text">
+                                            <td className="sop-workflow-muted-text">
                                                 {cmd.description || '--'}
                                             </td>
                                             <td style={{ textAlign: 'center' }}>
@@ -431,7 +431,7 @@ export function WhitelistTab() {
                                                 />
                                             </td>
                                             <td>
-                                                <div className="remote-diagnosis-table-actions">
+                                                <div className="sop-workflow-table-actions">
                                                     <button
                                                         type="button"
                                                         className="btn btn-subtle"

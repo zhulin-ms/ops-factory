@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useMemory } from '../../hooks/useMemory'
 import { useToast } from '../../contexts/ToastContext'
 import MemoryFileCard from './MemoryFileCard'
+import './Memory.css'
+import '../prompt/PromptsSection.css'
 
 interface MemorySectionProps {
     agentId: string | null

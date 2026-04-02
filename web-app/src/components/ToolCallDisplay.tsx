@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import UIResourceRenderer, { isUIResource } from './UIResourceRenderer'
+import './ToolCallDisplay.css'
 
 // Type for embedded resource content
 interface EmbeddedResource {

@@ -33,6 +33,6 @@ describe('App', () => {
         // Sidebar should be present for authenticated user
         expect(screen.getByText('Home')).toBeInTheDocument()
         expect(screen.getByText('History')).toBeInTheDocument()
-        expect(screen.getByText('Remote Diagnosis')).toBeInTheDocument()
+        expect(screen.getByText('SOP Workflow')).toBeInTheDocument()
     })
 })

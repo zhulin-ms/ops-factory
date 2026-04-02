@@ -1,6 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import './Message.css'
+import './ToolCallDisplay.css'
 import ToolCallDisplay from './ToolCallDisplay'
 import CitationMark from './CitationMark'
 import ReferenceList from './ReferenceList'
