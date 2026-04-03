@@ -3,8 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useToast } from '../../../../contexts/ToastContext'
 import { KNOWLEDGE_SERVICE_URL } from '../../../../config/runtime'
+import CardGrid from '../../../../components/cards/CardGrid'
 import PageHeader from '../../../../components/PageHeader'
 import ResourceCard, { type ResourceStatusTone } from '../../../../components/ResourceCard'
+import ListResultsMeta from '../../../../components/list/ListResultsMeta'
+import ListSearchInput from '../../../../components/list/ListSearchInput'
+import ListToolbar from '../../../../components/list/ListToolbar'
+import ListWorkbench from '../../../../components/list/ListWorkbench'
 
 interface SourceSummary {
     id: string
@@ -329,123 +334,108 @@ export default function Knowledge() {
                 </div>
             )}
 
-            <div className="search-container">
-                <div className="search-input-wrapper" style={{ flex: 1 }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                        type="text"
-                        className="search-input"
-                        placeholder={t('knowledge.searchPlaceholder')}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    {searchTerm && (
-                        <button
-                            onClick={() => setSearchTerm('')}
-                            style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'var(--color-text-muted)',
-                                cursor: 'pointer',
-                                padding: 'var(--spacing-1)'
-                            }}
-                            aria-label="Clear search"
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                                <line x1="18" y1="6" x2="6" y2="18" />
-                                <line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                        </button>
-                    )}
-                </div>
-            </div>
-            
-            <div className="seg-filter" role="tablist" aria-label="Status filter">
-                <button
-                    type="button"
-                    className={`seg-filter-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
-                    onClick={() => setStatusFilter('ALL')}
-                >
-                    {t('knowledge.statusAll')}
-                </button>
-                <button
-                    type="button"
-                    className={`seg-filter-btn ${statusFilter === 'ACTIVE' ? 'active' : ''}`}
-                    onClick={() => setStatusFilter('ACTIVE')}
-                >
-                    {t('knowledge.statusActive')}
-                </button>
-                <button
-                    type="button"
-                    className={`seg-filter-btn ${statusFilter === 'DISABLED' ? 'active' : ''}`}
-                    onClick={() => setStatusFilter('DISABLED')}
-                >
-                    {t('knowledge.statusDisabled')}
-                </button>
-            </div>
+            <ListWorkbench
+                controls={(
+                    <ListToolbar
+                        primary={(
+                            <>
+                                <ListSearchInput
+                                    value={searchTerm}
+                                    placeholder={t('knowledge.searchPlaceholder')}
+                                    onChange={setSearchTerm}
+                                />
 
-            {isLoading ? (
-                <div className="empty-state">
-                    <div className="empty-state-title">{t('common.loading')}</div>
-                </div>
-            ) : filteredSources.length === 0 ? (
-                <div className="empty-state">
-                    <div className="empty-state-title">{t('knowledge.emptyTitle')}</div>
-                    <div className="empty-state-description">{t('knowledge.emptyHint')}</div>
-                </div>
-            ) : (
-                <div className="resource-grid">
-                    {filteredSources.map(source => {
-                        const sourceStats = stats[source.id]
-                        const descriptionText = source.description?.trim() || t('knowledge.noDescription')
-                        return (
-                            <ResourceCard
-                                key={source.id}
-                                title={source.name}
-                                statusLabel={getKnowledgeStatusLabel(source.status, t)}
-                                statusTone={getKnowledgeStatusTone(source.status)}
-                                summary={(
-                                    <p
-                                        className={[
-                                            'resource-card-summary-text',
-                                            !source.description ? 'resource-card-summary-placeholder' : '',
-                                        ].filter(Boolean).join(' ')}
-                                        title={descriptionText}
+                                <div className="seg-filter" role="tablist" aria-label="Status filter">
+                                    <button
+                                        type="button"
+                                        className={`seg-filter-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
+                                        onClick={() => setStatusFilter('ALL')}
                                     >
-                                        {descriptionText}
-                                    </p>
-                                )}
-                                metrics={[
-                                    { label: t('knowledge.documents'), value: sourceStats?.documentCount ?? 0 },
-                                    { label: t('knowledge.chunks'), value: sourceStats?.chunkCount ?? 0 },
-                                    { label: t('knowledge.updatedAt'), value: formatDate(source.updatedAt) },
-                                ]}
-                                footer={(
-                                    <>
-                                        <button
-                                            type="button"
-                                            className="resource-card-danger-action"
-                                            onClick={() => setDeleteTarget(source)}
+                                        {t('knowledge.statusAll')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`seg-filter-btn ${statusFilter === 'ACTIVE' ? 'active' : ''}`}
+                                        onClick={() => setStatusFilter('ACTIVE')}
+                                    >
+                                        {t('knowledge.statusActive')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`seg-filter-btn ${statusFilter === 'DISABLED' ? 'active' : ''}`}
+                                        onClick={() => setStatusFilter('DISABLED')}
+                                    >
+                                        {t('knowledge.statusDisabled')}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                        secondary={(searchTerm || statusFilter !== 'ALL') ? (
+                            <ListResultsMeta>{t('common.resultsFound', { count: filteredSources.length })}</ListResultsMeta>
+                        ) : undefined}
+                    />
+                )}
+            >
+                {isLoading ? (
+                    <div className="empty-state">
+                        <div className="empty-state-title">{t('common.loading')}</div>
+                    </div>
+                ) : filteredSources.length === 0 ? (
+                    <div className="empty-state">
+                        <div className="empty-state-title">{t('knowledge.emptyTitle')}</div>
+                        <div className="empty-state-description">{t('knowledge.emptyHint')}</div>
+                    </div>
+                ) : (
+                    <CardGrid className="knowledge-resource-grid">
+                        {filteredSources.map(source => {
+                            const sourceStats = stats[source.id]
+                            const descriptionText = source.description?.trim() || t('knowledge.noDescription')
+                            return (
+                                <ResourceCard
+                                    key={source.id}
+                                    title={source.name}
+                                    statusLabel={getKnowledgeStatusLabel(source.status, t)}
+                                    statusTone={getKnowledgeStatusTone(source.status)}
+                                    summary={(
+                                        <p
+                                            className={[
+                                                'resource-card-summary-text',
+                                                !source.description ? 'resource-card-summary-placeholder' : '',
+                                            ].filter(Boolean).join(' ')}
+                                            title={descriptionText}
                                         >
-                                            {t('common.delete')}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="resource-card-primary-action"
-                                            onClick={() => navigate(`/knowledge/${source.id}`)}
-                                        >
-                                            {t('knowledge.configure')}
-                                        </button>
-                                    </>
-                                )}
-                            />
-                        )
-                    })}
-                </div>
-            )}
+                                            {descriptionText}
+                                        </p>
+                                    )}
+                                    metrics={[
+                                        { label: t('knowledge.documents'), value: sourceStats?.documentCount ?? 0 },
+                                        { label: t('knowledge.chunks'), value: sourceStats?.chunkCount ?? 0 },
+                                        { label: t('knowledge.updatedAt'), value: formatDate(source.updatedAt) },
+                                    ]}
+                                    footer={(
+                                        <>
+                                            <button
+                                                type="button"
+                                                className="resource-card-danger-action"
+                                                onClick={() => setDeleteTarget(source)}
+                                            >
+                                                {t('common.delete')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="resource-card-primary-action"
+                                                onClick={() => navigate(`/knowledge/${source.id}`)}
+                                            >
+                                                {t('knowledge.configure')}
+                                            </button>
+                                        </>
+                                    )}
+                                />
+                            )
+                        })}
+                    </CardGrid>
+                )}
+            </ListWorkbench>
 
             {showCreateModal && (
                 <CreateKnowledgeModal

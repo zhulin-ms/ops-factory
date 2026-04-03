@@ -1,0 +1,5 @@
+.list-results-meta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-weight: 600;
+}

@@ -1,11 +1,11 @@
-import Monitoring from '../../../pages/Monitoring'
+import MonitoringPage from './pages/MonitoringPage'
 import type { AppModule } from '../../platform/module-types'
 
 const monitoringModule: AppModule = {
     id: 'monitoring',
     owner: 'platform',
     routes: [
-        { id: 'monitoring.index', path: '/monitoring', component: Monitoring, access: 'admin' },
+        { id: 'monitoring.index', path: '/monitoring', component: MonitoringPage, access: 'admin' },
     ],
     navItems: [
         {

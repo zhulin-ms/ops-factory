@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { useGoosed } from '../../../../contexts/GoosedContext'
 import { useUser } from '../../../../contexts/UserContext'
 import PageHeader from '../../../../components/PageHeader'
+import CardGrid from '../../../../components/cards/CardGrid'
+import CardWorkbench from '../../../../components/cards/CardWorkbench'
 import ResourceCard from '../../../../components/ResourceCard'
 import { CreateAgentModal } from '../components/CreateAgentModal'
 import { DeleteAgentModal } from '../components/DeleteAgentModal'
@@ -66,7 +68,8 @@ export default function Agents() {
                     <p className="empty-state-description">{t('agents.noAgentsHint')}</p>
                 </div>
             ) : (
-                <div className="resource-grid">
+                <CardWorkbench>
+                    <CardGrid>
                     {agents.map(agent => {
                         const skills = agentSkillsMap.get(agent.id) || []
                         const modelSummary = getModelSummary(agent.model, agent.provider, t('agents.unknown'))
@@ -74,19 +77,17 @@ export default function Agents() {
                             <ResourceCard
                                 key={agent.id}
                                 title={agent.name}
-                                summary={(
-                                    <div className="resource-card-summary-stack">
-                                        {shouldShowProviderTag(agent.provider, agent.model) && (
-                                            <div className="resource-card-tags">
-                                                <span className="resource-card-tag" title={agent.provider}>
-                                                    {agent.provider}
-                                                </span>
-                                            </div>
-                                        )}
-                                        <p className="resource-card-summary-text resource-card-summary-code" title={modelSummary}>
-                                            {modelSummary}
-                                        </p>
+                                tags={shouldShowProviderTag(agent.provider, agent.model) ? (
+                                    <div className="resource-card-tags">
+                                        <span className="resource-card-tag" title={agent.provider}>
+                                            {agent.provider}
+                                        </span>
                                     </div>
+                                ) : undefined}
+                                summary={(
+                                    <p className="resource-card-summary-text resource-card-summary-code" title={modelSummary}>
+                                        {modelSummary}
+                                    </p>
                                 )}
                                 metrics={[
                                     { label: t('agents.skills'), value: skills.length },
@@ -113,7 +114,8 @@ export default function Agents() {
                             />
                         )
                     })}
-                </div>
+                    </CardGrid>
+                </CardWorkbench>
             )}
 
             {showCreateModal && (

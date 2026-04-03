@@ -2108,7 +2108,7 @@ export default function KnowledgeConfigure() {
 
     if (isLoading && !source) {
         return (
-            <div className="page-container knowledge-configure-page">
+            <div className="page-container sidebar-top-page knowledge-configure-page">
                 <div className="empty-state">
                     <div className="empty-state-title">{t('common.loading')}</div>
                 </div>
@@ -2118,7 +2118,7 @@ export default function KnowledgeConfigure() {
 
     if (error && !source) {
         return (
-            <div className="page-container knowledge-configure-page">
+            <div className="page-container sidebar-top-page knowledge-configure-page">
                 <div className="knowledge-configure-header">
                     <button
                         type="button"
@@ -2151,8 +2151,8 @@ export default function KnowledgeConfigure() {
 
     const pageClassName = [
         'page-container',
+        'sidebar-top-page',
         'knowledge-configure-page',
-        activeTab === 'documents' ? 'knowledge-configure-documents' : '',
     ].filter(Boolean).join(' ')
 
     return (

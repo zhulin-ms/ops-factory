@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import KnowledgeConfigure from '../pages/KnowledgeConfigure'
+import KnowledgeConfigure from '../app/modules/knowledge/pages/KnowledgeConfigurePage'
 
 const showToast = vi.fn()
 const compareRequests: Array<Record<string, unknown>> = []

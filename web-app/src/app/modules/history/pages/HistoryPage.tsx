@@ -5,7 +5,13 @@ import type { Session } from '@goosed/sdk'
 import { useGoosed } from '../../../../contexts/GoosedContext'
 import { useInbox } from '../../../../contexts/InboxContext'
 import { useToast } from '../../../../contexts/ToastContext'
+import PageHeader from '../../../../components/PageHeader'
 import Pagination from '../../../../components/Pagination'
+import ListFooter from '../../../../components/list/ListFooter'
+import ListResultsMeta from '../../../../components/list/ListResultsMeta'
+import ListSearchInput from '../../../../components/list/ListSearchInput'
+import ListToolbar from '../../../../components/list/ListToolbar'
+import ListWorkbench from '../../../../components/list/ListWorkbench'
 import { isScheduledSession } from '../../../../config/runtime'
 import SessionList, { type SessionWithAgent } from '../components/SessionList'
 import '../styles/history.css'
@@ -192,62 +198,13 @@ export default function HistoryPage() {
 
     return (
         <div className="page-container sidebar-top-page history-page">
-            <header className="page-header">
-                <h1 className="page-title">{t('history.title')}</h1>
-                <p className="page-subtitle">{t('history.subtitle')}</p>
-            </header>
+            <PageHeader title={t('history.title')} subtitle={t('history.subtitle')} />
 
             {(error || (!isConnected && connectionError)) && (
                 <div className="conn-banner conn-banner-error">
                     {error || t('common.connectionError', { error: connectionError })}
                 </div>
             )}
-
-            <div className="search-container">
-                <div className="search-input-wrapper">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                        type="text"
-                        className="search-input"
-                        placeholder={t('history.searchPlaceholder')}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    {searchTerm && (
-                        <button
-                            onClick={() => setSearchTerm('')}
-                            style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'var(--color-text-muted)',
-                                cursor: 'pointer',
-                                padding: 'var(--spacing-1)',
-                            }}
-                            aria-label="Clear search"
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                                <line x1="18" y1="6" x2="6" y2="18" />
-                                <line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            <div className="seg-filter" role="tablist" aria-label="Session type filter">
-                <button type="button" className={`seg-filter-btn ${historyFilter === 'user' ? 'active' : ''}`} onClick={() => setHistoryFilter('user')}>
-                    {t('history.filterUser')}
-                </button>
-                <button type="button" className={`seg-filter-btn ${historyFilter === 'scheduled' ? 'active' : ''}`} onClick={() => setHistoryFilter('scheduled')}>
-                    {t('history.filterScheduled')}
-                </button>
-                <button type="button" className={`seg-filter-btn ${historyFilter === 'all' ? 'active' : ''}`} onClick={() => setHistoryFilter('all')}>
-                    {t('history.filterAll')}
-                </button>
-            </div>
 
             {lastDeletedSessionId && lastDeletedAt && (
                 <div
@@ -263,44 +220,35 @@ export default function HistoryPage() {
                 </div>
             )}
 
-            {searchTerm && filteredSessions.length === 0 && !isLoading && (
-                <div className="empty-state">
-                    <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <h3 className="empty-state-title">{t('common.noResults')}</h3>
-                    <p className="empty-state-description">
-                        {t('history.noMatchSessions', { term: searchTerm })}
-                    </p>
-                </div>
-            )}
+            <ListWorkbench
+                controls={(
+                    <ListToolbar
+                        primary={(
+                            <>
+                                <ListSearchInput
+                                    value={searchTerm}
+                                    placeholder={t('history.searchPlaceholder')}
+                                    onChange={setSearchTerm}
+                                />
 
-            {(!searchTerm || filteredSessions.length > 0) && (
-                <>
-                    {searchTerm && (
-                        <p
-                            style={{
-                                fontSize: 'var(--font-size-sm)',
-                                color: 'var(--color-text-secondary)',
-                                marginBottom: 'var(--spacing-4)',
-                            }}
-                        >
-                            {t('common.resultsFound', { count: filteredSessions.length })}
-                        </p>
-                    )}
-
-                    <SessionList
-                        sessions={paginatedSessions}
-                        isLoading={isLoading}
-                        onResume={handleResumeSession}
-                        onDelete={handleDeleteSession}
-                        deletingSessionKeys={deletingSessionKeys}
-                        getSessionKey={getSessionKey}
-                        onMarkUnread={historyFilter !== 'user' ? handleMarkUnread : undefined}
+                                <div className="seg-filter" role="tablist" aria-label="Session type filter">
+                                    <button type="button" className={`seg-filter-btn ${historyFilter === 'user' ? 'active' : ''}`} onClick={() => setHistoryFilter('user')}>
+                                        {t('history.filterUser')}
+                                    </button>
+                                    <button type="button" className={`seg-filter-btn ${historyFilter === 'scheduled' ? 'active' : ''}`} onClick={() => setHistoryFilter('scheduled')}>
+                                        {t('history.filterScheduled')}
+                                    </button>
+                                    <button type="button" className={`seg-filter-btn ${historyFilter === 'all' ? 'active' : ''}`} onClick={() => setHistoryFilter('all')}>
+                                        {t('history.filterAll')}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                        secondary={searchTerm ? <ListResultsMeta>{t('common.resultsFound', { count: filteredSessions.length })}</ListResultsMeta> : undefined}
                     />
-
-                    {filteredSessions.length > 0 && (
+                )}
+                footer={filteredSessions.length > 0 ? (
+                    <ListFooter>
                         <Pagination
                             currentPage={currentPage}
                             totalPages={totalPages}
@@ -313,22 +261,32 @@ export default function HistoryPage() {
                             }}
                             disabled={isLoading}
                         />
-                    )}
-                </>
-            )}
-
-            {!isLoading && filteredByType.length > 0 && (
-                <p
-                    style={{
-                        marginTop: 'var(--spacing-6)',
-                        fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-muted)',
-                        textAlign: 'center',
-                    }}
-                >
-                    {t('common.totalSessions', { count: filteredByType.length })}
-                </p>
-            )}
+                    </ListFooter>
+                ) : undefined}
+            >
+                {searchTerm && filteredSessions.length === 0 && !isLoading ? (
+                    <div className="empty-state">
+                        <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <h3 className="empty-state-title">{t('common.noResults')}</h3>
+                        <p className="empty-state-description">
+                            {t('history.noMatchSessions', { term: searchTerm })}
+                        </p>
+                    </div>
+                ) : (
+                    <SessionList
+                        sessions={paginatedSessions}
+                        isLoading={isLoading}
+                        onResume={handleResumeSession}
+                        onDelete={handleDeleteSession}
+                        deletingSessionKeys={deletingSessionKeys}
+                        getSessionKey={getSessionKey}
+                        onMarkUnread={historyFilter !== 'user' ? handleMarkUnread : undefined}
+                    />
+                )}
+            </ListWorkbench>
         </div>
     )
 }

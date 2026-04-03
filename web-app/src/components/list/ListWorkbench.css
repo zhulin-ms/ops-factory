@@ -1,0 +1,19 @@
+.list-workbench {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-4);
+}
+
+.list-workbench-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.list-workbench-body {
+    min-width: 0;
+}
+
+.list-workbench-footer {
+    padding-top: var(--spacing-4);
+}

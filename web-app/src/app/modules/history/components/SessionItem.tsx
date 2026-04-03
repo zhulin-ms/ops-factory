@@ -2,6 +2,7 @@ import type { MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Session } from '@goosed/sdk'
 import { isScheduledSession } from '../../../../config/runtime'
+import ListCard from '../../../../components/list/ListCard'
 
 export type SessionWithAgent = Session & { agentId?: string }
 
@@ -30,7 +31,7 @@ export default function SessionItem({ session, onResume, onDelete, isDeleting = 
     }
 
     return (
-        <div className="session-item animate-slide-in">
+        <ListCard className="session-item animate-slide-in">
             <div
                 className="session-info"
                 onClick={() => onResume(session)}
@@ -38,17 +39,21 @@ export default function SessionItem({ session, onResume, onDelete, isDeleting = 
             >
                 <div className="session-name">{session.name || t('history.untitledSession')}</div>
                 <div className="session-meta">
-                    <span className={`session-type-badge ${sessionType}`}>{sessionType.toUpperCase()}</span>
-                    {sessionType === 'scheduled' && session.schedule_id && (
-                        <span className="session-schedule-id">{t('history.schedule', { id: session.schedule_id })}</span>
-                    )}
-                    <span>{formattedDate}</span>
-                    {session.message_count !== undefined && (
-                        <span>{session.message_count} {t('common.messages')}</span>
-                    )}
-                    {session.total_tokens !== undefined && session.total_tokens !== null && (
-                        <span>{session.total_tokens.toLocaleString()} {t('common.tokens')}</span>
-                    )}
+                    <div className="session-meta-tags">
+                        <span className={`session-type-badge ${sessionType}`}>{sessionType.toUpperCase()}</span>
+                    </div>
+                    <div className="session-meta-details">
+                        {sessionType === 'scheduled' && session.schedule_id && (
+                            <span className="session-schedule-id">{t('history.schedule', { id: session.schedule_id })}</span>
+                        )}
+                        <span>{formattedDate}</span>
+                        {session.message_count !== undefined && (
+                            <span>{session.message_count} {t('common.messages')}</span>
+                        )}
+                        {session.total_tokens !== undefined && session.total_tokens !== null && (
+                            <span>{session.total_tokens.toLocaleString()} {t('common.tokens')}</span>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -86,6 +91,6 @@ export default function SessionItem({ session, onResume, onDelete, isDeleting = 
                     </svg>
                 </button>
             </div>
-        </div>
+        </ListCard>
     )
 }

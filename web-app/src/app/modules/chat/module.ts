@@ -1,11 +1,11 @@
-import Chat from '../../../pages/Chat'
+import ChatPage from './pages/ChatPage'
 import type { AppModule } from '../../platform/module-types'
 
 const chatModule: AppModule = {
     id: 'chat',
     owner: 'platform',
     routes: [
-        { id: 'chat.index', path: '/chat', component: Chat, access: 'authenticated', hidden: true },
+        { id: 'chat.index', path: '/chat', component: ChatPage, access: 'authenticated', hidden: true },
     ],
     navItems: [
         {
@@ -21,4 +21,3 @@ const chatModule: AppModule = {
 }
 
 export default chatModule
-

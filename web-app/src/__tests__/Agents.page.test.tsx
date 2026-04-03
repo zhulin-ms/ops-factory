@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import Agents from '../pages/Agents'
+import Agents from '../app/modules/agents/pages/AgentsPage'
 
 const refreshAgents = vi.fn()
 const fetchMcp = vi.fn()
@@ -51,7 +51,7 @@ vi.mock('../hooks/useMcp', () => ({
 vi.mock('../config/runtime', () => ({
     GATEWAY_URL: 'http://127.0.0.1:8088/gateway',
     gatewayHeaders: () => ({ 'Content-Type': 'application/json' }),
-    slugify: (value: string) => value.toLowerCase().replace(/\s+/g, '-'),
+    slugify: (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
 }))
 
 describe('Agents page', () => {
@@ -94,5 +94,45 @@ describe('Agents page', () => {
 
         fireEvent.click(screen.getByText('agents.configure'))
         expect(await screen.findByText('configure-page')).toBeInTheDocument()
+    })
+
+    it('generates a valid fallback id for non-latin agent names', async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({
+            ok: true,
+            json: async () => ({ success: true }),
+        } as Response))
+        vi.stubGlobal('fetch', fetchMock)
+
+        render(
+            <MemoryRouter>
+                <Agents />
+            </MemoryRouter>
+        )
+
+        fireEvent.click(screen.getByText('agents.createAgent'))
+
+        const nameInput = screen.getByPlaceholderText('agents.agentNamePlaceholder')
+        fireEvent.change(nameInput, { target: { value: '创建方式' } })
+
+        const idInput = screen.getByPlaceholderText('agents.agentIdPlaceholder') as HTMLInputElement
+        expect(idInput.value).toMatch(/^agent-[a-z0-9]{6}$/)
+
+        const submitButton = screen.getByRole('button', { name: 'agents.createAgentTitle' })
+        expect(submitButton).not.toBeDisabled()
+
+        fireEvent.click(submitButton)
+
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringContaining('/agents'),
+                expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({
+                        id: idInput.value,
+                        name: '创建方式',
+                    }),
+                })
+            )
+        })
     })
 })

@@ -27,8 +27,8 @@
 }
 
 .message.user .message-avatar {
-    background: #2f3540;
-    color: white;
+    background: #e7ebf0;
+    color: #4b5563;
 }
 
 .message.assistant .message-avatar {
@@ -63,8 +63,8 @@
 .message.user .message-content {
     width: auto;
     max-width: min(100%, 680px);
-    background: #2f3540;
-    color: white;
+    background: #eef2f6;
+    color: #32353b;
     border-bottom-right-radius: var(--radius-sm);
 }
 

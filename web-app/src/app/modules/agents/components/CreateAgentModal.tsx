@@ -5,6 +5,15 @@ import { GATEWAY_URL, gatewayHeaders, slugify } from '../../../../config/runtime
 
 const DEFAULT_LLM = { provider: 'openai', model: 'qwen/qwen3.5-35b-a3b' }
 
+function buildSuggestedAgentId(value: string, fallbackSuffix: string): string {
+    if (!value.trim()) return ''
+
+    const normalizedId = slugify(value)
+    if (normalizedId) return normalizedId
+
+    return `agent-${fallbackSuffix}`
+}
+
 export function CreateAgentModal({
     onClose,
     onCreated,
@@ -17,15 +26,16 @@ export function CreateAgentModal({
     const [name, setName] = useState('')
     const [id, setId] = useState('')
     const [idManuallyEdited, setIdManuallyEdited] = useState(false)
+    const [fallbackSuffix] = useState(() => Math.random().toString(36).slice(2, 8))
     const [creating, setCreating] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     const handleNameChange = useCallback((value: string) => {
         setName(value)
         if (!idManuallyEdited) {
-            setId(slugify(value))
+            setId(buildSuggestedAgentId(value, fallbackSuffix))
         }
-    }, [idManuallyEdited])
+    }, [idManuallyEdited, fallbackSuffix])
 
     const handleIdChange = useCallback((value: string) => {
         setIdManuallyEdited(true)
@@ -140,4 +150,3 @@ export function CreateAgentModal({
         </div>
     )
 }
-

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import Files from '../pages/Files'
+import Files from '../app/modules/files/pages/FilesPage'
 
 const openPreview = vi.fn()
 const closePreview = vi.fn()

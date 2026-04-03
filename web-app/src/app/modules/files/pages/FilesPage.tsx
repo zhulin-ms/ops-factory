@@ -4,6 +4,14 @@ import { useGoosed } from '../../../../contexts/GoosedContext'
 import { usePreview } from '../../../../contexts/PreviewContext'
 import { useUser } from '../../../../contexts/UserContext'
 import { useToast } from '../../../../contexts/ToastContext'
+import PageHeader from '../../../../components/PageHeader'
+import Pagination from '../../../../components/Pagination'
+import ListCard from '../../../../components/list/ListCard'
+import ListFooter from '../../../../components/list/ListFooter'
+import ListResultsMeta from '../../../../components/list/ListResultsMeta'
+import ListSearchInput from '../../../../components/list/ListSearchInput'
+import ListToolbar from '../../../../components/list/ListToolbar'
+import ListWorkbench from '../../../../components/list/ListWorkbench'
 import { GATEWAY_URL, GATEWAY_SECRET_KEY, gatewayHeaders } from '../../../../config/runtime'
 import '../styles/files.css'
 
@@ -133,6 +141,8 @@ export default function FilesPage() {
     const [activeCategory, setActiveCategory] = useState<FileCategory>('all')
     const [deleteTarget, setDeleteTarget] = useState<AgentFile | null>(null)
     const [deletingKey, setDeletingKey] = useState<string | null>(null)
+    const [currentPage, setCurrentPage] = useState(1)
+    const [pageSize, setPageSize] = useState(20)
 
     useEffect(() => {
         const loadFiles = async () => {
@@ -216,6 +226,17 @@ export default function FilesPage() {
         return result
     }, [files, searchTerm, activeCategory])
 
+    const totalPages = Math.max(1, Math.ceil(filteredFiles.length / pageSize))
+    const paginatedFiles = useMemo(() => {
+        const startIndex = (currentPage - 1) * pageSize
+        const endIndex = startIndex + pageSize
+        return filteredFiles.slice(startIndex, endIndex)
+    }, [filteredFiles, currentPage, pageSize])
+
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [searchTerm, activeCategory])
+
     const handleDelete = async (file: AgentFile) => {
         const fileKey = `${file.agentId}-${file.path}`
         setDeletingKey(fileKey)
@@ -245,116 +266,101 @@ export default function FilesPage() {
 
     return (
         <div className="page-container sidebar-top-page files-page">
-            <header className="page-header">
-                <h1 className="page-title">{t('files.title')}</h1>
-                <p className="page-subtitle">{t('files.subtitle')}</p>
-            </header>
+            <PageHeader title={t('files.title')} subtitle={t('files.subtitle')} />
 
             {(error || (!isConnected && connectionError)) && (
                 <div className="conn-banner conn-banner-error">
                     {error || t('common.connectionError', { error: connectionError })}
                 </div>
             )}
+            <ListWorkbench
+                controls={(
+                    <ListToolbar
+                        primary={(
+                            <>
+                                <ListSearchInput
+                                    value={searchTerm}
+                                    placeholder={t('files.searchPlaceholder')}
+                                    onChange={setSearchTerm}
+                                />
 
-            <div className="search-container">
-                <div className="search-input-wrapper">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                        type="text"
-                        className="search-input"
-                        placeholder={t('files.searchPlaceholder')}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    {searchTerm && (
-                        <button
-                            onClick={() => setSearchTerm('')}
-                            style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'var(--color-text-muted)',
-                                cursor: 'pointer',
-                                padding: 'var(--spacing-1)',
-                            }}
-                            aria-label="Clear search"
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                                <line x1="18" y1="6" x2="6" y2="18" />
-                                <line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            <div className="seg-filter">
-                {FILE_CATEGORIES.map((category) => (
-                    <button
-                        key={category.key}
-                        className={`seg-filter-btn ${activeCategory === category.key ? 'active' : ''}`}
-                        onClick={() => setActiveCategory(category.key)}
-                    >
-                        {t(category.labelKey)}
-                        {categoryCounts[category.key] > 0 && (
-                            <span className="seg-filter-count">{categoryCounts[category.key]}</span>
+                                <div className="seg-filter">
+                                    {FILE_CATEGORIES.map((category) => (
+                                        <button
+                                            key={category.key}
+                                            className={`seg-filter-btn ${activeCategory === category.key ? 'active' : ''}`}
+                                            onClick={() => setActiveCategory(category.key)}
+                                        >
+                                            {t(category.labelKey)}
+                                            {categoryCounts[category.key] > 0 && (
+                                                <span className="seg-filter-count">{categoryCounts[category.key]}</span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
                         )}
-                    </button>
-                ))}
-            </div>
-
-            {isLoading && (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--spacing-10)' }}>
-                    <div className="loading-spinner" />
-                </div>
-            )}
-
-            {!isLoading && files.length === 0 && (
-                <div className="empty-state">
-                    <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <h3 className="empty-state-title">{t('files.noFiles')}</h3>
-                    <p className="empty-state-description">{t('files.noFilesHint')}</p>
-                </div>
-            )}
-
-            {searchTerm && filteredFiles.length === 0 && !isLoading && files.length > 0 && (
-                <div className="empty-state">
-                    <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <circle cx="11" cy="11" r="8" />
-                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <h3 className="empty-state-title">{t('common.noResults')}</h3>
-                    <p className="empty-state-description">{t('files.noMatchFiles', { term: searchTerm })}</p>
-                </div>
-            )}
-
-            {(!searchTerm || filteredFiles.length > 0) && !isLoading && (
-                <>
-                    {searchTerm && (
-                        <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-4)' }}>
-                            {t('common.resultsFound', { count: filteredFiles.length })}
-                        </p>
-                    )}
-
+                        secondary={(searchTerm || activeCategory !== 'all') ? <ListResultsMeta>{t('common.resultsFound', { count: filteredFiles.length })}</ListResultsMeta> : undefined}
+                    />
+                )}
+                footer={filteredFiles.length > 0 ? (
+                    <ListFooter>
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            pageSize={pageSize}
+                            totalItems={filteredFiles.length}
+                            onPageChange={setCurrentPage}
+                            onPageSizeChange={(newSize) => {
+                                setPageSize(newSize)
+                                setCurrentPage(1)
+                            }}
+                            disabled={isLoading}
+                        />
+                    </ListFooter>
+                ) : undefined}
+            >
+                {isLoading ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--spacing-10)' }}>
+                        <div className="loading-spinner" />
+                    </div>
+                ) : files.length === 0 ? (
+                    <div className="empty-state">
+                        <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <h3 className="empty-state-title">{t('files.noFiles')}</h3>
+                        <p className="empty-state-description">{t('files.noFilesHint')}</p>
+                    </div>
+                ) : searchTerm && filteredFiles.length === 0 ? (
+                    <div className="empty-state">
+                        <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <h3 className="empty-state-title">{t('common.noResults')}</h3>
+                        <p className="empty-state-description">{t('files.noMatchFiles', { term: searchTerm })}</p>
+                    </div>
+                ) : (
                     <div className="file-list">
-                        {filteredFiles.map((file) => {
+                        {paginatedFiles.map((file) => {
                             const fileKey = `${file.agentId}-${file.path}`
                             const isDeleting = deletingKey === fileKey
 
                             return (
-                                <div key={fileKey} className={`file-item animate-slide-in${isDeleting ? ' is-deleting' : ''}`}>
+                                <ListCard key={fileKey} className={`file-item animate-slide-in${isDeleting ? ' is-deleting' : ''}`}>
                                     <div className="file-icon">{getFileIcon(file.type)}</div>
                                     <div className="file-info">
                                         <div className="file-name">{file.name}</div>
                                         <div className="file-meta">
-                                            <span>{formatFileSize(file.size)}</span>
-                                            <span>{formatDate(file.modifiedAt)}</span>
-                                            <span className="file-agent-tag">{file.agentName}</span>
+                                            <div className="file-meta-tags">
+                                                <span className="file-agent-tag">{file.agentName}</span>
+                                            </div>
+                                            <div className="file-meta-details">
+                                                <span>{formatFileSize(file.size)}</span>
+                                                <span>{formatDate(file.modifiedAt)}</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="file-actions">
@@ -397,18 +403,12 @@ export default function FilesPage() {
                                             </svg>
                                         </button>
                                     </div>
-                                </div>
+                                </ListCard>
                             )
                         })}
                     </div>
-                </>
-            )}
-
-            {!isLoading && files.length > 0 && (
-                <p style={{ marginTop: 'var(--spacing-6)', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', textAlign: 'center' }}>
-                    {t('common.totalFiles', { count: files.length })}
-                </p>
-            )}
+                )}
+            </ListWorkbench>
 
             {deleteTarget && (
                 <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => setDeleteTarget(null)}>

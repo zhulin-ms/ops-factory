@@ -75,12 +75,19 @@
 
 .resource-card-summary {
     min-height: 60px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
 }
 
 .resource-card-summary-stack {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-2);
+}
+
+.resource-card-tags-slot {
+    min-width: 0;
 }
 
 .resource-card-tags {

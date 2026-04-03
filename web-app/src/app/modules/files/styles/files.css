@@ -5,7 +5,7 @@
 .file-list {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-3);
+    gap: var(--spacing-2);
 }
 
 .file-item {
@@ -13,15 +13,12 @@
     align-items: center;
     gap: var(--spacing-4);
     padding: var(--spacing-4);
-    background: var(--surface-2);
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-lg);
-    transition: all var(--transition-base);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
 
 .file-item:hover {
-    border-color: #d4dae3;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    border-color: #d7deea;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
 }
 
 .file-item.is-deleting {
@@ -52,8 +49,10 @@
 }
 
 .file-name {
-    font-weight: 600;
-    margin-bottom: var(--spacing-1);
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: var(--spacing-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -61,17 +60,34 @@
 
 .file-meta {
     display: flex;
-    gap: var(--spacing-4);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-3);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.file-meta-tags,
+.file-meta-details {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-2);
+}
+
+.file-meta-details {
+    gap: var(--spacing-3);
 }
 
 .file-agent-tag {
-    padding: var(--spacing-1) var(--spacing-2);
-    background: var(--color-accent-subtle);
-    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    background: rgba(148, 163, 184, 0.16);
+    border-radius: var(--radius-full);
     font-size: var(--font-size-xs);
     font-weight: 500;
+    color: var(--color-text-secondary);
 }
 
 .file-actions {
@@ -81,7 +97,7 @@
     transition: opacity var(--transition-fast);
     align-items: center;
     justify-content: flex-end;
-    min-width: 112px;
+    flex: 0 0 120px;
 }
 
 .file-item:hover .file-actions {
@@ -141,4 +157,18 @@
 .file-delete-btn:hover {
     background: rgba(239, 68, 68, 0.12);
     color: var(--color-error);
+}
+
+@media (max-width: 768px) {
+    .file-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .file-actions {
+        width: 100%;
+        flex: none;
+        justify-content: flex-start;
+        opacity: 1;
+    }
 }

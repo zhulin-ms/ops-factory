@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import SettingsModal from '../../pages/Settings'
+import SettingsModal from './settings/SettingsModal'
 import './SidebarShell.css'
 
 export function SidebarShell({

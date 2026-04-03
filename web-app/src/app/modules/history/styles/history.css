@@ -5,23 +5,20 @@
 .session-list {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-3);
+    gap: var(--spacing-2);
 }
 
 .session-item {
     display: flex;
     align-items: center;
     padding: var(--spacing-4);
-    background: var(--surface-2);
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-lg);
     cursor: pointer;
-    transition: all var(--transition-base);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
 
 .session-item:hover {
-    border-color: #d4dae3;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+    border-color: #d7deea;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
 }
 
 .session-info {
@@ -31,8 +28,10 @@
 }
 
 .session-name {
-    font-weight: 600;
-    margin-bottom: var(--spacing-1);
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: var(--spacing-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -41,15 +40,31 @@
 
 .session-meta {
     display: flex;
-    gap: var(--spacing-4);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-3);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
     text-align: left;
+}
+
+.session-meta-tags,
+.session-meta-details {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-2);
+}
+
+.session-meta-details {
+    gap: var(--spacing-3);
 }
 
 .session-actions {
     display: flex;
     gap: var(--spacing-2);
+    justify-content: flex-end;
+    flex: 0 0 88px;
     opacity: 0;
     transition: opacity var(--transition-fast);
 }
@@ -81,4 +96,18 @@
 
 .session-schedule-id {
     color: var(--color-text-secondary);
+}
+
+@media (max-width: 768px) {
+    .session-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .session-actions {
+        width: 100%;
+        flex: none;
+        justify-content: flex-start;
+        opacity: 1;
+    }
 }

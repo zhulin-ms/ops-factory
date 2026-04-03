@@ -14,6 +14,7 @@ interface ResourceCardProps {
     title: string
     statusLabel?: string
     statusTone?: ResourceStatusTone
+    tags?: ReactNode
     summary?: ReactNode
     metrics: ResourceCardMetric[]
     footer?: ReactNode
@@ -30,6 +31,7 @@ export default function ResourceCard({
     title,
     statusLabel,
     statusTone = 'neutral',
+    tags,
     summary,
     metrics,
     footer,
@@ -50,8 +52,9 @@ export default function ResourceCard({
                 )}
             </div>
 
-            {summary && (
+            {(tags || summary) && (
                 <div className="resource-card-summary">
+                    {tags && <div className="resource-card-tags-slot">{tags}</div>}
                     {summary}
                 </div>
             )}
