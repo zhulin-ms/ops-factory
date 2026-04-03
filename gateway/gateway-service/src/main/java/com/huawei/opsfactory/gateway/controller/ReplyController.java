@@ -116,7 +116,7 @@ public class ReplyController {
                                         instanceReadyAt - spawnStart, instanceReadyAt - requestStart);
                                 instance.touch();
                                 instanceManager.touchAllForUser(userId);
-                                boolean resumeRequired = sessionId != null && !instance.isSessionResumed(sessionId);
+                                boolean resumeRequired = sessionId != null;
                                 AtomicLong relayReadyAt = new AtomicLong(instanceReadyAt);
                                 AtomicBoolean firstChunkSeen = new AtomicBoolean(false);
 
@@ -229,14 +229,17 @@ public class ReplyController {
     }
 
     /**
-     * Ensure that the session referenced in the reply body has been resumed on this
-     * goosed instance (provider + extensions loaded). This is a no-op when the session
-     * was already resumed (normal flow). After a force-recycle, the goosed process is
-     * brand-new and needs an explicit /agent/resume call before it can handle /reply.
+     * Ensure that any follow-up reply against an existing session first restores that
+     * session on the current goosed instance (provider + extensions loaded).
+     *
+     * We intentionally do not trust the gateway's local resumed-session cache here:
+     * stop/recycle/page-switch flows can leave the cache and goosed's real state out
+     * of sync. Treating resume as the standard precondition for session continuation
+     * keeps "continue chatting" aligned with the explicit history/resume entrypoint.
      */
     private Mono<Void> ensureSessionResumed(ManagedInstance instance, String sessionId) {
-        if (sessionId == null || instance.isSessionResumed(sessionId)) {
-            log.debug("[REPLY] session {} already resumed or null, skipping resume", sessionId);
+        if (sessionId == null) {
+            log.debug("[REPLY] session id missing, skipping pre-reply resume");
             return Mono.empty();
         }
         String resumeBody = "{\"session_id\":\"" + sessionId + "\",\"load_model_and_extensions\":true}";

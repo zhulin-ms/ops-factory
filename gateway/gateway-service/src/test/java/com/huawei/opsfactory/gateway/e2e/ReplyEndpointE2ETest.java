@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,6 +44,8 @@ public class ReplyEndpointE2ETest extends BaseE2ETest {
     public void reply_authenticatedUser_streamsSSE() {
         when(instanceManager.getOrSpawn("test-agent", "alice"))
                 .thenReturn(Mono.just(mockInstance));
+        when(goosedProxy.fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/resume"), anyString(), anyInt(), anyString()))
+                .thenReturn(Mono.just("{\"session\":{\"id\":\"session-123\"},\"extension_results\":[]}"));
 
         DataBuffer buffer = new DefaultDataBufferFactory()
                 .wrap("data: {\"content\":\"hello\"}\n\n".getBytes(StandardCharsets.UTF_8));
@@ -53,10 +56,39 @@ public class ReplyEndpointE2ETest extends BaseE2ETest {
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue("{\"message\":\"hello\"}")
+                .bodyValue("{\"session_id\":\"session-123\",\"message\":\"hello\"}")
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .exchange()
                 .expectStatus().isOk();
+
+        verify(goosedProxy).fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/resume"),
+                eq("{\"session_id\":\"session-123\",\"load_model_and_extensions\":true}"), anyInt(), anyString());
+    }
+
+    @Test
+    public void reply_existingSession_stillResumesBeforeReplyWhenInstanceCacheSaysResumed() {
+        mockInstance.markSessionResumed("session-123");
+        when(instanceManager.getOrSpawn("test-agent", "alice"))
+                .thenReturn(Mono.just(mockInstance));
+        when(goosedProxy.fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/resume"), anyString(), anyInt(), anyString()))
+                .thenReturn(Mono.just("{\"session\":{\"id\":\"session-123\"},\"extension_results\":[]}"));
+
+        DataBuffer buffer = new DefaultDataBufferFactory()
+                .wrap("data: {\"content\":\"hello again\"}\n\n".getBytes(StandardCharsets.UTF_8));
+        when(sseRelayService.relay(eq(9999), eq("/reply"), anyString(), eq("test-agent"), eq("alice"), any()))
+                .thenReturn(Flux.just(buffer));
+
+        webClient.post().uri("/gateway/agents/test-agent/reply")
+                .header(HEADER_SECRET_KEY, SECRET_KEY)
+                .header(HEADER_USER_ID, "alice")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"session_id\":\"session-123\",\"message\":\"hello again\"}")
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .exchange()
+                .expectStatus().isOk();
+
+        verify(goosedProxy, times(1)).fetchJson(eq(9999), eq(HttpMethod.POST), eq("/agent/resume"),
+                eq("{\"session_id\":\"session-123\",\"load_model_and_extensions\":true}"), anyInt(), anyString());
     }
 
     @Test
