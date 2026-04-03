@@ -1,5 +1,5 @@
-GOOSE_PROVIDER: custom_qwen3-32b
-GOOSE_MODEL: qwen/qwen3-32b
+GOOSE_PROVIDER: custom_qwen3.5-27b
+GOOSE_MODEL: qwen/qwen3.5-27b
 GOOSE_MODE: auto
 GOOSE_DISABLE_KEYRING: '1'
 GOOSE_TELEMETRY_ENABLED: false
@@ -102,16 +102,16 @@ extensions:
     display_name: Top Of Mind
     bundled: true
     available_tools: []
-  platform-monitor:
+  platform_monitor:
     enabled: true
     type: stdio
-    name: platform-monitor
+    name: platform_monitor
     description: OpsFactory platform monitoring — provides health, agent, and observability data
-    cmd: npx
+    cmd: node
     args:
-    - tsx
-    - config/mcp/platform-monitor/src/index.ts
-    envs: {}
+    - config/mcp/platform-monitor/src/index.js
+    envs:
+      NODE_TLS_REJECT_UNAUTHORIZED: '0'
     env_keys:
     - GATEWAY_URL
     - GATEWAY_SECRET_KEY

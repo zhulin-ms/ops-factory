@@ -10,6 +10,12 @@ import ChatInput from '../../../../components/ChatInput'
 import type { Session, ImageData } from '@goosed/sdk'
 import type { AttachedFile } from '../../../../types/message'
 import { isScheduledSession } from '../../../../config/runtime'
+import {
+    createSessionLocator,
+    parseSessionLocatorFromSearchParams,
+    SessionLocatorError,
+    type SessionLocatorState,
+} from '../../../../utils/sessionLocator'
 import '../styles/chat.css'
 
 interface LocationState {
@@ -19,15 +25,6 @@ interface LocationState {
 interface ModelInfo {
     provider: string
     model: string
-}
-
-function detectAgentFromWorkingDir(workingDir: string, agents: Array<{ id: string }>): string {
-    for (const agent of agents) {
-        if (workingDir.includes(agent.id)) {
-            return agent.id
-        }
-    }
-    return agents[0]?.id || ''
 }
 
 function isNotFoundError(error: unknown): boolean {
@@ -45,8 +42,9 @@ export default function Chat() {
 
     const sessionId = searchParams.get('sessionId')
     const agentParam = searchParams.get('agent')
+    const routeLocatorState = parseSessionLocatorFromSearchParams(searchParams)
 
-    const [selectedAgent, setSelectedAgent] = useState('')
+    const [locatorState, setLocatorState] = useState<SessionLocatorState>(routeLocatorState)
     const [session, setSession] = useState<Session | null>(null)
     const [isInitializing, setIsInitializing] = useState(true)
     const [initError, setInitError] = useState<string | null>(null)
@@ -55,11 +53,41 @@ export default function Chat() {
     const [showStopHint, setShowStopHint] = useState(false)
     const stopHintTimerRef = useRef<number | null>(null)
 
-    const activeAgentId = selectedAgent || agents[0]?.id || ''
+    useEffect(() => {
+        setLocatorState((current) => {
+            if (current.kind === routeLocatorState.kind) {
+                if (current.kind === 'idle' || current.kind === 'corrupted') {
+                    return current
+                }
+                if (current.kind === 'recovering' && routeLocatorState.kind === 'recovering' &&
+                    current.sessionId === routeLocatorState.sessionId &&
+                    current.hintedAgentId === routeLocatorState.hintedAgentId) {
+                    return current
+                }
+                if (current.kind === 'ready' && routeLocatorState.kind === 'ready' &&
+                    current.locator.sessionId === routeLocatorState.locator.sessionId &&
+                    current.locator.agentId === routeLocatorState.locator.agentId) {
+                    return current
+                }
+            }
+
+            if (current.kind === 'ready' && routeLocatorState.kind === 'recovering' &&
+                current.locator.sessionId === routeLocatorState.sessionId) {
+                return current
+            }
+
+            return routeLocatorState
+        })
+    }, [routeLocatorState])
+
+    const readyLocator = locatorState.kind === 'ready' ? locatorState.locator : null
+    const recoverySessionId = locatorState.kind === 'recovering' ? locatorState.sessionId : ''
+    const activeSessionId = readyLocator?.sessionId || recoverySessionId
+    const activeAgentId = readyLocator?.agentId || ''
     const client = activeAgentId ? getClient(activeAgentId) : null
 
     const { messages, chatState, isLoading, error, tokenState, outputFilesEvent, sendMessage, stopMessage, clearMessages, setInitialMessages } = useChat({
-        sessionId,
+        sessionId: activeSessionId || null,
         client: client!,
     })
 
@@ -102,7 +130,7 @@ export default function Chat() {
             const agentClient = getClient(agentId)
             const newSession = await agentClient.startSession()
             setSession(newSession)
-            setSelectedAgent(agentId)
+            setLocatorState({ kind: 'ready', locator: createSessionLocator(newSession.id, agentId) })
             clearMessages()
             navigate(`/chat?sessionId=${newSession.id}&agent=${agentId}`, { replace: true })
             return newSession
@@ -116,25 +144,29 @@ export default function Chat() {
     }, [getClient, clearMessages, navigate])
 
     const handleAgentChange = useCallback(async (agentId: string) => {
-        if (agentId === selectedAgent) return
+        if (agentId === activeAgentId) return
         await createSessionWithAgent(agentId)
-    }, [selectedAgent, createSessionWithAgent])
+    }, [activeAgentId, createSessionWithAgent])
 
     useEffect(() => {
         let cancelled = false
 
         const resumeSessionForAgent = async (agentId: string) => {
             const agentClient = getClient(agentId)
-            const resumeResult = await agentClient.resumeSession(sessionId!)
+            const resumeResult = await agentClient.resumeSession(activeSessionId)
             return { agentId, resumeResult }
         }
 
         const findSessionOwner = async () => {
             let notFoundError: Error | null = null
+            const hintedAgentId = readyLocator?.agentId || (locatorState.kind === 'recovering' ? locatorState.hintedAgentId : null)
+            const candidateAgentIds = hintedAgentId
+                ? [hintedAgentId, ...agents.map(agent => agent.id).filter(agentId => agentId !== hintedAgentId)]
+                : agents.map(agent => agent.id)
 
-            for (const agent of agents) {
+            for (const agentId of candidateAgentIds) {
                 try {
-                    return await resumeSessionForAgent(agent.id)
+                    return await resumeSessionForAgent(agentId)
                 } catch (err) {
                     if (isNotFoundError(err)) {
                         notFoundError = err instanceof Error ? err : new Error('Resource not found')
@@ -150,12 +182,24 @@ export default function Chat() {
         const initSession = async () => {
             if (!isConnected || agents.length === 0) return
 
-            if (!sessionId) {
+            if (locatorState.kind === 'idle') {
                 clearMessages()
                 setSession(null)
                 setInitError(null)
                 setIsInitializing(false)
                 navigate('/', { replace: true })
+                return
+            }
+
+            if (locatorState.kind === 'corrupted') {
+                clearMessages()
+                setSession(null)
+                setInitError(locatorState.reason)
+                setIsInitializing(false)
+                return
+            }
+
+            if (!activeSessionId) {
                 return
             }
 
@@ -166,27 +210,28 @@ export default function Chat() {
 
             try {
                 const { agentId: ownerAgentId, resumeResult } = await findSessionOwner()
-                let resolvedAgentId = ownerAgentId
-                let resumedSession = resumeResult.session
-
-                if (resumedSession.working_dir) {
-                    const workingDirAgentId = detectAgentFromWorkingDir(resumedSession.working_dir, agents)
-                    if (workingDirAgentId) {
-                        resolvedAgentId = workingDirAgentId
-                    }
-                }
+                const resumedSession = resumeResult.session
 
                 if (cancelled) return
 
-                setSelectedAgent(resolvedAgentId)
-                if (agentParam !== resolvedAgentId) {
-                    navigate(`/chat?sessionId=${sessionId}&agent=${resolvedAgentId}`, { replace: true })
+                const nextLocator = createSessionLocator(activeSessionId, ownerAgentId)
+                setLocatorState((current) => {
+                    if (current.kind === 'ready' &&
+                        current.locator.sessionId === nextLocator.sessionId &&
+                        current.locator.agentId === nextLocator.agentId) {
+                        return current
+                    }
+
+                    return { kind: 'ready', locator: nextLocator }
+                })
+                if (agentParam !== ownerAgentId) {
+                    navigate(`/chat?sessionId=${activeSessionId}&agent=${ownerAgentId}`, { replace: true })
                 }
                 setSession(resumedSession)
 
                 // Auto-mark scheduled sessions as read when viewed
                 if (isScheduledSession(resumedSession)) {
-                    markSessionRead(resolvedAgentId, sessionId)
+                    markSessionRead(ownerAgentId, activeSessionId)
                 }
 
                 if (resumedSession.conversation && Array.isArray(resumedSession.conversation)) {
@@ -198,7 +243,11 @@ export default function Chat() {
             } catch (err) {
                 console.error('Failed to initialize session:', err)
                 if (!cancelled) {
-                    setInitError(err instanceof Error ? err.message : 'Failed to load session')
+                    const message = err instanceof Error ? err.message : 'Failed to load session'
+                    if (err instanceof SessionLocatorError) {
+                        setLocatorState({ kind: 'corrupted', reason: message, rawValue: locatorState })
+                    }
+                    setInitError(message)
                 }
             } finally {
                 if (!cancelled) {
@@ -211,14 +260,14 @@ export default function Chat() {
         return () => {
             cancelled = true
         }
-    }, [getClient, isConnected, sessionId, agentParam, agents, setInitialMessages, clearMessages, navigate, markSessionRead])
+    }, [getClient, isConnected, activeSessionId, readyLocator, locatorState, agentParam, agents, setInitialMessages, clearMessages, navigate, markSessionRead])
 
     useEffect(() => {
-        if (initialMessage && sessionId && !isInitializing && messages.length === 0) {
+        if (initialMessage && locatorState.kind === 'ready' && activeSessionId && !isInitializing && messages.length === 0) {
             sendMessage(initialMessage)
             window.history.replaceState({}, document.title)
         }
-    }, [initialMessage, sessionId, isInitializing, messages.length, sendMessage])
+    }, [initialMessage, locatorState, activeSessionId, isInitializing, messages.length, sendMessage])
 
     useEffect(() => {
         return () => {
@@ -230,21 +279,24 @@ export default function Chat() {
     }, [])
 
     const handleSendMessage = useCallback((text: string, images?: ImageData[], attachedFiles?: AttachedFile[]) => {
+        if (locatorState.kind !== 'ready') {
+            throw new SessionLocatorError('Session locator is not ready for sending messages', locatorState)
+        }
         if (stopHintTimerRef.current !== null) {
             window.clearTimeout(stopHintTimerRef.current)
             stopHintTimerRef.current = null
         }
         setShowStopHint(false)
         sendMessage(text, images, attachedFiles)
-    }, [sendMessage])
+    }, [locatorState, sendMessage])
 
     const handleUploadFile = useCallback(async (file: File): Promise<{ path: string }> => {
-        if (!client || !sessionId) {
+        if (locatorState.kind !== 'ready' || !client || !activeSessionId) {
             throw new Error('No active session for file upload')
         }
-        const result = await client.uploadFile(file, sessionId)
+        const result = await client.uploadFile(file, activeSessionId)
         return { path: result.path }
-    }, [client, sessionId])
+    }, [locatorState, client, activeSessionId])
 
     const handleRetry = useCallback(() => {
         for (let i = messages.length - 1; i >= 0; i--) {
@@ -273,6 +325,27 @@ export default function Chat() {
         }
     }, [stopMessage])
 
+    if (locatorState.kind === 'corrupted') {
+        return (
+            <div className="chat-container">
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="empty-state">
+                        <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <h3 className="empty-state-title">{t('chat.failedToLoadSession')}</h3>
+                        <p className="empty-state-description">{locatorState.reason}</p>
+                        <button className="btn btn-primary" style={{ marginTop: 'var(--spacing-4)' }} onClick={() => navigate('/history')}>
+                            {t('history.title')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     if (isInitializing && !isConnected && goosedError) {
         return (
             <div className="chat-container">
@@ -295,12 +368,13 @@ export default function Chat() {
     }
 
     if (isInitializing) {
+        const loadingText = locatorState.kind === 'recovering' ? t('chat.loadingSession') : t('chat.loadingSession')
         return (
             <div className="chat-container">
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{ textAlign: 'center' }}>
                         <div className="loading-spinner" style={{ margin: '0 auto var(--spacing-4)' }} />
-                        <p style={{ color: 'var(--color-text-secondary)' }}>{t('chat.loadingSession')}</p>
+                        <p style={{ color: 'var(--color-text-secondary)' }}>{loadingText}</p>
                     </div>
                 </div>
             </div>
@@ -340,7 +414,7 @@ export default function Chat() {
             {/* Messages area - scrollable */}
             <div className="chat-messages-area">
                 <div className="chat-messages-scroll">
-                    <MessageList messages={messages} isLoading={isLoading} chatState={chatState} agentId={selectedAgent} sessionId={sessionId} outputFilesEvent={outputFilesEvent} onRetry={handleRetry} />
+                    <MessageList messages={messages} isLoading={isLoading} chatState={chatState} agentId={activeAgentId} sessionId={activeSessionId || sessionId} outputFilesEvent={outputFilesEvent} onRetry={handleRetry} />
                 </div>
             </div>
 
@@ -353,12 +427,12 @@ export default function Chat() {
                     <ChatInput
                         onSubmit={handleSendMessage}
                         onUploadFile={handleUploadFile}
-                        disabled={isLoading || !isConnected || isCreatingSession}
+                        disabled={locatorState.kind !== 'ready' || isLoading || !isConnected || isCreatingSession}
                         isGenerating={isLoading}
                         onStopGeneration={handleStopMessage}
                         placeholder={isCreatingSession ? t('chat.switchingAgent') : isLoading ? t('chat.waitingForResponse') : t('chat.typePlaceholder')}
                         autoFocus
-                        selectedAgent={selectedAgent}
+                        selectedAgent={activeAgentId}
                         onAgentChange={handleAgentChange}
                         showAgentSelector={true}
                         modelInfo={modelInfo}

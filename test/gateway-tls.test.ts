@@ -425,8 +425,8 @@ describe('supervisor-agent MCP config uses env_keys', () => {
     expect(config).toContain('- GATEWAY_URL')
   })
 
-  it('includes NODE_TLS_REJECT_UNAUTHORIZED in env_keys', () => {
-    expect(config).toContain('- NODE_TLS_REJECT_UNAUTHORIZED')
+  it('sets NODE_TLS_REJECT_UNAUTHORIZED in envs', () => {
+    expect(config).toContain("NODE_TLS_REJECT_UNAUTHORIZED: '0'")
   })
 
   it('includes GATEWAY_SECRET_KEY in env_keys', () => {
@@ -443,7 +443,7 @@ describe('platform-monitor MCP source', () => {
   beforeAll(async () => {
     source = await readFile(
       join(GATEWAY_DIR, 'agents', 'supervisor-agent', 'config', 'mcp',
-        'platform-monitor', 'src', 'index.ts'),
+        'platform-monitor', 'src', 'handlers.js'),
       'utf-8',
     )
   })
