@@ -27,8 +27,7 @@ public class RuntimePreparer {
      * @return the runtime root path for this (agentId, userId)
      */
     public Path prepare(String agentId, String userId) throws IOException {
-        Path projectRoot = Path.of(properties.getPaths().getProjectRoot()).toAbsolutePath().normalize();
-        Path gatewayRoot = projectRoot.resolve("gateway");
+        Path gatewayRoot = properties.getGatewayRootPath();
         Path agentsDir = gatewayRoot.resolve(properties.getPaths().getAgentsDir());
         Path usersDir = gatewayRoot.resolve(properties.getPaths().getUsersDir());
 

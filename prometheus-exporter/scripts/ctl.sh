@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_DIR="$(dirname "${SCRIPT_DIR}")"
+ROOT_DIR="$(dirname "${SERVICE_DIR}")"
 
 yaml_val() {
     local key="$1" file="${SERVICE_DIR}/config.yaml"
@@ -30,6 +31,11 @@ log_ok()    { echo -e "${GREEN}[OK]${NC}    $1"; }
 log_fail()  { echo -e "${RED}[FAIL]${NC}  $1"; }
 
 LOG_DIR="${SERVICE_DIR}/logs"
+PID_FILE="${LOG_DIR}/prometheus-exporter.pid"
+DAEMON_HELPER="${ROOT_DIR}/scripts/lib/service-daemon.sh"
+
+# shellcheck source=/dev/null
+source "${DAEMON_HELPER}"
 
 check_port() { lsof -ti:"$1" >/dev/null 2>&1; }
 
@@ -50,19 +56,6 @@ wait_http_ok() {
     done
     log_error "${name} health check failed: ${url}"
     return 1
-}
-
-start_detached() {
-    local log_file="$1"
-    shift
-
-    mkdir -p "${LOG_DIR}"
-    if command -v setsid >/dev/null 2>&1; then
-        nohup setsid "$@" </dev/null >>"${log_file}" 2>&1 &
-    else
-        nohup "$@" </dev/null >>"${log_file}" 2>&1 &
-    fi
-    echo $!
 }
 
 build_exporter() {
@@ -88,7 +81,22 @@ EXPORTER_PID=""
 
 do_startup() {
     local mode="${1:-foreground}"
-    stop_port "${EXPORTER_PORT}" "exporter"
+
+    if [ "${mode}" = "background" ] && daemon_is_running "${PID_FILE}"; then
+        local existing_pid
+        existing_pid="$(daemon_read_pid "${PID_FILE}")"
+        if curl -fsS "http://127.0.0.1:${EXPORTER_PORT}/health" >/dev/null 2>&1; then
+            log_info "Exporter already running (PID: ${existing_pid})"
+            return 0
+        fi
+        log_warn "Managed exporter process exists but health check failed; restarting"
+        daemon_stop "${PID_FILE}" "exporter" 5 || true
+    fi
+
+    if check_port "${EXPORTER_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "Exporter port ${EXPORTER_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${EXPORTER_PORT}" "exporter"
+    fi
 
     build_exporter
     local jar="${SERVICE_DIR}/target/prometheus-exporter.jar"
@@ -99,13 +107,16 @@ do_startup() {
 
     if [ "${mode}" = "background" ]; then
         local log_file="${LOG_DIR}/exporter.log"
-        EXPORTER_PID="$(start_detached "${log_file}" env CONFIG_PATH="${SERVICE_DIR}/config.yaml" \
+        EXPORTER_PID="$(daemon_start "${PID_FILE}" "${log_file}" env CONFIG_PATH="${SERVICE_DIR}/config.yaml" \
             java -Dserver.port="${EXPORTER_PORT}" -jar "${jar}")"
         if ! kill -0 "${EXPORTER_PID}" 2>/dev/null; then
             log_error "Failed to start exporter"
             return 1
         fi
-        wait_http_ok "Exporter" "http://127.0.0.1:${EXPORTER_PORT}/health" 20 1
+        if ! wait_http_ok "Exporter" "http://127.0.0.1:${EXPORTER_PORT}/health" 20 1; then
+            daemon_stop "${PID_FILE}" "exporter" 5 || true
+            return 1
+        fi
         log_info "Exporter started (PID: ${EXPORTER_PID}, log: ${log_file})"
     else
         exec env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java -Dserver.port="${EXPORTER_PORT}" -jar "${jar}"
@@ -113,17 +124,27 @@ do_startup() {
 }
 
 do_shutdown() {
-    stop_port "${EXPORTER_PORT}" "exporter"
+    daemon_stop "${PID_FILE}" "exporter" 20 || true
+    if ! daemon_wait_for_port_release "${EXPORTER_PORT}" 20 0.1 && check_port "${EXPORTER_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "Exporter port ${EXPORTER_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${EXPORTER_PORT}" "exporter"
+    fi
+    rm -f "${PID_FILE}" 2>/dev/null || true
 }
 
 do_status() {
-    if check_port "${EXPORTER_PORT}"; then
+    if daemon_is_running "${PID_FILE}"; then
+        local pid
+        pid="$(daemon_read_pid "${PID_FILE}")"
         if curl -fsS "http://127.0.0.1:${EXPORTER_PORT}/health" >/dev/null 2>&1; then
-            log_ok "Exporter running (http://localhost:${EXPORTER_PORT}/metrics)"
+            log_ok "Exporter running (http://localhost:${EXPORTER_PORT}/metrics, PID: ${pid})"
         else
-            log_warn "Exporter port open but health check failed"
+            log_warn "Exporter process running (PID: ${pid}) but health check failed"
             return 1
         fi
+    elif check_port "${EXPORTER_PORT}"; then
+        log_warn "Exporter port open on ${EXPORTER_PORT} but service is unmanaged (missing/stale pidfile)"
+        return 1
     else
         log_fail "Exporter not running on port ${EXPORTER_PORT}"
         return 1

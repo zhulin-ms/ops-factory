@@ -69,8 +69,13 @@ log_ok()    { echo -e "${GREEN}[OK]${NC}    $1"; }
 log_fail()  { echo -e "${RED}[FAIL]${NC}  $1"; }
 
 LOG_DIR="${SERVICE_DIR}/logs"
+PID_FILE="${LOG_DIR}/gateway.pid"
 GATEWAY_HEALTH_PATH="/gateway/status"
 GATEWAY_AGENTS_PATH="/gateway/agents"
+DAEMON_HELPER="${ROOT_DIR}/scripts/lib/service-daemon.sh"
+
+# shellcheck source=/dev/null
+source "${DAEMON_HELPER}"
 
 # --- Utilities ---
 check_port() { lsof -ti:"$1" >/dev/null 2>&1; }
@@ -134,19 +139,6 @@ wait_http_ok() {
     done
     log_error "${name} health check failed: ${url}"
     return 1
-}
-
-start_detached() {
-    local log_file="$1"
-    shift
-
-    mkdir -p "${LOG_DIR}"
-    if command -v setsid >/dev/null 2>&1; then
-        nohup setsid "$@" </dev/null >>"${log_file}" 2>&1 &
-    else
-        nohup "$@" </dev/null >>"${log_file}" 2>&1 &
-    fi
-    echo $!
 }
 
 add_java_opt_from_env() {
@@ -257,8 +249,24 @@ GATEWAY_PID=""
 
 do_startup() {
     local mode="${1:-foreground}"
+
+    if [ "${mode}" = "background" ] && daemon_is_running "${PID_FILE}"; then
+        local existing_pid
+        existing_pid="$(daemon_read_pid "${PID_FILE}")"
+        if gateway_url >/dev/null 2>&1; then
+            log_info "Gateway already running (PID: ${existing_pid})"
+            check_agents_configured || true
+            return 0
+        fi
+        log_warn "Managed gateway process exists but health check failed; restarting"
+        daemon_stop "${PID_FILE}" "gateway" 5 || true
+    fi
+
     shutdown_agents
-    stop_port "${GATEWAY_PORT}" "gateway"
+    if check_port "${GATEWAY_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "Gateway port ${GATEWAY_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${GATEWAY_PORT}" "gateway"
+    fi
 
     build_gateway
 
@@ -380,20 +388,20 @@ do_startup() {
     java_opts+=("-jar" "${jar}")
 
     if [ "${mode}" = "background" ]; then
-        local shell_sink="/dev/null"
+        local console_log="${LOG_DIR}/gateway-console.log"
         local app_log="${LOG_DIR}/gateway.log"
-        GATEWAY_PID="$(start_detached "${shell_sink}" env GATEWAY_CONFIG_PATH="${GATEWAY_CONFIG_PATH}" "${java_cmd}" "${java_opts[@]}")"
+        GATEWAY_PID="$(daemon_start "${PID_FILE}" "${console_log}" env GATEWAY_CONFIG_PATH="${GATEWAY_CONFIG_PATH}" "${java_cmd}" "${java_opts[@]}")"
         if ! kill -0 "${GATEWAY_PID}" 2>/dev/null; then
             log_error "Failed to start gateway"
             return 1
         fi
         if ! wait_http_ok "Gateway" "${GATEWAY_SCHEME}://127.0.0.1:${GATEWAY_PORT}${GATEWAY_HEALTH_PATH}" \
                 "x-secret-key: ${GATEWAY_SECRET_KEY}" 40 1; then
-            log_error "Gateway failed to become healthy. Check logs: ${app_log}"
-            kill "${GATEWAY_PID}" 2>/dev/null || true
+            log_error "Gateway failed to become healthy. Check logs: ${app_log} and ${console_log}"
+            daemon_stop "${PID_FILE}" "gateway" 5 || true
             return 1
         fi
-        log_info "Gateway started (PID: ${GATEWAY_PID}, app log: ${app_log})"
+        log_info "Gateway started (PID: ${GATEWAY_PID}, app log: ${app_log}, console log: ${console_log})"
         check_agents_configured || true
     else
         exec env GATEWAY_CONFIG_PATH="${GATEWAY_CONFIG_PATH}" ${java_cmd} "${java_opts[@]}"
@@ -401,19 +409,29 @@ do_startup() {
 }
 
 do_shutdown() {
+    daemon_stop "${PID_FILE}" "gateway" 20 || true
+    if ! daemon_wait_for_port_release "${GATEWAY_PORT}" 20 0.1 && check_port "${GATEWAY_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "Gateway port ${GATEWAY_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${GATEWAY_PORT}" "gateway"
+    fi
+    rm -f "${PID_FILE}" 2>/dev/null || true
     shutdown_agents
-    stop_port "${GATEWAY_PORT}" "gateway"
 }
 
 do_status() {
     local has_fail=0
-    if check_port "${GATEWAY_PORT}"; then
+    if daemon_is_running "${PID_FILE}"; then
+        local pid
+        pid="$(daemon_read_pid "${PID_FILE}")"
         if gateway_url >/dev/null 2>&1; then
-            log_ok "Gateway running (${GATEWAY_SCHEME}://localhost:${GATEWAY_PORT})"
+            log_ok "Gateway running (${GATEWAY_SCHEME}://localhost:${GATEWAY_PORT}, PID: ${pid})"
         else
-            log_fail "Gateway port open but ${GATEWAY_HEALTH_PATH} check failed"
+            log_fail "Gateway process running (PID: ${pid}) but ${GATEWAY_HEALTH_PATH} check failed"
             has_fail=1
         fi
+    elif check_port "${GATEWAY_PORT}"; then
+        log_warn "Gateway port open on ${GATEWAY_PORT} but service is unmanaged (missing/stale pidfile)"
+        has_fail=1
     else
         log_fail "Gateway not running on port ${GATEWAY_PORT}"
         has_fail=1

@@ -49,9 +49,7 @@ public class SystemUserMigrationService {
     }
 
     private Path resolveUsersDir() {
-        Path projectRoot = Path.of(properties.getPaths().getProjectRoot()).toAbsolutePath().normalize();
-        Path gatewayRoot = projectRoot.resolve("gateway");
-        return gatewayRoot.resolve(properties.getPaths().getUsersDir());
+        return properties.getGatewayRootPath().resolve(properties.getPaths().getUsersDir());
     }
 
     private void mergeLegacyIntoSystemDir(Path legacyDir, Path systemDir) throws IOException {

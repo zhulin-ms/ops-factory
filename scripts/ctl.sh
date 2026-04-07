@@ -63,22 +63,6 @@ run_if_enabled() {
     fi
 }
 
-# === Cleanup trap for background processes ===
-GATEWAY_BG_PID=""
-KNOWLEDGE_BG_PID=""
-EXPORTER_BG_PID=""
-WEBAPP_BG_PID=""
-
-cleanup() {
-    for pid_var in WEBAPP_BG_PID EXPORTER_BG_PID KNOWLEDGE_BG_PID GATEWAY_BG_PID; do
-        local pid="${!pid_var}"
-        if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
-            kill "${pid}" 2>/dev/null || true
-            wait "${pid}" 2>/dev/null || true
-        fi
-    done
-}
-
 # === Component validation ===
 VALID_COMPONENTS="onlyoffice langfuse gateway knowledge business-intelligence exporter webapp"
 

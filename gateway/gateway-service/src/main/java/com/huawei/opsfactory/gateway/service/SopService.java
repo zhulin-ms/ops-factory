@@ -37,8 +37,7 @@ public class SopService {
 
     @PostConstruct
     public void init() {
-        this.gatewayRoot = Path.of(properties.getPaths().getProjectRoot())
-                .toAbsolutePath().normalize().resolve("gateway");
+        this.gatewayRoot = properties.getGatewayRootPath();
         this.sopsDir = gatewayRoot.resolve("agents").resolve("qos-agent")
                 .resolve("config").resolve("skills")
                 .resolve("sop-diagnosis-execution").resolve("sops");

@@ -47,8 +47,7 @@ public class AgentConfigService {
         residentInstances.clear();
         residentInstanceKeys.clear();
 
-        this.gatewayRoot = Path.of(properties.getPaths().getProjectRoot())
-                .toAbsolutePath().normalize().resolve("gateway");
+        this.gatewayRoot = properties.getGatewayRootPath();
         Path configYaml = gatewayRoot.resolve("config.yaml");
         Map<String, Object> data = YamlLoader.load(configYaml);
 

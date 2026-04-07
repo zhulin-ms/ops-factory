@@ -38,8 +38,7 @@ public class CommandWhitelistService {
 
     @PostConstruct
     public void init() {
-        this.gatewayRoot = Path.of(properties.getPaths().getProjectRoot())
-                .toAbsolutePath().normalize().resolve("gateway");
+        this.gatewayRoot = properties.getGatewayRootPath();
         this.whitelistFile = gatewayRoot.resolve("data").resolve("command-whitelist.json");
 
         initializeDefaultIfNeeded();

@@ -48,8 +48,7 @@ public class HostService {
 
     @PostConstruct
     public void init() {
-        this.gatewayRoot = Path.of(properties.getPaths().getProjectRoot())
-                .toAbsolutePath().normalize().resolve("gateway");
+        this.gatewayRoot = properties.getGatewayRootPath();
         this.hostsDir = gatewayRoot.resolve("data").resolve("hosts");
 
         // Derive AES key from configuration (ensure exactly 32 bytes for AES-256)

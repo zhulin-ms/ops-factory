@@ -14,6 +14,7 @@ import java.nio.file.Path;
 public class GatewayProperties {
 
     private static final Logger log = LoggerFactory.getLogger(GatewayProperties.class);
+    private static final String CONFIG_PATH_KEY = "GATEWAY_CONFIG_PATH";
 
     private String secretKey = "test";
     private String corsOrigin = "http://127.0.0.1:5173";
@@ -156,6 +157,59 @@ public class GatewayProperties {
 
     public void setRemoteExecution(RemoteExecution remoteExecution) {
         this.remoteExecution = remoteExecution;
+    }
+
+    public Path getConfigPath() {
+        String configuredPath = configuredConfigPath();
+        if (configuredPath == null || configuredPath.isBlank()) {
+            return Path.of("config.yaml").toAbsolutePath().normalize();
+        }
+
+        Path configPath = Path.of(configuredPath);
+        if (configPath.isAbsolute()) {
+            return configPath.normalize();
+        }
+        return Path.of("").toAbsolutePath().resolve(configPath).normalize();
+    }
+
+    public Path getConfigDirectory() {
+        Path configPath = getConfigPath();
+        Path parent = configPath.getParent();
+        if (parent != null) {
+            return parent;
+        }
+        return Path.of("").toAbsolutePath().normalize();
+    }
+
+    public Path getProjectRootPath() {
+        Path configuredRoot = Path.of(paths.getProjectRoot());
+        if (configuredRoot.isAbsolute()) {
+            return configuredRoot.normalize();
+        }
+        if (configuredConfigPath() != null) {
+            return getConfigDirectory().resolve(configuredRoot).normalize();
+        }
+        return configuredRoot.toAbsolutePath().normalize();
+    }
+
+    public Path getGatewayRootPath() {
+        if (configuredConfigPath() == null) {
+            return getProjectRootPath().resolve("gateway").normalize();
+        }
+        Path configPath = getConfigPath();
+        Path configDir = getConfigDirectory();
+        if ("config.yaml".equals(configPath.getFileName() != null ? configPath.getFileName().toString() : "")) {
+            return configDir;
+        }
+        return getProjectRootPath().resolve("gateway").normalize();
+    }
+
+    private String configuredConfigPath() {
+        String configuredPath = System.getProperty(CONFIG_PATH_KEY);
+        if (configuredPath == null || configuredPath.isBlank()) {
+            configuredPath = System.getenv(CONFIG_PATH_KEY);
+        }
+        return (configuredPath == null || configuredPath.isBlank()) ? null : configuredPath;
     }
 
     // ---- Nested config classes ----
@@ -301,12 +355,7 @@ public class GatewayProperties {
         if (rawPath.isAbsolute()) {
             return;
         }
-        Path candidate = Path.of(paths.getProjectRoot())
-            .toAbsolutePath()
-            .normalize()
-            .resolve("gateway")
-            .resolve(goosedBin)
-            .normalize();
+        Path candidate = getGatewayRootPath().resolve(goosedBin).normalize();
         if (Files.exists(candidate)) {
             goosedBin = candidate.toString();
         }

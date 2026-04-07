@@ -2,6 +2,10 @@ package com.huawei.opsfactory.gateway.config;
 
 import org.junit.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -116,5 +120,31 @@ public class GatewayPropertiesTest {
         GatewayProperties props = new GatewayProperties();
         props.setGooseTls(false);
         assertEquals("http", props.gooseScheme());
+    }
+
+    @Test
+    public void testResolvesPathsRelativeToGatewayConfigPath() throws IOException {
+        Path tempRoot = Files.createTempDirectory("gateway-props");
+        Path gatewayRoot = tempRoot.resolve("gateway");
+        Files.createDirectories(gatewayRoot);
+        Files.writeString(gatewayRoot.resolve("config.yaml"), "server:\n  port: 3000\n");
+
+        String previous = System.getProperty("GATEWAY_CONFIG_PATH");
+        System.setProperty("GATEWAY_CONFIG_PATH", gatewayRoot.resolve("config.yaml").toString());
+        try {
+            GatewayProperties props = new GatewayProperties();
+            GatewayProperties.Paths paths = new GatewayProperties.Paths();
+            paths.setProjectRoot("..");
+            props.setPaths(paths);
+
+            assertEquals(tempRoot.normalize(), props.getProjectRootPath());
+            assertEquals(gatewayRoot.normalize(), props.getGatewayRootPath());
+        } finally {
+            if (previous == null) {
+                System.clearProperty("GATEWAY_CONFIG_PATH");
+            } else {
+                System.setProperty("GATEWAY_CONFIG_PATH", previous);
+            }
+        }
     }
 }

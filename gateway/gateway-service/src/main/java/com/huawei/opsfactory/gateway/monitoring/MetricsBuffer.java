@@ -64,8 +64,7 @@ public class MetricsBuffer {
     }
 
     public MetricsBuffer(GatewayProperties properties) {
-        Path gatewayRoot = Path.of(properties.getPaths().getProjectRoot())
-                .toAbsolutePath().normalize().resolve("gateway");
+        Path gatewayRoot = properties.getGatewayRootPath();
         this.persistPath = gatewayRoot.resolve("data").resolve("monitoring").resolve("metrics.json");
         loadFromDisk();
     }
