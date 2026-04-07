@@ -27,7 +27,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-abstract class KnowledgeApiIntegrationTestSupport {
+public abstract class KnowledgeApiIntegrationTestSupport {
 
     protected static final Path RUNTIME_BASE_DIR = Path.of("target/test-runtime-api").toAbsolutePath().normalize();
     protected static final Path INPUT_FILES_DIR = Path.of("src/test/resources/inputFiles").toAbsolutePath().normalize();

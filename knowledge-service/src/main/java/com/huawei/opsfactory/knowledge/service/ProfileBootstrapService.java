@@ -6,10 +6,14 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ProfileBootstrapService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProfileBootstrapService.class);
 
     public static final String DEFAULT_INDEX_PROFILE_NAME = "system-default-index";
     public static final String DEFAULT_RETRIEVAL_PROFILE_NAME = "system-default-retrieval";
@@ -52,6 +56,7 @@ public class ProfileBootstrapService {
                 now
             );
             profileRepository.insertIndex(record);
+            log.info("Created default index profile name={} id={}", record.name(), record.id());
             return record;
         });
         profileRepository.findRetrievalByName(DEFAULT_RETRIEVAL_PROFILE_NAME).map(existing -> {
@@ -64,6 +69,7 @@ public class ProfileBootstrapService {
                 now
             );
             profileRepository.updateRetrieval(updated);
+            log.debug("Refreshed default retrieval profile name={} id={}", updated.name(), updated.id());
             return updated;
         }).orElseGet(() -> {
             ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(
@@ -75,6 +81,7 @@ public class ProfileBootstrapService {
                 now
             );
             profileRepository.insertRetrieval(record);
+            log.info("Created default retrieval profile name={} id={}", record.name(), record.id());
             return record;
         });
     }

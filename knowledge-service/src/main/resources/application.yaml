@@ -11,6 +11,9 @@ spring:
       max-file-size: 100MB
       max-request-size: 1GB
 
+logging:
+  config: classpath:log4j2-spring.xml
+
 management:
   endpoints:
     web:

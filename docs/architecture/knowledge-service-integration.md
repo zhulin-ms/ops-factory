@@ -88,6 +88,17 @@ knowledge:
     pool:
       max-size: 5
       min-idle: 1
+  logging:
+    include-query-text: false
+```
+
+```yaml
+logging:
+  level:
+    root: INFO
+    com.huawei.opsfactory.knowledge: INFO
+    com.huawei.opsfactory.knowledge.service.EmbeddingService: WARN
+    com.huawei.opsfactory.knowledge.service.SearchService: INFO
 ```
 
 - `knowledge.runtime.base-dir`
@@ -119,7 +130,66 @@ knowledge:
   - 含义：数据库连接池参数
   - 说明：默认值面向本地和轻量部署，生产环境可按实际并发调整
 
-### 3.1.1 Schema 初始化与迁移
+### 3.1.1 日志与排查配置
+
+`knowledge-service` 当前使用 `SLF4J API + Log4j2 backend`。
+
+默认行为：
+
+- 应用日志由 Log4j2 直接写入 `knowledge-service/logs/knowledge-service.log`
+- 脚本后台启动时，标准输出与标准错误单独写入 `knowledge-service/logs/knowledge-service-console.log`
+- 日志格式默认带上：
+  - `service`
+  - `requestId`
+  - `sourceId`
+  - `documentId`
+  - `jobId`
+  - `thread`
+  - `logger`
+
+配置项：
+
+- `logging.level.root`
+  - 含义：全局日志级别
+  - 默认值：`INFO`
+
+- `logging.level.com.huawei.opsfactory.knowledge`
+  - 含义：knowledge-service 应用代码主日志级别
+  - 建议：日常保持 `INFO`，排查复杂问题时再临时切到 `DEBUG`
+
+- `logging.level.com.huawei.opsfactory.knowledge.service.EmbeddingService`
+  - 含义：embedding 调用与降级相关日志级别
+  - 建议：默认 `WARN`，排查远程 embedding 失败或本地回退时切到 `DEBUG`
+
+- `logging.level.com.huawei.opsfactory.knowledge.service.SearchService`
+  - 含义：检索链路日志级别
+  - 建议：默认 `INFO`，仅在检索诊断时切到 `DEBUG`
+
+- `knowledge.logging.include-query-text`
+  - 含义：是否在检索相关日志中输出原始 query 文本
+  - 默认值：`false`
+  - 建议：默认关闭，避免敏感查询内容进入日志；默认日志会记录 query 长度和哈希摘要
+
+使用脚本启动时，可通过环境变量临时提级，而不改 `config.yaml`：
+
+```bash
+KNOWLEDGE_LOG_LEVEL=DEBUG \
+KNOWLEDGE_LOG_LEVEL_APP=DEBUG \
+KNOWLEDGE_LOG_LEVEL_EMBEDDING=DEBUG \
+KNOWLEDGE_LOG_LEVEL_SEARCH=DEBUG \
+KNOWLEDGE_LOG_QUERY_TEXT=false \
+./knowledge-service/scripts/ctl.sh restart --background
+```
+
+说明：
+
+- `KNOWLEDGE_LOG_LEVEL` 对应 `logging.level.root`
+- `KNOWLEDGE_LOG_LEVEL_APP` 对应 `logging.level.com.huawei.opsfactory.knowledge`
+- `KNOWLEDGE_LOG_LEVEL_EMBEDDING` 对应 `logging.level.com.huawei.opsfactory.knowledge.service.EmbeddingService`
+- `KNOWLEDGE_LOG_LEVEL_SEARCH` 对应 `logging.level.com.huawei.opsfactory.knowledge.service.SearchService`
+- `KNOWLEDGE_LOG_QUERY_TEXT` 对应 `knowledge.logging.include-query-text`
+
+### 3.1.2 Schema 初始化与迁移
 
 服务启动时使用 Flyway 执行数据库迁移。
 

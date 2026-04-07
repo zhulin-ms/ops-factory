@@ -10,6 +10,15 @@ knowledge:
     pool:
       max-size: 5
       min-idle: 1
+  logging:
+    include-query-text: false
+
+logging:
+  level:
+    root: INFO
+    com.huawei.opsfactory.knowledge: INFO
+    com.huawei.opsfactory.knowledge.service.EmbeddingService: WARN
+    com.huawei.opsfactory.knowledge.service.SearchService: INFO
 
 ops-knowledge:
   ingest:

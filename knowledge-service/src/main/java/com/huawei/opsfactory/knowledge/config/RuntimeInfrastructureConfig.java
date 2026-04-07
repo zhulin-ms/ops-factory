@@ -1,5 +1,6 @@
 package com.huawei.opsfactory.knowledge.config;
 
+import com.huawei.opsfactory.knowledge.common.logging.MdcTaskDecorator;
 import com.huawei.opsfactory.knowledge.infrastructure.db.DatabaseDialect;
 import com.huawei.opsfactory.knowledge.infrastructure.db.PostgresqlDialect;
 import com.huawei.opsfactory.knowledge.infrastructure.db.SqliteDialect;
@@ -77,6 +78,7 @@ public class RuntimeInfrastructureConfig {
         executor.setCorePoolSize(1);
         executor.setMaxPoolSize(1);
         executor.setQueueCapacity(8);
+        executor.setTaskDecorator(new MdcTaskDecorator());
         executor.initialize();
         return executor;
     }

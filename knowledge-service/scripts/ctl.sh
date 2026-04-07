@@ -13,6 +13,11 @@ yaml_val() {
 KNOWLEDGE_PORT="${KNOWLEDGE_PORT:-$(yaml_val server.port)}"
 KNOWLEDGE_PORT="${KNOWLEDGE_PORT:-8092}"
 MVN="${MVN:-mvn}"
+KNOWLEDGE_LOG_LEVEL="${KNOWLEDGE_LOG_LEVEL:-}"
+KNOWLEDGE_LOG_LEVEL_APP="${KNOWLEDGE_LOG_LEVEL_APP:-}"
+KNOWLEDGE_LOG_LEVEL_EMBEDDING="${KNOWLEDGE_LOG_LEVEL_EMBEDDING:-}"
+KNOWLEDGE_LOG_LEVEL_SEARCH="${KNOWLEDGE_LOG_LEVEL_SEARCH:-}"
+KNOWLEDGE_LOG_QUERY_TEXT="${KNOWLEDGE_LOG_QUERY_TEXT:-}"
 
 if ! command -v "${MVN}" &>/dev/null; then
     for candidate in /tmp/apache-maven-3.9.6/bin/mvn /usr/local/bin/mvn; do
@@ -98,17 +103,40 @@ do_startup() {
     log_info "Starting knowledge-service at http://127.0.0.1:${KNOWLEDGE_PORT}"
     cd "${SERVICE_DIR}"
 
+    local java_opts=(
+        "-Dserver.port=${KNOWLEDGE_PORT}"
+    )
+
+    if [ -n "${KNOWLEDGE_LOG_LEVEL}" ]; then
+        java_opts+=("-Dlogging.level.root=${KNOWLEDGE_LOG_LEVEL}")
+    fi
+    if [ -n "${KNOWLEDGE_LOG_LEVEL_APP}" ]; then
+        java_opts+=("-Dlogging.level.com.huawei.opsfactory.knowledge=${KNOWLEDGE_LOG_LEVEL_APP}")
+    fi
+    if [ -n "${KNOWLEDGE_LOG_LEVEL_EMBEDDING}" ]; then
+        java_opts+=("-Dlogging.level.com.huawei.opsfactory.knowledge.service.EmbeddingService=${KNOWLEDGE_LOG_LEVEL_EMBEDDING}")
+    fi
+    if [ -n "${KNOWLEDGE_LOG_LEVEL_SEARCH}" ]; then
+        java_opts+=("-Dlogging.level.com.huawei.opsfactory.knowledge.service.SearchService=${KNOWLEDGE_LOG_LEVEL_SEARCH}")
+    fi
+    if [ -n "${KNOWLEDGE_LOG_QUERY_TEXT}" ]; then
+        java_opts+=("-Dknowledge.logging.include-query-text=${KNOWLEDGE_LOG_QUERY_TEXT}")
+    fi
+
     if [ "${mode}" = "background" ]; then
         local log_file="${LOG_DIR}/knowledge-service.log"
-        SERVICE_PID="$(start_detached "${log_file}" env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java -Dserver.port="${KNOWLEDGE_PORT}" -jar "${jar}")"
+        local console_log_file="${LOG_DIR}/knowledge-service-console.log"
+        java_opts+=("-Dlogging.config=classpath:log4j2-file-only.xml" "-jar" "${jar}")
+        SERVICE_PID="$(start_detached "${console_log_file}" env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java "${java_opts[@]}")"
         if ! kill -0 "${SERVICE_PID}" 2>/dev/null; then
             log_error "Failed to start knowledge-service"
             return 1
         fi
         wait_http_ok "knowledge-service" "http://127.0.0.1:${KNOWLEDGE_PORT}/actuator/health" 40 1
-        log_info "knowledge-service started (PID: ${SERVICE_PID}, log: ${log_file})"
+        log_info "knowledge-service started (PID: ${SERVICE_PID}, app log: ${log_file}, console log: ${console_log_file})"
     else
-        exec env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java -Dserver.port="${KNOWLEDGE_PORT}" -jar "${jar}"
+        java_opts+=("-jar" "${jar}")
+        exec env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java "${java_opts[@]}"
     fi
 }
 

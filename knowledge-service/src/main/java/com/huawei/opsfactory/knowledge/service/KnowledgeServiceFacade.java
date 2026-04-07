@@ -7,8 +7,10 @@ import com.huawei.opsfactory.knowledge.api.profile.ProfileController;
 import com.huawei.opsfactory.knowledge.api.retrieval.RetrievalController;
 import com.huawei.opsfactory.knowledge.api.source.SourceController;
 import com.huawei.opsfactory.knowledge.common.error.ApiConflictException;
+import com.huawei.opsfactory.knowledge.common.logging.LoggingKeys;
 import com.huawei.opsfactory.knowledge.common.model.PageResponse;
 import com.huawei.opsfactory.knowledge.common.util.Ids;
+import com.huawei.opsfactory.knowledge.config.KnowledgeLoggingProperties;
 import com.huawei.opsfactory.knowledge.config.KnowledgeProperties;
 import com.huawei.opsfactory.knowledge.repository.BindingRepository;
 import com.huawei.opsfactory.knowledge.repository.ChunkRepository;
@@ -30,6 +32,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +44,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class KnowledgeServiceFacade {
 
+    private static final Logger log = LoggerFactory.getLogger(KnowledgeServiceFacade.class);
     private static final int COMPARE_FETCH_TOP_K = 64;
 
     private final SourceRepository sourceRepository;
@@ -56,6 +62,7 @@ public class KnowledgeServiceFacade {
     private final LexicalIndexService lexicalIndexService;
     private final VectorIndexService vectorIndexService;
     private final ProfileBootstrapService profileBootstrapService;
+    private final KnowledgeLoggingProperties knowledgeLoggingProperties;
     private final ThreadPoolTaskExecutor taskExecutor;
 
     public KnowledgeServiceFacade(
@@ -74,6 +81,7 @@ public class KnowledgeServiceFacade {
         LexicalIndexService lexicalIndexService,
         VectorIndexService vectorIndexService,
         ProfileBootstrapService profileBootstrapService,
+        KnowledgeLoggingProperties knowledgeLoggingProperties,
         ThreadPoolTaskExecutor taskExecutor
     ) {
         this.sourceRepository = sourceRepository;
@@ -91,6 +99,7 @@ public class KnowledgeServiceFacade {
         this.lexicalIndexService = lexicalIndexService;
         this.vectorIndexService = vectorIndexService;
         this.profileBootstrapService = profileBootstrapService;
+        this.knowledgeLoggingProperties = knowledgeLoggingProperties;
         this.taskExecutor = taskExecutor;
     }
 
@@ -113,6 +122,7 @@ public class KnowledgeServiceFacade {
         );
         sourceRepository.insert(record);
         bindingRepository.upsert(new BindingRepository.BindingRecord(Ids.newId("spb"), id, indexProfileId, retrievalProfileId, now, now));
+        log.info("Created source sourceId={} name={} indexProfileId={} retrievalProfileId={}", id, request.name(), indexProfileId, retrievalProfileId);
         return toSourceResponse(record);
     }
 
@@ -151,6 +161,14 @@ public class KnowledgeServiceFacade {
         bindingRepository.upsert(new BindingRepository.BindingRecord(
             Ids.newId("spb"), sourceId, updated.indexProfileId(), updated.retrievalProfileId(), existing.createdAt(), now
         ));
+        log.info(
+            "Updated source sourceId={} status={} indexProfileId={} retrievalProfileId={} rebuildRequired={}",
+            sourceId,
+            updated.status(),
+            updated.indexProfileId(),
+            updated.retrievalProfileId(),
+            updated.rebuildRequired()
+        );
         return toSourceResponse(updated);
     }
 
@@ -173,6 +191,7 @@ public class KnowledgeServiceFacade {
         sourceRepository.delete(source.id());
         storageManager.deleteRecursively(storageManager.artifactSourceDir(sourceId));
         storageManager.deleteRecursively(storageManager.uploadSourceDir(sourceId));
+        log.info("Deleted source sourceId={} removedDocuments={}", sourceId, documents.size());
         return new SourceController.DeleteSourceResponse(sourceId, true);
     }
 
@@ -208,7 +227,11 @@ public class KnowledgeServiceFacade {
         JobRepository.JobRecord job = new JobRepository.JobRecord(Ids.newId("job"), "INGEST", sourceId, null, "RUNNING", 0, null, "Ingest started", "system", 0, 0, 0, 0, null, null, null, now, null, now, now);
         jobRepository.insert(job);
         int imported = 0;
+        long startedAt = System.currentTimeMillis();
+        putMdcIfText(LoggingKeys.SOURCE_ID, sourceId);
+        putMdcIfText(LoggingKeys.JOB_ID, job.id());
         try {
+            log.info("Starting ingest sourceId={} jobId={} fileCount={}", sourceId, job.id(), files == null ? 0 : files.length);
             for (MultipartFile file : files) {
                 if (file.isEmpty() || !StringUtils.hasText(file.getOriginalFilename())) {
                     continue;
@@ -219,11 +242,29 @@ public class KnowledgeServiceFacade {
             }
             JobRepository.JobRecord finished = new JobRepository.JobRecord(job.id(), job.jobType(), sourceId, null, "SUCCEEDED", 100, null, "Ingest completed", "system", 0, 0, 0, 0, null, null, null, now, Instant.now(), job.createdAt(), Instant.now());
             jobRepository.update(finished);
+            log.info(
+                "Completed ingest sourceId={} jobId={} imported={} durationMs={}",
+                sourceId,
+                job.id(),
+                imported,
+                System.currentTimeMillis() - startedAt
+            );
             return new DocumentController.IngestDocumentsResponse(job.id(), sourceId, "SUCCEEDED", imported);
         } catch (RuntimeException ex) {
             JobRepository.JobRecord failed = new JobRepository.JobRecord(job.id(), job.jobType(), sourceId, null, "FAILED", imported == 0 ? 0 : 100, null, ex.getMessage(), "system", 0, 0, 0, 0, null, null, ex.getMessage(), now, Instant.now(), job.createdAt(), Instant.now());
             jobRepository.update(failed);
+            log.error(
+                "Failed ingest sourceId={} jobId={} imported={} durationMs={}",
+                sourceId,
+                job.id(),
+                imported,
+                System.currentTimeMillis() - startedAt,
+                ex
+            );
             throw ex;
+        } finally {
+            removeMdcIfText(LoggingKeys.JOB_ID, job.id());
+            removeMdcIfText(LoggingKeys.SOURCE_ID, sourceId);
         }
     }
 
@@ -315,6 +356,7 @@ public class KnowledgeServiceFacade {
         Instant now = Instant.now();
         JobRepository.JobRecord job = new JobRepository.JobRecord(Ids.newId("job"), jobType, document.sourceId(), documentId, "SUCCEEDED", 100, null, jobType + " completed", "system", 0, 0, 0, 0, null, null, null, now, now, now, now);
         jobRepository.insert(job);
+        log.info("Created simple document job jobId={} documentId={} sourceId={} jobType={}", job.id(), documentId, document.sourceId(), jobType);
         return new DocumentController.JobCreationResponse(job.id(), documentId, jobType, job.status());
     }
 
@@ -465,16 +507,28 @@ public class KnowledgeServiceFacade {
     }
 
     public RetrievalController.SearchResponse search(RetrievalController.SearchRequest request) {
+        long startedAt = System.currentTimeMillis();
         ensureSourcesReadable(resolveReferencedSourceIds(request.sourceIds(), request.documentIds()));
         String retrievalProfileId = resolveSearchRetrievalProfileId(request.retrievalProfileId(), request.sourceIds());
         ResolvedRetrievalSettings settings = resolveRetrievalSettings(retrievalProfileId, request.topK(), request.override());
         List<SearchService.SearchableChunk> searchableChunks = filterChunks(request.sourceIds(), request.documentIds(), request.filters());
         List<SearchService.SearchMatch> matches = searchService.search(searchableChunks, request.query(), settings.toSearchOptions());
         List<RetrievalController.SearchHit> hits = toSearchHits(matches, settings.snippetLength());
+        log.info(
+            "Search completed query={} mode={} sourceCount={} documentCount={} candidateChunks={} hits={} durationMs={}",
+            describeQuery(request.query()),
+            settings.mode(),
+            countItems(request.sourceIds()),
+            countItems(request.documentIds()),
+            searchableChunks.size(),
+            hits.size(),
+            System.currentTimeMillis() - startedAt
+        );
         return new RetrievalController.SearchResponse(request.query(), hits, hits.size());
     }
 
     public RetrievalController.CompareSearchResponse compare(RetrievalController.CompareSearchRequest request) {
+        long startedAt = System.currentTimeMillis();
         ensureSourcesReadable(resolveReferencedSourceIds(request.sourceIds(), request.documentIds()));
         String retrievalProfileId = resolveSearchRetrievalProfileId(request.retrievalProfileId(), request.sourceIds());
         ResolvedRetrievalSettings baseSettings = resolveRetrievalSettings(retrievalProfileId, COMPARE_FETCH_TOP_K, null);
@@ -491,13 +545,22 @@ public class KnowledgeServiceFacade {
             ? compareModeResponse(searchableChunks, request.query(), baseSettings.withMode("lexical", COMPARE_FETCH_TOP_K, null))
             : emptyCompareModeResponse();
 
-        return new RetrievalController.CompareSearchResponse(
+        RetrievalController.CompareSearchResponse response = new RetrievalController.CompareSearchResponse(
             request.query(),
             COMPARE_FETCH_TOP_K,
             hybrid,
             semantic,
             lexical
         );
+        log.info(
+            "Compare search completed query={} modes={} sourceCount={} documentCount={} durationMs={}",
+            describeQuery(request.query()),
+            modes,
+            countItems(request.sourceIds()),
+            countItems(request.documentIds()),
+            System.currentTimeMillis() - startedAt
+        );
+        return response;
     }
 
     public RetrievalController.FetchResponse fetch(String chunkId, boolean includeNeighbors, int neighborWindow) {
@@ -525,6 +588,7 @@ public class KnowledgeServiceFacade {
     }
 
     public RetrievalController.RetrieveResponse retrieve(RetrievalController.RetrieveRequest request) {
+        long startedAt = System.currentTimeMillis();
         ensureSourcesReadable(resolveReferencedSourceIds(request.sourceIds(), List.of()));
         RetrievalController.SearchResponse searchResponse = search(new RetrievalController.SearchRequest(
             request.query(), request.sourceIds(), List.of(), request.retrievalProfileId(), request.topK(), null, null
@@ -536,16 +600,31 @@ public class KnowledgeServiceFacade {
                 hit.score(), fetched.keywords(), List.of(new RetrievalController.Reference("page", fetched.pageFrom(), fetched.pageTo()))
             );
         }).toList();
+        log.info(
+            "Retrieve completed query={} sourceCount={} evidences={} durationMs={}",
+            describeQuery(request.query()),
+            countItems(request.sourceIds()),
+            evidences.size(),
+            System.currentTimeMillis() - startedAt
+        );
         return new RetrievalController.RetrieveResponse(request.query(), evidences);
     }
 
     public RetrievalController.ExplainResponse explain(RetrievalController.ExplainRequest request) {
+        long startedAt = System.currentTimeMillis();
         ChunkRepository.ChunkRecord chunk = chunkRepository.findById(request.chunkId())
             .orElseThrow(() -> new IllegalArgumentException("Chunk not found: " + request.chunkId()));
         ensureSourceReadable(chunk.sourceId());
         String retrievalProfileId = resolveSearchRetrievalProfileId(request.retrievalProfileId(), List.of(chunk.sourceId()));
         ResolvedRetrievalSettings settings = resolveRetrievalSettings(retrievalProfileId, null, null);
         SearchService.ExplainResult explain = searchService.explain(toSearchableChunk(chunk), request.query(), settings.toSearchOptions());
+        log.info(
+            "Explain completed chunkId={} sourceId={} query={} durationMs={}",
+            request.chunkId(),
+            chunk.sourceId(),
+            describeQuery(request.query()),
+            System.currentTimeMillis() - startedAt
+        );
         return new RetrievalController.ExplainResponse(
             request.query(),
             request.chunkId(),
@@ -695,6 +774,7 @@ public class KnowledgeServiceFacade {
         );
         jobRepository.insert(job);
         sourceRepository.update(withRuntimeState(source, "MAINTENANCE", "知识库重建中，请稍后再试", job.id(), source.lastJobError(), source.rebuildRequired(), now));
+        log.info("Queued source rebuild sourceId={} jobId={}", sourceId, job.id());
         taskExecutor.execute(() -> runSourceRebuild(job.id(), sourceId));
         return new SourceController.RebuildSourceResponse(job.id(), sourceId, "RUNNING");
     }
@@ -742,6 +822,7 @@ public class KnowledgeServiceFacade {
         JobRepository.JobRecord existing = jobRepository.findById(jobId).orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
         JobRepository.JobRecord updated = new JobRepository.JobRecord(existing.id(), existing.jobType(), existing.sourceId(), existing.documentId(), "CANCELLED", existing.progress(), existing.stage(), existing.message(), existing.createdBy(), existing.totalDocuments(), existing.processedDocuments(), existing.successDocuments(), existing.failedDocuments(), existing.currentDocumentId(), existing.currentDocumentName(), existing.errorSummary(), existing.startedAt(), Instant.now(), existing.createdAt(), Instant.now());
         jobRepository.update(updated);
+        log.info("Cancelled job jobId={} jobType={} sourceId={} documentId={}", jobId, existing.jobType(), existing.sourceId(), existing.documentId());
         return new JobController.JobCancelResponse(jobId, true, "CANCELLED", updated.updatedAt());
     }
 
@@ -754,6 +835,7 @@ public class KnowledgeServiceFacade {
         Instant now = Instant.now();
         JobRepository.JobRecord retry = new JobRepository.JobRecord(Ids.newId("job"), existing.jobType(), existing.sourceId(), existing.documentId(), "SUCCEEDED", 100, existing.stage(), "Retry completed", "system", existing.totalDocuments(), existing.processedDocuments(), existing.successDocuments(), existing.failedDocuments(), existing.currentDocumentId(), existing.currentDocumentName(), existing.errorSummary(), now, now, now, now);
         jobRepository.insert(retry);
+        log.info("Retried job previousJobId={} retryJobId={} jobType={} sourceId={} documentId={}", jobId, retry.id(), existing.jobType(), existing.sourceId(), existing.documentId());
         return new JobController.JobRetryResponse(retry.id(), jobId, retry.status());
     }
 
@@ -795,8 +877,11 @@ public class KnowledgeServiceFacade {
     private boolean processUpload(String sourceId, MultipartFile file) {
         try {
             String documentId = Ids.newId("doc");
+            putMdcIfText(LoggingKeys.SOURCE_ID, sourceId);
+            putMdcIfText(LoggingKeys.DOCUMENT_ID, documentId);
             String sha256 = sha256(file.getInputStream());
             if (documentRepository.findBySourceIdAndSha256(sourceId, sha256).isPresent()) {
+                log.info("Skipped duplicate upload sourceId={} documentName={} sha256={}", sourceId, file.getOriginalFilename(), sha256);
                 return false;
             }
             Path originalPath = storageManager.originalFilePath(sourceId, documentId, file.getOriginalFilename());
@@ -804,6 +889,14 @@ public class KnowledgeServiceFacade {
             TikaConversionService.ConversionResult conversion = conversionService.convert(originalPath);
             if (!isAllowedContentType(Optional.ofNullable(file.getContentType()).orElse(conversion.contentType()), conversion.contentType())) {
                 storageManager.deleteRecursively(storageManager.uploadDocumentDir(sourceId, documentId));
+                log.warn(
+                    "Rejected upload sourceId={} documentId={} documentName={} requestContentType={} detectedContentType={}",
+                    sourceId,
+                    documentId,
+                    file.getOriginalFilename(),
+                    file.getContentType(),
+                    conversion.contentType()
+                );
                 throw new IllegalStateException("Unsupported content type: " + conversion.contentType());
             }
             Instant now = Instant.now();
@@ -830,9 +923,22 @@ public class KnowledgeServiceFacade {
             lexicalIndexService.upsertChunks(insertedChunks);
             vectorIndexService.upsertChunks(insertedChunks, vectors);
             refreshDocumentChunkStats(documentId);
+            log.info(
+                "Processed upload sourceId={} documentId={} documentName={} contentType={} chunkCount={} fileSizeBytes={}",
+                sourceId,
+                documentId,
+                file.getOriginalFilename(),
+                conversion.contentType(),
+                insertedChunks.size(),
+                file.getSize()
+            );
             return true;
         } catch (Exception e) {
+            log.error("Failed to process upload sourceId={} documentName={}", sourceId, file.getOriginalFilename(), e);
             throw new IllegalStateException("Failed to ingest file " + file.getOriginalFilename(), e);
+        } finally {
+            removeMdcIfText(LoggingKeys.DOCUMENT_ID, null);
+            removeMdcIfText(LoggingKeys.SOURCE_ID, sourceId);
         }
     }
 
@@ -1010,7 +1116,10 @@ public class KnowledgeServiceFacade {
 
     private void runSourceRebuild(String jobId, String sourceId) {
         Instant startedAt = Instant.now();
+        putMdcIfText(LoggingKeys.JOB_ID, jobId);
+        putMdcIfText(LoggingKeys.SOURCE_ID, sourceId);
         try {
+            log.info("Starting source rebuild sourceId={} jobId={}", sourceId, jobId);
             SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
                 .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
             List<DocumentRepository.DocumentRecord> documents = documentRepository.findBySourceId(sourceId);
@@ -1035,6 +1144,7 @@ public class KnowledgeServiceFacade {
                 final int failedBeforeDocument = failedCount;
                 try {
                     updateRebuildJob(jobId, sourceId, "RUNNING", stageHolder[0], "Parsing document", total, processedBeforeDocument, succeededBeforeDocument, failedBeforeDocument, document.id(), document.name(), null, startedAt, null);
+                    putMdcIfText(LoggingKeys.DOCUMENT_ID, document.id());
                     rebuildDocumentFromOriginal(document, currentStage -> {
                         stageHolder[0] = currentStage;
                         updateRebuildJob(
@@ -1057,6 +1167,14 @@ public class KnowledgeServiceFacade {
                     succeededCount++;
                 } catch (Exception ex) {
                     failedCount++;
+                    log.error(
+                        "Failed rebuilding document sourceId={} jobId={} documentId={} stage={}",
+                        sourceId,
+                        jobId,
+                        document.id(),
+                        stageHolder[0],
+                        ex
+                    );
                     maintenanceJobFailureRepository.insert(new MaintenanceJobFailureRepository.FailureRecord(
                         Ids.newId("mjf"),
                         jobId,
@@ -1068,6 +1186,8 @@ public class KnowledgeServiceFacade {
                         summarizeError(ex),
                         Instant.now()
                     ));
+                } finally {
+                    removeMdcIfText(LoggingKeys.DOCUMENT_ID, document.id());
                 }
                 processed++;
                 updateRebuildJob(jobId, sourceId, "RUNNING", processed == total ? "INDEXING" : "PARSING", "Rebuilt " + processed + "/" + total + " documents", total, processed, succeededCount, failedCount, null, null, failedCount > 0 ? failedCount + " 个文档处理失败" : null, startedAt, null);
@@ -1091,6 +1211,14 @@ public class KnowledgeServiceFacade {
                 finalFailedCount > 0,
                 now
             )));
+            log.info(
+                "Completed source rebuild sourceId={} jobId={} totalDocuments={} succeededDocuments={} failedDocuments={}",
+                sourceId,
+                jobId,
+                total,
+                finalSucceededCount,
+                finalFailedCount
+            );
         } catch (Exception ex) {
             Instant now = Instant.now();
             jobRepository.update(new JobRepository.JobRecord(
@@ -1106,6 +1234,10 @@ public class KnowledgeServiceFacade {
                 true,
                 now
             )));
+            log.error("Source rebuild failed sourceId={} jobId={}", sourceId, jobId, ex);
+        } finally {
+            removeMdcIfText(LoggingKeys.SOURCE_ID, sourceId);
+            removeMdcIfText(LoggingKeys.JOB_ID, jobId);
         }
     }
 
@@ -1142,6 +1274,41 @@ public class KnowledgeServiceFacade {
         lexicalIndexService.upsertChunks(insertedChunks);
         vectorIndexService.upsertChunks(insertedChunks, vectors);
         refreshDocumentChunkStats(document.id());
+        if (log.isDebugEnabled()) {
+            log.debug(
+                "Rebuilt document sourceId={} documentId={} chunkCount={}",
+                document.sourceId(),
+                document.id(),
+                insertedChunks.size()
+            );
+        }
+    }
+
+    private void putMdcIfText(String key, String value) {
+        if (StringUtils.hasText(value)) {
+            MDC.put(key, value);
+        }
+    }
+
+    private void removeMdcIfText(String key, String value) {
+        if (value == null || StringUtils.hasText(value)) {
+            MDC.remove(key);
+        }
+    }
+
+    private int countItems(List<?> items) {
+        return items == null ? 0 : items.size();
+    }
+
+    private String describeQuery(String query) {
+        String normalized = query == null ? "" : query.trim().replaceAll("\\s+", " ");
+        if (normalized.isBlank()) {
+            return "<blank>";
+        }
+        if (knowledgeLoggingProperties.isIncludeQueryText()) {
+            return normalized.length() > 200 ? normalized.substring(0, 200) + "..." : normalized;
+        }
+        return "len=" + normalized.length() + ",hash=" + hash(normalized).substring(0, 12);
     }
 
     private void updateRebuildJob(
