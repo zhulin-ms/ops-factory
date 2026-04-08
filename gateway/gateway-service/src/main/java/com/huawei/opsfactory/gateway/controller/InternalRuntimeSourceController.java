@@ -7,6 +7,7 @@ import com.huawei.opsfactory.gateway.monitoring.MetricsBuffer;
 import com.huawei.opsfactory.gateway.monitoring.MetricsSnapshot;
 import com.huawei.opsfactory.gateway.process.InstanceManager;
 import com.huawei.opsfactory.gateway.service.AgentConfigService;
+import com.huawei.opsfactory.gateway.service.LangfuseService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +27,7 @@ public class InternalRuntimeSourceController {
 
     private final InstanceManager instanceManager;
     private final AgentConfigService agentConfigService;
+    private final LangfuseService langfuseService;
     private final GatewayProperties gatewayProperties;
     private final MetricsBuffer metricsBuffer;
 
@@ -37,10 +39,12 @@ public class InternalRuntimeSourceController {
 
     public InternalRuntimeSourceController(InstanceManager instanceManager,
                                            AgentConfigService agentConfigService,
+                                           LangfuseService langfuseService,
                                            GatewayProperties gatewayProperties,
                                            MetricsBuffer metricsBuffer) {
         this.instanceManager = instanceManager;
         this.agentConfigService = agentConfigService;
+        this.langfuseService = langfuseService;
         this.gatewayProperties = gatewayProperties;
         this.metricsBuffer = metricsBuffer;
     }
@@ -62,6 +66,11 @@ public class InternalRuntimeSourceController {
         result.put("idle", Map.of(
                 "timeoutMs", idleTimeoutMs,
                 "checkIntervalMs", gatewayProperties.getIdle().getCheckIntervalMs()));
+        Map<String, Object> langfuse = new LinkedHashMap<>();
+        langfuse.put("configured", langfuseService.isConfigured());
+        String langfuseHost = gatewayProperties.getLangfuse().getHost();
+        langfuse.put("host", (langfuseHost != null && !langfuseHost.isEmpty()) ? langfuseHost : null);
+        result.put("langfuse", langfuse);
         return result;
     }
 

@@ -180,7 +180,7 @@ public class ReplyController {
      */
     private List<Map<String, Object>> snapshotFiles(Path workingDir) {
         try {
-            return fileService.listFiles(workingDir);
+            return fileService.listTopLevelFiles(workingDir);
         } catch (Exception e) {
             log.debug("[REPLY] file snapshot failed (best-effort): {}", e.getMessage());
             return Collections.emptyList();
@@ -194,7 +194,7 @@ public class ReplyController {
     private Mono<DataBuffer> buildOutputFilesEvent(Path workingDir, String sessionId,
                                                     List<Map<String, Object>> beforeFiles) {
         try {
-            List<Map<String, Object>> afterFiles = fileService.listFiles(workingDir);
+            List<Map<String, Object>> afterFiles = fileService.listTopLevelFiles(workingDir);
             List<Map<String, String>> changed = fileService.diffFiles(beforeFiles, afterFiles);
             if (changed.isEmpty()) {
                 return Mono.empty();

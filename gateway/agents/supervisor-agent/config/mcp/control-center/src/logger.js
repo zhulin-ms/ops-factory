@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 const LOG_ROOT = process.env.GOOSE_PATH_ROOT || process.cwd()
 const LOG_DIR = join(LOG_ROOT, 'logs', 'mcp')
-export const LOG_FILE_PATH = join(LOG_DIR, 'platform_monitor.log')
+export const LOG_FILE_PATH = join(LOG_DIR, 'control_center.log')
 
 mkdirSync(LOG_DIR, { recursive: true })
 
@@ -29,7 +29,7 @@ export function log(level, event, details = {}) {
   const payload = {
     ts: new Date().toISOString(),
     level,
-    service: 'platform_monitor',
+    service: 'control_center',
     event,
   }
 

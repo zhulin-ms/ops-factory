@@ -67,7 +67,6 @@
 
 - `app/modules/agents/*`
 - `app/modules/knowledge/*`
-- `app/modules/monitoring/*`
 - `app/modules/history/*`
 
 ## 2. 模块是如何被自动加载的

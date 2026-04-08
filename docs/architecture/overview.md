@@ -4,7 +4,7 @@
 This repository is a multi-service agent platform. The main development boundary is: `web-app` presents UI, `gateway` owns orchestration and API entry, agent runtimes execute work, `control-center` owns platform observation and service control, and support services such as `langfuse`, `onlyoffice`, and `prometheus-exporter` remain optional integrations.
 
 ## Service Responsibilities
-- `web-app/`: React/Vite frontend for chat, files, history, monitoring, settings, and agent configuration.
+- `web-app/`: React/Vite frontend for chat, files, history, settings, agent configuration, and admin control-center entry points.
 - `gateway/`: single backend entry for auth, routing, process management, config CRUD, file access, and session orchestration.
 - `control-center/`: platform control plane for service health, runtime observation, config/log access, and service actions.
 - `gateway/agents/*`: per-agent config, skills, memory, and provider definitions.

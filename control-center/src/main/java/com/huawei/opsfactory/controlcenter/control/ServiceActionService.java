@@ -4,7 +4,6 @@ import com.huawei.opsfactory.controlcenter.config.ControlCenterProperties;
 import com.huawei.opsfactory.controlcenter.events.EventStoreService;
 import com.huawei.opsfactory.controlcenter.model.ControlCenterEvent;
 import com.huawei.opsfactory.controlcenter.model.ServiceActionResult;
-import com.huawei.opsfactory.controlcenter.observe.ServiceHealthProbeService;
 import com.huawei.opsfactory.controlcenter.registry.ManagedServiceRegistry;
 import org.springframework.stereotype.Service;
 
@@ -14,16 +13,13 @@ public class ServiceActionService {
     private final ManagedServiceRegistry registry;
     private final CtlScriptExecutor executor;
     private final EventStoreService eventStoreService;
-    private final ServiceHealthProbeService probeService;
 
     public ServiceActionService(ManagedServiceRegistry registry,
                                CtlScriptExecutor executor,
-                               EventStoreService eventStoreService,
-                               ServiceHealthProbeService probeService) {
+                               EventStoreService eventStoreService) {
         this.registry = registry;
         this.executor = executor;
         this.eventStoreService = eventStoreService;
-        this.probeService = probeService;
     }
 
     public ServiceActionResult restart(String serviceId) {
@@ -36,19 +32,6 @@ public class ServiceActionService {
 
     public ServiceActionResult stop(String serviceId) {
         return execute(serviceId, "stop", "shutdown");
-    }
-
-    public Object probe(String serviceId) {
-        var status = probeService.getStatus(serviceId);
-        eventStoreService.append(new ControlCenterEvent(
-                System.currentTimeMillis(),
-                "probe",
-                status.id(),
-                status.name(),
-                "info",
-                status.reachable() ? "Probe succeeded" : "Probe failed: " + (status.message() != null ? status.message() : status.status())
-        ));
-        return status;
     }
 
     private ServiceActionResult execute(String serviceId, String actionLabel, String ctlAction) {

@@ -118,7 +118,7 @@ public class AuthFilterE2ETest extends BaseE2ETest {
 
     @Test
     public void adminEndpoint_regularUser_returns403() {
-        webClient.get().uri("/gateway/monitoring/system")
+        webClient.get().uri("/gateway/runtime-source/system")
                 .header(HEADER_SECRET_KEY, SECRET_KEY)
                 .header(HEADER_USER_ID, "alice")
                 .exchange()
@@ -128,7 +128,7 @@ public class AuthFilterE2ETest extends BaseE2ETest {
     @Test
     public void adminEndpoint_noAuth_returns401beforeForbidden() {
         // Auth filter runs before user context filter
-        webClient.get().uri("/gateway/monitoring/system")
+        webClient.get().uri("/gateway/runtime-source/system")
                 .exchange()
                 .expectStatus().isUnauthorized();
     }

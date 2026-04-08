@@ -67,10 +67,10 @@ describe('Rapid session lifecycle', () => {
       clients.map((c, i) => c.deleteSession(sessions[i])),
     )
 
-    // Verify monitoring — running instances for these users should be gone
+    // Verify runtime source — running instances for these users should be gone
     // (but the goosed process stays alive until idle-reaped; we check that
     //  no extra instances leaked beyond what's expected)
-    const monRes = await gw.fetch('/monitoring/instances')
+    const monRes = await gw.fetch('/runtime-source/instances')
     expect(monRes.ok).toBe(true)
     const monData = await monRes.json()
 
@@ -80,7 +80,7 @@ describe('Rapid session lifecycle', () => {
 
   it('should not leak ports after rapid create-destroy', async () => {
     // Record baseline instance count
-    const before = await gw.fetch('/monitoring/instances')
+    const before = await gw.fetch('/runtime-source/instances')
     const beforeData = await before.json()
     const baselineCount = beforeData.totalInstances || 0
 
@@ -97,7 +97,7 @@ describe('Rapid session lifecycle', () => {
 
     // After all cycles, instance count should be at most baseline + 1
     // (the goosed process for test-port-leak should be reused, not spawned 5 times)
-    const after = await gw.fetch('/monitoring/instances')
+    const after = await gw.fetch('/runtime-source/instances')
     const afterData = await after.json()
     expect(afterData.totalInstances).toBeLessThanOrEqual(baselineCount + 1)
   }, 180_000)

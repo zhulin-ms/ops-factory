@@ -72,9 +72,6 @@ test.describe('Sidebar navigation — regular user', () => {
     await expect(page.locator('.sidebar-nav a[href="/scheduled-actions"]')).not.toBeVisible()
   })
 
-  test('does NOT show Monitoring link', async ({ page }) => {
-    await expect(page.locator('.sidebar-nav a[href="/monitoring"]')).not.toBeVisible()
-  })
 })
 
 // =====================================================
@@ -92,7 +89,6 @@ test.describe('Sidebar navigation — admin user', () => {
     { text: 'Inbox', path: '/inbox' },
     { text: 'Agents', path: '/agents' },
     { text: 'Scheduler', path: '/scheduled-actions' },
-    { text: 'Monitoring', path: '/monitoring' },
   ]
 
   for (const item of adminNavItems) {
@@ -122,12 +118,6 @@ test.describe('RBAC — page access guards', () => {
     await expect(page).toHaveURL('/')
   })
 
-  test('regular user redirected from /monitoring', async ({ page }) => {
-    await login(page)
-    await page.goto('/monitoring')
-    await expect(page).toHaveURL('/')
-  })
-
   test('admin can access /agents/:id/configure', async ({ page }) => {
     await loginAs(page, ADMIN_USER)
     await page.goto('/agents/universal-agent/configure')
@@ -142,11 +132,6 @@ test.describe('RBAC — page access guards', () => {
     await expect(page).toHaveURL('/scheduled-actions')
   })
 
-  test('admin can access /monitoring', async ({ page }) => {
-    await loginAs(page, ADMIN_USER)
-    await page.goto('/monitoring')
-    await expect(page).toHaveURL('/monitoring')
-  })
 })
 
 // =====================================================

@@ -18,9 +18,9 @@ afterAll(async () => {
   if (gw) await gw.stop()
 }, 15_000)
 
-/** Fetch monitoring instances as admin */
-async function getMonitoringInstances(): Promise<any> {
-  const res = await gw.fetch('/monitoring/instances')
+/** Fetch runtime-source instances as admin */
+async function getRuntimeInstances(): Promise<any> {
+  const res = await gw.fetch('/runtime-source/instances')
   expect(res.ok).toBe(true)
   return res.json()
 }
@@ -51,7 +51,7 @@ describe('Watchdog — process crash detection and recovery', () => {
     expect(result1.hasError).toBe(false)
 
     // 3. Find the goosed PID via monitoring
-    const monData = await getMonitoringInstances()
+    const monData = await getRuntimeInstances()
     const pid = findInstancePid(monData, 'universal-agent', 'test-watchdog-user')
     expect(pid).toBeTruthy()
 
@@ -91,7 +91,7 @@ describe('Watchdog — process crash detection and recovery', () => {
       expect(result.hasFinish).toBe(true)
 
       // Find and kill the process
-      const monData = await getMonitoringInstances()
+      const monData = await getRuntimeInstances()
       const pid = findInstancePid(monData, 'universal-agent', 'test-multi-crash')
       if (pid) {
         try {
@@ -113,7 +113,7 @@ describe('Watchdog — process crash detection and recovery', () => {
   it('resident instances should not be idle-reaped', async () => {
     // supervisor-agent is configured as a resident instance for admin
     // Verify it's running
-    const monData1 = await getMonitoringInstances()
+    const monData1 = await getRuntimeInstances()
     const sysGroup = monData1.byAgent?.find(
       (g: any) => g.agentId === 'supervisor-agent',
     )

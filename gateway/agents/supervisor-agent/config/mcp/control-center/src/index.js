@@ -8,7 +8,7 @@ import { dispatch, tools } from './handlers.js'
 import { LOG_FILE_PATH, logError, logInfo } from './logger.js'
 
 const server = new Server(
-  { name: 'platform_monitor', version: '1.0.0' },
+  { name: 'control_center', version: '1.0.0' },
   { capabilities: { tools: {} } },
 )
 
@@ -39,6 +39,6 @@ await server.connect(transport)
 logInfo('server_started', {
   transport: 'stdio',
   pid: process.pid,
-  gatewayUrl: process.env.GATEWAY_URL || 'https://127.0.0.1:3000',
+  controlCenterUrl: process.env.CONTROL_CENTER_URL || 'https://127.0.0.1:8094',
   logFile: LOG_FILE_PATH,
 })

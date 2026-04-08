@@ -277,7 +277,7 @@ curl -X OPTIONS -H "Origin: http://localhost:5173" \
 - **操作步骤**：
   ```bash
   curl -H "x-secret-key: test" -H "x-user-id: admin" \
-    https://localhost:3000/monitoring/instances -k
+    https://localhost:3000/runtime-source/instances -k
   ```
 - **预期结果**：admin 用户的实例始终存在，状态为 running
 
@@ -400,7 +400,7 @@ curl -s http://localhost:9091/metrics | grep opsfactory_agents_configured_total
 curl -s http://localhost:9091/metrics | grep opsfactory_instances_total
 ```
 
-- **预期结果**：按 status 标签分组（starting/running/stopped/error），值与 `/monitoring/instances` 一致
+- **预期结果**：按 status 标签分组（starting/running/stopped/error），值与 `/runtime-source/instances` 一致
 
 ### TC-PROM-014 `P2`：每实例空闲时间指标
 
@@ -524,7 +524,7 @@ docker exec langfuse-postgres pg_isready
 
 ```bash
 curl -H "x-secret-key: test" -H "x-user-id: admin" \
-  "https://localhost:3000/monitoring/overview?from=2026-03-01&to=2026-03-17" -k
+  "https://localhost:8094/control-center/observability/overview?from=2026-03-01&to=2026-03-17" -H "x-secret-key: change-me"
 ```
 
 - 对比 Langfuse Web UI 中同时间段数据
@@ -534,7 +534,7 @@ curl -H "x-secret-key: test" -H "x-user-id: admin" \
 
 ```bash
 curl -H "x-secret-key: test" -H "x-user-id: admin" \
-  "https://localhost:3000/monitoring/traces?from=2026-03-01&to=2026-03-17&limit=5" -k
+  "https://localhost:8094/control-center/observability/traces?from=2026-03-01&to=2026-03-17&limit=5" -H "x-secret-key: change-me"
 ```
 
 - **预期结果**：返回的 Trace ID、时间戳等与 Langfuse UI 一致
@@ -543,7 +543,7 @@ curl -H "x-secret-key: test" -H "x-user-id: admin" \
 
 ```bash
 curl -H "x-secret-key: test" -H "x-user-id: admin" \
-  "https://localhost:3000/monitoring/observations?from=2026-03-01&to=2026-03-17" -k
+  "https://localhost:8094/control-center/observability/observations?from=2026-03-01&to=2026-03-17" -H "x-secret-key: change-me"
 ```
 
 - **预期结果**：返回按 observation 名称分组的延迟分布

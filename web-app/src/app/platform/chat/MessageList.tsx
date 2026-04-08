@@ -157,9 +157,13 @@ export default function MessageList({ messages, isLoading = false, chatState = C
             for (const content of msg.content) {
                 if (content.type === 'toolResponse' && content.id) {
                     const toolResult = content.toolResult
+                    const toolResultIsError = Boolean(
+                        toolResult?.status === 'error' ||
+                        (toolResult && typeof toolResult === 'object' && 'isError' in toolResult && toolResult.isError === true)
+                    )
                     map.set(content.id, {
                         result: toolResult?.status === 'success' ? toolResult.value : toolResult,
-                        isError: toolResult?.status === 'error'
+                        isError: toolResultIsError
                     })
                 }
             }

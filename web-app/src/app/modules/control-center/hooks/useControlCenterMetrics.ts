@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { CONTROL_CENTER_URL, controlCenterHeaders } from '../../../../config/runtime'
 import { getErrorMessage } from '../../../../utils/errorMessages'
 
-// ---- Types matching GET /monitoring/metrics response ----
+// ---- Types matching GET /runtime/metrics response ----
 
 export interface MetricsPoint {
   t: number

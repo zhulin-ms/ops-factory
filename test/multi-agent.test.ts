@@ -110,15 +110,15 @@ describe('Multi-agent concurrent usage', () => {
     await gw.fetchAs(USER, `/agents/${AGENT_B}/sessions/${sessionB.id}`, { method: 'DELETE' })
   }, 60_000)
 
-  it('monitoring shows instances from different agents', async () => {
+  it('runtime source shows instances from different agents', async () => {
     const clientA = new WebClient(gw, USER, AGENT_A)
     const clientB = new WebClient(gw, USER, AGENT_B)
 
     const sessionA = await clientA.startNewChat()
     const sessionB = await clientB.startNewChat()
 
-    // Check monitoring
-    const res = await gw.fetch('/monitoring/instances')
+    // Check runtime source
+    const res = await gw.fetch('/runtime-source/instances')
     expect(res.ok).toBe(true)
     const monData = await res.json()
 

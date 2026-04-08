@@ -57,6 +57,6 @@ Before considering a frontend task complete, confirm:
 Request design or frontend review when a change affects:
 - navigation structure
 - right-panel behavior
-- chat/file/monitoring core workflows
+- chat/file/control-center core workflows
 - shared visual patterns used across multiple pages
 - introduction of a new reusable layout or visual primitive

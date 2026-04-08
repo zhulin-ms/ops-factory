@@ -402,9 +402,9 @@ describe('InstanceManager GATEWAY_URL injection', () => {
 })
 
 // =============================================================================
-// 11. supervisor-agent MCP config uses env_keys for GATEWAY_URL
+// 11. supervisor-agent control-center MCP relies on built-in defaults
 // =============================================================================
-describe('supervisor-agent MCP config uses env_keys', () => {
+describe('supervisor-agent control-center MCP config defaults', () => {
   let config: string
 
   beforeAll(async () => {
@@ -414,50 +414,49 @@ describe('supervisor-agent MCP config uses env_keys', () => {
     )
   })
 
-  it('does NOT hardcode GATEWAY_URL in envs', () => {
-    // Should not have envs: GATEWAY_URL: http://...
+  it('does NOT hardcode CONTROL_CENTER_URL in envs', () => {
     const lines = config.split('\n')
-    const envsBlock = lines.some(l => /^\s+GATEWAY_URL:\s*http/.test(l))
+    const envsBlock = lines.some(l => /^\s+CONTROL_CENTER_URL:\s*http/.test(l))
     expect(envsBlock).toBe(false)
   })
 
-  it('includes GATEWAY_URL in env_keys', () => {
-    expect(config).toContain('- GATEWAY_URL')
+  it('does NOT require CONTROL_CENTER_URL in env_keys', () => {
+    expect(config).not.toContain('- CONTROL_CENTER_URL')
   })
 
   it('sets NODE_TLS_REJECT_UNAUTHORIZED in envs', () => {
     expect(config).toContain("NODE_TLS_REJECT_UNAUTHORIZED: '0'")
   })
 
-  it('includes GATEWAY_SECRET_KEY in env_keys', () => {
-    expect(config).toContain('- GATEWAY_SECRET_KEY')
+  it('does NOT require CONTROL_CENTER_SECRET_KEY in env_keys', () => {
+    expect(config).not.toContain('- CONTROL_CENTER_SECRET_KEY')
   })
 })
 
 // =============================================================================
-// 12. platform-monitor fallback URL uses https
+// 12. control-center MCP fallback URL uses https
 // =============================================================================
-describe('platform-monitor MCP source', () => {
+describe('control-center MCP source', () => {
   let source: string
 
   beforeAll(async () => {
     source = await readFile(
       join(GATEWAY_DIR, 'agents', 'supervisor-agent', 'config', 'mcp',
-        'platform-monitor', 'src', 'handlers.js'),
+        'control-center', 'src', 'handlers.js'),
       'utf-8',
     )
   })
 
   it('fallback URL uses https', () => {
-    expect(source).toMatch(/GATEWAY_URL\s*=\s*process\.env\.GATEWAY_URL\s*\|\|\s*'https:\/\//)
+    expect(source).toMatch(/CONTROL_CENTER_URL\s*=\s*process\.env\.CONTROL_CENTER_URL\s*\|\|\s*'https:\/\//)
   })
 
   it('does not contain http:// fallback', () => {
-    expect(source).not.toMatch(/GATEWAY_URL.*\|\|\s*'http:\/\//)
+    expect(source).not.toMatch(/CONTROL_CENTER_URL.*\|\|\s*'http:\/\//)
   })
 
-  it('reads GATEWAY_URL from environment', () => {
-    expect(source).toContain('process.env.GATEWAY_URL')
+  it('reads CONTROL_CENTER_URL from environment', () => {
+    expect(source).toContain('process.env.CONTROL_CENTER_URL')
   })
 })
 
