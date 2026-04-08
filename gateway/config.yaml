@@ -1,9 +1,8 @@
 port: 3000
-host: 0.0.0.0
-secretKey: test
-corsOrigin: '*'
-goosedBin: goosed
-goosedTls: true
+host: "127.0.0.1"
+secretKey: "test"
+corsOrigin: "*"
+goosedBin: "/Users/zlj/Downloads/Goose.app/Contents/Resources/bin/goosed"
 gooseTls: true
 gatewayTls: false
 gatewayKeyStore: .gateway-keystore.p12
@@ -25,7 +24,6 @@ remoteExecution: {defaultTimeout: 30, maxTimeout: 120}
 agents:
 - {id: universal-agent, name: Universal Agent}
 - {id: kb-agent, name: KB Agent}
-- {id: report-agent, name: Report Agent}
 - {id: supervisor-agent, name: Supervisor Agent}
 - {id: qos-agent, name: QoS Agent}
 - {id: qa-agent, name: QA Agent}

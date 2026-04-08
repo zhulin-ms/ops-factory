@@ -283,6 +283,9 @@ export class GoosedClient {
     // === Chat APIs ===
 
     async *sendMessage(sessionId: string, text: string, images?: ImageData[]): AsyncGenerator<SSEEvent> {
+        if (!text.trim() && (!images || images.length === 0)) {
+            throw new GoosedException('Empty message');
+        }
         const content: Array<Record<string, unknown>> = [];
         if (text.trim()) {
             content.push({ type: 'text', text });

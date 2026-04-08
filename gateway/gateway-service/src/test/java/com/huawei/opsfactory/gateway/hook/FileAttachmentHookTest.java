@@ -152,7 +152,22 @@ public class FileAttachmentHookTest {
         String body = "{\"user_message\": {\"content\": []}}";
         HookContext ctx = new HookContext(body, "agent1", "user1");
         StepVerifier.create(hook.process(ctx))
-                .expectNext(ctx)
-                .verifyComplete();
+                .expectErrorSatisfies(e -> {
+                    assertTrue(e instanceof ResponseStatusException);
+                    assertEquals(HttpStatus.BAD_REQUEST, ((ResponseStatusException) e).getStatus());
+                })
+                .verify();
+    }
+
+    @Test
+    public void testBlankTextContent_badRequest() {
+        String body = "{\"user_message\": {\"content\": [{\"type\": \"text\", \"text\": \"   \"}]}}";
+        HookContext ctx = new HookContext(body, "agent1", "user1");
+        StepVerifier.create(hook.process(ctx))
+                .expectErrorSatisfies(e -> {
+                    assertTrue(e instanceof ResponseStatusException);
+                    assertEquals(HttpStatus.BAD_REQUEST, ((ResponseStatusException) e).getStatus());
+                })
+                .verify();
     }
 }

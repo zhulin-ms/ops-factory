@@ -1,5 +1,12 @@
-GOOSE_PROVIDER: custom_op-qwen3.5-35b-a3b
-GOOSE_MODEL: qwen/Qwen3.5-35B-A3B
+#GOOSE_PROVIDER: custom_op-qwen3.5-35b-a3b
+#GOOSE_MODEL: qwen/Qwen3.5-35B-A3B
+
+GOOSE_PROVIDER: custom_qwen3.5-27b
+GOOSE_MODEL: qwen/qwen3.5-27b
+
+#GOOSE_PROVIDER: custom_glm
+#GOOSE_MODEL: GLM-4.7
+
 GOOSE_MODE: auto
 GOOSE_DISABLE_KEYRING: '1'
 GOOSE_TELEMETRY_ENABLED: false
@@ -19,7 +26,7 @@ extensions:
     bundled: true
     available_tools: []
   todo:
-    enabled: true
+    enabled: false
     type: platform
     name: todo
     description: Enable a todo list for goose so it can keep track of what it is doing
@@ -110,14 +117,6 @@ extensions:
     display_name: Analyze
     bundled: true
     available_tools: []
-  skills:
-    enabled: true
-    type: platform
-    name: skills
-    description: Load and use skills from relevant directories
-    display_name: Skills
-    bundled: true
-    available_tools: []
   sop-executor:
     enabled: false
     type: stdio
@@ -125,7 +124,7 @@ extensions:
     description: SOP workflow executor - list/run SOPs, query hosts, execute remote commands
     cmd: node
     args:
-    - D:/ss/code/TMP/ops-factory-main/gateway/agents/qos-agent/config/mcp/sop-executor/dist/index.js
+      - /Users/zlj/Documents/ZLJ/works/code/ops-factory/gateway/agents/qos-agent/config/mcp/sop-executor/dist/index.js
     envs:
       GATEWAY_URL: http://127.0.0.1:3000
       GATEWAY_SECRET_KEY: test

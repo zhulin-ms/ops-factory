@@ -1,5 +1,5 @@
-GOOSE_PROVIDER: custom_opsagentllm
-GOOSE_MODEL: kimi-k2-turbo-preview
+GOOSE_PROVIDER: custom_glm
+GOOSE_MODEL: GLM-4.7
 GOOSE_MODE: auto
 GOOSE_DISABLE_KEYRING: '1'
 GOOSE_TELEMETRY_ENABLED: false

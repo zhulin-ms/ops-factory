@@ -45,6 +45,28 @@ public class FileAttachmentHook implements RequestHook {
                 return Mono.just(ctx);
             }
 
+            boolean hasMeaningfulContent = false;
+            for (JsonNode item : content) {
+                String type = item.path("type").asText("");
+                if ("text".equals(type)) {
+                    if (!item.path("text").asText("").trim().isEmpty()) {
+                        hasMeaningfulContent = true;
+                        break;
+                    }
+                } else if ("image".equals(type)) {
+                    if (!item.path("data").asText("").trim().isEmpty()) {
+                        hasMeaningfulContent = true;
+                        break;
+                    }
+                } else if (!type.isEmpty()) {
+                    hasMeaningfulContent = true;
+                    break;
+                }
+            }
+            if (!hasMeaningfulContent) {
+                return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Empty user message"));
+            }
+
             // Find text content and extract file paths
             Path usersDir = agentConfigService.getUsersDir();
             String usersDirStr = usersDir.toAbsolutePath().normalize().toString();

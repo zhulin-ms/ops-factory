@@ -1,5 +1,8 @@
-GOOSE_PROVIDER: custom_openai_oss_120b
-GOOSE_MODEL: openai/gpt-oss-120b
+GOOSE_PROVIDER: custom_op-qwen3.5-35b-a3b
+GOOSE_MODEL: qwen/Qwen3.5-35B-A3B
+
+#GOOSE_PROVIDER: custom_glm
+#GOOSE_MODEL: GLM-4.7
 GOOSE_MODE: auto
 GOOSE_DISABLE_KEYRING: '1'
 GOOSE_TELEMETRY_ENABLED: false
