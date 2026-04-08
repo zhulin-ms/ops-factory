@@ -170,7 +170,7 @@ export default function AddMcpModal({
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal mcp-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal modal-wide mcp-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">{isEditMode ? t('mcp.editTitle') : t('mcp.addTitle')}</h2>
           <button
@@ -204,7 +204,7 @@ export default function AddMcpModal({
                 disabled={isEditMode}
               />
               {isEditMode && (
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--spacing-1)' }}>
+                <p className="mcp-form-hint">
                   {t('mcp.nameCannotChange')}
                 </p>
               )}
@@ -271,7 +271,7 @@ export default function AddMcpModal({
                     onChange={e => setArgs(e.target.value)}
                     placeholder="-m my_mcp_server"
                   />
-                  <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--spacing-1)' }}>
+                  <p className="mcp-form-hint">
                     {t('mcp.argumentsHint')}
                   </p>
                 </div>
@@ -304,34 +304,39 @@ export default function AddMcpModal({
                   {t('mcp.envAdd')}
                 </button>
               </div>
-              {envVars.map((env, index) => (
-                <div key={index} className="mcp-form-env-row">
-                  <input
-                    type="text"
-                    className="form-input mcp-form-env-key"
-                    value={env.key}
-                    onChange={e => updateEnvVar(index, 'key', e.target.value)}
-                    placeholder={t('mcp.envKeyPlaceholder')}
-                    disabled={env.fromExisting}
-                  />
-                  <input
-                    type="text"
-                    className="form-input mcp-form-env-value"
-                    value={env.value}
-                    onChange={e => updateEnvVar(index, 'value', e.target.value)}
-                    placeholder={env.fromExisting ? t('mcp.envKeepCurrentValue') : t('mcp.envValuePlaceholder')}
-                  />
-                  <button
-                    type="button"
-                    className="mcp-form-remove-btn"
-                    onClick={() => removeEnvVar(index)}
-                  >
-                    &times;
-                  </button>
+              {envVars.length > 0 && (
+                <div className="mcp-form-env-list">
+                  {envVars.map((env, index) => (
+                    <div key={index} className="mcp-form-env-row">
+                      <input
+                        type="text"
+                        className="form-input mcp-form-env-key"
+                        value={env.key}
+                        onChange={e => updateEnvVar(index, 'key', e.target.value)}
+                        placeholder={t('mcp.envKeyPlaceholder')}
+                        disabled={env.fromExisting}
+                        title={env.key}
+                      />
+                      <input
+                        type="text"
+                        className="form-input mcp-form-env-value"
+                        value={env.value}
+                        onChange={e => updateEnvVar(index, 'value', e.target.value)}
+                        placeholder={env.fromExisting ? t('mcp.envKeepCurrentValue') : t('mcp.envValuePlaceholder')}
+                      />
+                      <button
+                        type="button"
+                        className="mcp-form-remove-btn"
+                        onClick={() => removeEnvVar(index)}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
               {isEditMode && envVars.some(env => env.fromExisting) && (
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--spacing-1)' }}>
+                <p className="mcp-form-hint">
                   {t('mcp.envExistingHint')}
                 </p>
               )}
@@ -341,8 +346,7 @@ export default function AddMcpModal({
               <label className="form-label">{t('mcp.timeout')}</label>
               <input
                 type="number"
-                className="form-input"
-                style={{ width: '120px' }}
+                className="form-input mcp-form-timeout"
                 value={timeout}
                 onChange={e => setTimeout(e.target.value)}
                 min="1"

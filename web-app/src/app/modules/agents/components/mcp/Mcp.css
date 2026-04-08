@@ -226,8 +226,8 @@
     color: #b45309;
 }
 
-.mcp-modal {
-    max-width: 520px;
+.mcp-modal.modal-wide {
+    max-width: min(860px, calc(100vw - 48px));
 }
 
 .form-required {
@@ -276,18 +276,35 @@
     text-decoration: underline;
 }
 
-.mcp-form-env-row {
+.mcp-form-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin: var(--spacing-1) 0 0;
+}
+
+.mcp-form-env-list {
     display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.mcp-form-env-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
     gap: var(--spacing-2);
     align-items: center;
 }
 
 .mcp-form-env-key {
-    flex: 0 0 120px;
+    min-width: 0;
 }
 
 .mcp-form-env-value {
-    flex: 1;
+    min-width: 0;
+}
+
+.mcp-form-timeout {
+    width: 120px;
 }
 
 .mcp-form-remove-btn {
@@ -309,4 +326,21 @@
 .mcp-form-remove-btn:hover {
     background: #fef2f2;
     color: #dc2626;
+}
+
+@media (max-width: 720px) {
+    .mcp-form-env-row {
+        grid-template-columns: 1fr auto;
+    }
+
+    .mcp-form-env-key,
+    .mcp-form-env-value {
+        grid-column: 1;
+    }
+
+    .mcp-form-remove-btn {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: center;
+    }
 }
