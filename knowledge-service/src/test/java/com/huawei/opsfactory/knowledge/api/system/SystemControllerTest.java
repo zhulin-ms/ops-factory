@@ -43,7 +43,10 @@ class SystemControllerTest {
             .andExpect(jsonPath("$.retrieval.mode").value("hybrid"))
             .andExpect(jsonPath("$.retrieval.lexicalTopK").value(50))
             .andExpect(jsonPath("$.retrieval.semanticTopK").value(50))
+            .andExpect(jsonPath("$.retrieval.finalTopK").value(8))
             .andExpect(jsonPath("$.retrieval.rrfK").value(60))
+            .andExpect(jsonPath("$.retrieval.semanticThreshold").value(0.42))
+            .andExpect(jsonPath("$.retrieval.lexicalThreshold").value(0.52))
             .andExpect(jsonPath("$.features.allowRequestOverride").value(true));
     }
 }

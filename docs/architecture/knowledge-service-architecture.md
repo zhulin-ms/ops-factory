@@ -489,6 +489,8 @@ request.retrievalProfileId ?
 - `snippetLength`
 - `topK`
 
+其中 `scoreThreshold` 当前只对 `semantic / lexical` 模式生效，`hybrid` 不走阈值过滤。
+
 而 `includeScores`、`includeExplain` 等字段目前主要是接口预留。
 
 ### 7.8 Compare 的默认路径

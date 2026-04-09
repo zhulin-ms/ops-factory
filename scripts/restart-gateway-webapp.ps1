@@ -1,14 +1,20 @@
 # ==============================================================================
 # ops-factory Windows service restart script
 #
-# Usage: restart-gateway-webapp.ps1 [gateway|webapp|all]
+# Usage: restart-gateway-webapp.ps1 [gateway|webapp|all] [nobuild]
 #   gateway  - restart gateway only (default)
 #   webapp   - restart webapp only
 #   all      - restart both gateway and webapp
+#   nobuild  - (optional) skip build steps, restart only
 # ==============================================================================
 
 param(
-    [string]$Component = "all"
+    [Parameter(Position = 0)]
+    [ValidateSet("gateway", "webapp", "all")]
+    [string]$Component = "all",
+
+    [Parameter(Position = 1)]
+    [switch]$NoBuild
 )
 
 $ErrorActionPreference = "Continue"
@@ -175,6 +181,66 @@ function Start-GatewayService {
 }
 
 # ==============================================================================
+# Build functions
+# ==============================================================================
+
+function Build-Gateway {
+    Write-Status "INFO" "Building gateway (Maven)..."
+
+    $JAVA_HOME = Split-Path -Parent (Split-Path -Parent $JAVA_CMD)
+
+    Push-Location "$ROOT_DIR\gateway"
+    $env:JAVA_HOME = $JAVA_HOME
+    $mvnArgs = "package -pl gateway-service -am -Dmaven.test.skip=true -q"
+    & cmd.exe /c "mvn $mvnArgs" 2>&1 | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Status "FAIL" "Gateway build failed (exit code $exitCode)"
+        Write-Status "INFO"  "Try manually: cd gateway && set JAVA_HOME=$JAVA_HOME && mvn package -Dmaven.test.skip=true"
+        exit 1
+    }
+
+    $JAR = "$ROOT_DIR\gateway\gateway-service\target\gateway-service.jar"
+    if (-not (Test-Path $JAR)) {
+        Write-Status "FAIL" "Build succeeded but JAR not found: $JAR"
+        exit 1
+    }
+
+    Write-Status "OK" "Gateway build complete"
+}
+
+function Build-Webapp {
+    Write-Status "INFO" "Building webapp (Vite)..."
+
+    $WEBAPP_DIR = "$ROOT_DIR\web-app"
+    if (-not (Test-Path "$WEBAPP_DIR\node_modules")) {
+        Write-Status "INFO" "Installing npm dependencies..."
+        Push-Location $WEBAPP_DIR
+        & npm.cmd install 2>&1 | ForEach-Object { Write-Host $_ }
+        $exitCode = $LASTEXITCODE
+        Pop-Location
+        if ($exitCode -ne 0) {
+            Write-Status "FAIL" "npm install failed"
+            exit 1
+        }
+    }
+
+    Push-Location $WEBAPP_DIR
+    & npm.cmd run build 2>&1 | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Status "FAIL" "Webapp build failed"
+        exit 1
+    }
+
+    Write-Status "OK" "Webapp build complete"
+}
+
+# ==============================================================================
 # Webapp functions
 # ==============================================================================
 
@@ -225,14 +291,18 @@ Write-Status "INFO" "Using Java: $JAVA_CMD"
 
 switch ($Component.ToLower()) {
     "gateway" {
+        if (-not $NoBuild) { Build-Gateway }
         Stop-Gateway
         Start-GatewayService -JavaCmd $JAVA_CMD
     }
     "webapp" {
+        if (-not $NoBuild) { Build-Webapp }
         Stop-Webapp
         Start-WebappService
     }
     "all" {
+        if (-not $NoBuild) { Build-Gateway }
+        if (-not $NoBuild) { Build-Webapp }
         Stop-Webapp
         Stop-Gateway
         Start-GatewayService -JavaCmd $JAVA_CMD
@@ -240,7 +310,7 @@ switch ($Component.ToLower()) {
     }
     default {
         Write-Status "ERROR" "Unknown component: $Component"
-        Write-Host "Usage: $([System.IO.Path]::GetFileName($PSCommandPath)) [gateway|webapp|all]"
+        Write-Host "Usage: $([System.IO.Path]::GetFileName($PSCommandPath)) [gateway|webapp|all] [-NoBuild]"
         exit 1
     }
 }

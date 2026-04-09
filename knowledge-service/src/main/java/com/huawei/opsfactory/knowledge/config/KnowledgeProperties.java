@@ -211,6 +211,8 @@ public class KnowledgeProperties {
         private int finalTopK = 8;
         private int maxTopK = 64;
         private int rrfK = 60;
+        private double semanticThreshold = 0.42;
+        private double lexicalThreshold = 0.52;
         private int snippetLength = 180;
         public String getMode() { return mode; }
         public void setMode(String mode) { this.mode = mode; }
@@ -224,6 +226,10 @@ public class KnowledgeProperties {
         public void setMaxTopK(int maxTopK) { this.maxTopK = maxTopK; }
         public int getRrfK() { return rrfK; }
         public void setRrfK(int rrfK) { this.rrfK = rrfK; }
+        public double getSemanticThreshold() { return semanticThreshold; }
+        public void setSemanticThreshold(double semanticThreshold) { this.semanticThreshold = semanticThreshold; }
+        public double getLexicalThreshold() { return lexicalThreshold; }
+        public void setLexicalThreshold(double lexicalThreshold) { this.lexicalThreshold = lexicalThreshold; }
         public int getSnippetLength() { return snippetLength; }
         public void setSnippetLength(int snippetLength) { this.snippetLength = snippetLength; }
     }

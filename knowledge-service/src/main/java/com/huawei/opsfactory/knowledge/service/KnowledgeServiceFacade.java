@@ -114,8 +114,8 @@ public class KnowledgeServiceFacade {
         String id = Ids.newId("src");
         String indexProfileId = request.indexProfileId() != null ? request.indexProfileId() : profileBootstrapService.defaultIndexProfileId();
         String retrievalProfileId = request.retrievalProfileId() != null ? request.retrievalProfileId() : profileBootstrapService.defaultRetrievalProfileId();
-        validateIndexProfileExists(indexProfileId);
-        validateRetrievalProfileExists(retrievalProfileId);
+        validateIndexProfileBindableToSource(indexProfileId, id);
+        validateRetrievalProfileBindableToSource(retrievalProfileId, id);
         SourceRepository.SourceRecord record = new SourceRepository.SourceRecord(
             id, request.name(), request.description(), "ACTIVE", "MANAGED", indexProfileId, retrievalProfileId,
             "ACTIVE", null, null, null, false, now, now
@@ -139,8 +139,8 @@ public class KnowledgeServiceFacade {
         Instant now = Instant.now();
         String indexProfileId = request.indexProfileId() != null ? request.indexProfileId() : existing.indexProfileId();
         String retrievalProfileId = request.retrievalProfileId() != null ? request.retrievalProfileId() : existing.retrievalProfileId();
-        validateIndexProfileExists(indexProfileId);
-        validateRetrievalProfileExists(retrievalProfileId);
+        validateIndexProfileBindableToSource(indexProfileId, sourceId);
+        validateRetrievalProfileBindableToSource(retrievalProfileId, sourceId);
         SourceRepository.SourceRecord updated = new SourceRepository.SourceRecord(
             sourceId,
             request.name() != null ? request.name() : existing.name(),
@@ -662,14 +662,14 @@ public class KnowledgeServiceFacade {
 
     public PageResponse<ProfileController.ProfileSummary> listIndexProfiles(int page, int pageSize) {
         List<ProfileController.ProfileSummary> items = profileRepository.findAllIndex().stream()
-            .map(p -> new ProfileController.ProfileSummary(p.id(), p.name(), p.config(), p.createdAt(), p.updatedAt()))
+            .map(this::toProfileSummary)
             .toList();
         return page(items, page, pageSize);
     }
 
     public PageResponse<ProfileController.ProfileSummary> listRetrievalProfiles(int page, int pageSize) {
         List<ProfileController.ProfileSummary> items = profileRepository.findAllRetrieval().stream()
-            .map(p -> new ProfileController.ProfileSummary(p.id(), p.name(), p.config(), p.createdAt(), p.updatedAt()))
+            .map(this::toProfileSummary)
             .toList();
         return page(items, page, pageSize);
     }
@@ -677,34 +677,70 @@ public class KnowledgeServiceFacade {
     @Transactional
     public ProfileController.ProfileDetail createIndexProfile(ProfileController.CreateProfileRequest request) {
         Instant now = Instant.now();
-        ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(Ids.newId("ip"), request.name(), request.config(), "index", now, now);
+        String profileName = request.name() != null ? request.name().trim() : null;
+        ensureProfileNameAvailable(profileName, null, true);
+        ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(
+            Ids.newId("ip"),
+            profileName,
+            request.config(),
+            "index",
+            null,
+            false,
+            null,
+            now,
+            now
+        );
         profileRepository.insertIndex(record);
-        return new ProfileController.ProfileDetail(record.id(), record.name(), record.config(), now, now);
+        return toProfileDetail(record);
     }
 
     @Transactional
     public ProfileController.ProfileDetail createRetrievalProfile(ProfileController.CreateProfileRequest request) {
         Instant now = Instant.now();
-        ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(Ids.newId("rp"), request.name(), request.config(), "retrieval", now, now);
+        String profileName = request.name() != null ? request.name().trim() : null;
+        ensureProfileNameAvailable(profileName, null, false);
+        ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(
+            Ids.newId("rp"),
+            profileName,
+            request.config(),
+            "retrieval",
+            null,
+            false,
+            null,
+            now,
+            now
+        );
         profileRepository.insertRetrieval(record);
-        return new ProfileController.ProfileDetail(record.id(), record.name(), record.config(), now, now);
+        return toProfileDetail(record);
     }
 
     public ProfileController.ProfileDetail getIndexProfile(String id) {
         ProfileRepository.ProfileRecord record = profileRepository.findIndexById(id).orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + id));
-        return new ProfileController.ProfileDetail(record.id(), record.name(), record.config(), record.createdAt(), record.updatedAt());
+        return toProfileDetail(record);
     }
 
     public ProfileController.ProfileDetail getRetrievalProfile(String id) {
         ProfileRepository.ProfileRecord record = profileRepository.findRetrievalById(id).orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + id));
-        return new ProfileController.ProfileDetail(record.id(), record.name(), record.config(), record.createdAt(), record.updatedAt());
+        return toProfileDetail(record);
     }
 
     @Transactional
     public ProfileController.ProfileUpdateResponse updateIndexProfile(String id, ProfileController.UpdateProfileRequest request) {
         ProfileRepository.ProfileRecord existing = profileRepository.findIndexById(id).orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + id));
-        ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(id, request.name() != null ? request.name() : existing.name(),
-            mergeMaps(existing.config(), request.config()), "index", existing.createdAt(), Instant.now());
+        ensureProfileMutable(existing, "index");
+        String profileName = request.name() != null ? request.name().trim() : existing.name();
+        ensureProfileNameAvailable(profileName, id, true);
+        ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(
+            id,
+            profileName,
+            mergeMaps(existing.config(), request.config()),
+            "index",
+            existing.ownerSourceId(),
+            existing.readonly(),
+            existing.derivedFromProfileId(),
+            existing.createdAt(),
+            Instant.now()
+        );
         profileRepository.updateIndex(updated);
         if (request.config() != null && !request.config().isEmpty()) {
             markSourcesRebuildRequiredByIndexProfile(id);
@@ -715,14 +751,30 @@ public class KnowledgeServiceFacade {
     @Transactional
     public ProfileController.ProfileUpdateResponse updateRetrievalProfile(String id, ProfileController.UpdateProfileRequest request) {
         ProfileRepository.ProfileRecord existing = profileRepository.findRetrievalById(id).orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + id));
-        ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(id, request.name() != null ? request.name() : existing.name(),
-            mergeMaps(existing.config(), request.config()), "retrieval", existing.createdAt(), Instant.now());
+        ensureProfileMutable(existing, "retrieval");
+        String profileName = request.name() != null ? request.name().trim() : existing.name();
+        ensureProfileNameAvailable(profileName, id, false);
+        ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(
+            id,
+            profileName,
+            mergeMaps(existing.config(), request.config()),
+            "retrieval",
+            existing.ownerSourceId(),
+            existing.readonly(),
+            existing.derivedFromProfileId(),
+            existing.createdAt(),
+            Instant.now()
+        );
         profileRepository.updateRetrieval(updated);
         return new ProfileController.ProfileUpdateResponse(id, updated.name(), updated.updatedAt());
     }
 
     @Transactional
     public ProfileController.DeleteProfileResponse deleteIndexProfile(String id) {
+        ensureProfileMutable(
+            profileRepository.findIndexById(id).orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + id)),
+            "index"
+        );
         ensureProfileNotBound(id, true);
         profileRepository.deleteIndex(id);
         return new ProfileController.DeleteProfileResponse(id, true);
@@ -730,6 +782,10 @@ public class KnowledgeServiceFacade {
 
     @Transactional
     public ProfileController.DeleteProfileResponse deleteRetrievalProfile(String id) {
+        ensureProfileMutable(
+            profileRepository.findRetrievalById(id).orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + id)),
+            "retrieval"
+        );
         ensureProfileNotBound(id, false);
         profileRepository.deleteRetrieval(id);
         return new ProfileController.DeleteProfileResponse(id, true);
@@ -747,8 +803,8 @@ public class KnowledgeServiceFacade {
         SourceRepository.SourceRecord source = sourceRepository.findById(request.sourceId())
             .orElseThrow(() -> new IllegalArgumentException("Source not found: " + request.sourceId()));
         ensureSourceWritable(source);
-        validateIndexProfileExists(request.indexProfileId());
-        validateRetrievalProfileExists(request.retrievalProfileId());
+        validateIndexProfileBindableToSource(request.indexProfileId(), request.sourceId());
+        validateRetrievalProfileBindableToSource(request.retrievalProfileId(), request.sourceId());
         Instant now = Instant.now();
         bindingRepository.upsert(new BindingRepository.BindingRecord(Ids.newId("spb"), request.sourceId(), request.indexProfileId(), request.retrievalProfileId(), now, now));
         sourceRepository.update(new SourceRepository.SourceRecord(
@@ -805,6 +861,214 @@ public class KnowledgeServiceFacade {
             request.indexProfileId() != null ? request.indexProfileId() : existingBinding.indexProfileId(),
             request.retrievalProfileId() != null ? request.retrievalProfileId() : existingBinding.retrievalProfileId()
         ));
+    }
+
+    public SourceController.SourceProfileConfigResponse getSourceIndexProfileConfig(String sourceId) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ProfileRepository.ProfileRecord profile = profileRepository.findIndexById(source.indexProfileId())
+            .orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + source.indexProfileId()));
+        return toSourceProfileConfigResponse(source, profile, false);
+    }
+
+    @Transactional
+    public SourceController.SourceProfileConfigResponse putSourceIndexProfileConfig(
+        String sourceId,
+        SourceController.UpdateSourceProfileConfigRequest request
+    ) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ensureSourceWritable(source);
+
+        ProfileRepository.ProfileRecord current = profileRepository.findIndexById(source.indexProfileId())
+            .orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + source.indexProfileId()));
+        Instant now = Instant.now();
+
+        boolean createdFromDefault = false;
+        ProfileRepository.ProfileRecord target = current;
+        if (shouldForkProfileForSource(current, sourceId, profileBootstrapService.defaultIndexProfileId())) {
+            createdFromDefault = true;
+            String targetName = sourceOwnedProfileName(source, "index", request.name(), current.name(), true);
+            ensureProfileNameAvailable(targetName, null, true);
+            target = new ProfileRepository.ProfileRecord(
+                Ids.newId("ip"),
+                targetName,
+                current.config(),
+                "index",
+                sourceId,
+                false,
+                current.id(),
+                now,
+                now
+            );
+            profileRepository.insertIndex(target);
+        }
+
+        String updatedName = sourceOwnedProfileName(source, "index", request.name(), target.name(), createdFromDefault);
+        ensureProfileNameAvailable(updatedName, target.id(), true);
+        ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(
+            target.id(),
+            updatedName,
+            mergeMaps(target.config(), request.config()),
+            "index",
+            sourceId,
+            false,
+            target.derivedFromProfileId(),
+            target.createdAt(),
+            now
+        );
+        profileRepository.updateIndex(updated);
+
+        SourceRepository.SourceRecord updatedSource = withBoundProfiles(
+            source,
+            updated.id(),
+            source.retrievalProfileId(),
+            true,
+            now
+        );
+        sourceRepository.update(updatedSource);
+        bindingRepository.upsert(new BindingRepository.BindingRecord(
+            Ids.newId("spb"), sourceId, updated.id(), updatedSource.retrievalProfileId(), now, now
+        ));
+
+        return toSourceProfileConfigResponse(updatedSource, updated, createdFromDefault);
+    }
+
+    @Transactional
+    public SourceController.SourceProfileConfigResponse resetSourceIndexProfileConfig(String sourceId) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ensureSourceWritable(source);
+
+        String defaultProfileId = profileBootstrapService.defaultIndexProfileId();
+        if (defaultProfileId == null) {
+            throw new IllegalStateException("System default index profile is unavailable");
+        }
+
+        ProfileRepository.ProfileRecord current = profileRepository.findIndexById(source.indexProfileId())
+            .orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + source.indexProfileId()));
+        ProfileRepository.ProfileRecord defaultProfile = profileRepository.findIndexById(defaultProfileId)
+            .orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + defaultProfileId));
+        Instant now = Instant.now();
+
+        SourceRepository.SourceRecord updatedSource = withBoundProfiles(
+            source,
+            defaultProfileId,
+            source.retrievalProfileId(),
+            true,
+            now
+        );
+        sourceRepository.update(updatedSource);
+        bindingRepository.upsert(new BindingRepository.BindingRecord(
+            Ids.newId("spb"), sourceId, defaultProfileId, updatedSource.retrievalProfileId(), now, now
+        ));
+        deleteOwnedProfileIfPresent(current, true, sourceId, defaultProfileId);
+
+        return toSourceProfileConfigResponse(updatedSource, defaultProfile, false);
+    }
+
+    public SourceController.SourceProfileConfigResponse getSourceRetrievalProfileConfig(String sourceId) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ProfileRepository.ProfileRecord profile = profileRepository.findRetrievalById(source.retrievalProfileId())
+            .orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + source.retrievalProfileId()));
+        return toSourceProfileConfigResponse(source, profile, false);
+    }
+
+    @Transactional
+    public SourceController.SourceProfileConfigResponse putSourceRetrievalProfileConfig(
+        String sourceId,
+        SourceController.UpdateSourceProfileConfigRequest request
+    ) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ensureSourceWritable(source);
+
+        ProfileRepository.ProfileRecord current = profileRepository.findRetrievalById(source.retrievalProfileId())
+            .orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + source.retrievalProfileId()));
+        Instant now = Instant.now();
+
+        boolean createdFromDefault = false;
+        ProfileRepository.ProfileRecord target = current;
+        if (shouldForkProfileForSource(current, sourceId, profileBootstrapService.defaultRetrievalProfileId())) {
+            createdFromDefault = true;
+            String targetName = sourceOwnedProfileName(source, "retrieval", request.name(), current.name(), true);
+            ensureProfileNameAvailable(targetName, null, false);
+            target = new ProfileRepository.ProfileRecord(
+                Ids.newId("rp"),
+                targetName,
+                current.config(),
+                "retrieval",
+                sourceId,
+                false,
+                current.id(),
+                now,
+                now
+            );
+            profileRepository.insertRetrieval(target);
+        }
+
+        String updatedName = sourceOwnedProfileName(source, "retrieval", request.name(), target.name(), createdFromDefault);
+        ensureProfileNameAvailable(updatedName, target.id(), false);
+        ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(
+            target.id(),
+            updatedName,
+            mergeMaps(target.config(), request.config()),
+            "retrieval",
+            sourceId,
+            false,
+            target.derivedFromProfileId(),
+            target.createdAt(),
+            now
+        );
+        profileRepository.updateRetrieval(updated);
+
+        SourceRepository.SourceRecord updatedSource = withBoundProfiles(
+            source,
+            source.indexProfileId(),
+            updated.id(),
+            source.rebuildRequired(),
+            now
+        );
+        sourceRepository.update(updatedSource);
+        bindingRepository.upsert(new BindingRepository.BindingRecord(
+            Ids.newId("spb"), sourceId, updatedSource.indexProfileId(), updated.id(), now, now
+        ));
+
+        return toSourceProfileConfigResponse(updatedSource, updated, createdFromDefault);
+    }
+
+    @Transactional
+    public SourceController.SourceProfileConfigResponse resetSourceRetrievalProfileConfig(String sourceId) {
+        SourceRepository.SourceRecord source = sourceRepository.findById(sourceId)
+            .orElseThrow(() -> new IllegalArgumentException("Source not found: " + sourceId));
+        ensureSourceWritable(source);
+
+        String defaultProfileId = profileBootstrapService.defaultRetrievalProfileId();
+        if (defaultProfileId == null) {
+            throw new IllegalStateException("System default retrieval profile is unavailable");
+        }
+
+        ProfileRepository.ProfileRecord current = profileRepository.findRetrievalById(source.retrievalProfileId())
+            .orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + source.retrievalProfileId()));
+        ProfileRepository.ProfileRecord defaultProfile = profileRepository.findRetrievalById(defaultProfileId)
+            .orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + defaultProfileId));
+        Instant now = Instant.now();
+
+        SourceRepository.SourceRecord updatedSource = withBoundProfiles(
+            source,
+            source.indexProfileId(),
+            defaultProfileId,
+            source.rebuildRequired(),
+            now
+        );
+        sourceRepository.update(updatedSource);
+        bindingRepository.upsert(new BindingRepository.BindingRecord(
+            Ids.newId("spb"), sourceId, updatedSource.indexProfileId(), defaultProfileId, now, now
+        ));
+        deleteOwnedProfileIfPresent(current, false, sourceId, defaultProfileId);
+
+        return toSourceProfileConfigResponse(updatedSource, defaultProfile, false);
     }
 
     public JobController.JobResponse getJob(String jobId) {
@@ -959,6 +1223,48 @@ public class KnowledgeServiceFacade {
         }
     }
 
+    private void validateIndexProfileBindableToSource(String profileId, String sourceId) {
+        validateIndexProfileExists(profileId);
+        if (profileId == null) {
+            return;
+        }
+        ProfileRepository.ProfileRecord profile = profileRepository.findIndexById(profileId)
+            .orElseThrow(() -> new IllegalArgumentException("Index profile not found: " + profileId));
+        ensureProfileBindableToSource(profile, sourceId, "index");
+    }
+
+    private void validateRetrievalProfileBindableToSource(String profileId, String sourceId) {
+        validateRetrievalProfileExists(profileId);
+        if (profileId == null) {
+            return;
+        }
+        ProfileRepository.ProfileRecord profile = profileRepository.findRetrievalById(profileId)
+            .orElseThrow(() -> new IllegalArgumentException("Retrieval profile not found: " + profileId));
+        ensureProfileBindableToSource(profile, sourceId, "retrieval");
+    }
+
+    private void ensureProfileBindableToSource(ProfileRepository.ProfileRecord profile, String sourceId, String profileType) {
+        if (profile.readonly()) {
+            return;
+        }
+        if (sourceId.equals(profile.ownerSourceId())) {
+            return;
+        }
+        throw new ApiConflictException(
+            "PROFILE_BINDING_NOT_ALLOWED",
+            "Only system default or source-owned " + profileType + " profiles can be bound to source " + sourceId
+        );
+    }
+
+    private void ensureProfileMutable(ProfileRepository.ProfileRecord profile, String profileType) {
+        if (profile.readonly()) {
+            throw new ApiConflictException(
+                "READ_ONLY_PROFILE",
+                "System default " + profileType + " profile is read-only. Customize it from the source config page instead."
+            );
+        }
+    }
+
     private void ensureProfileNotBound(String profileId, boolean indexProfile) {
         boolean inUse = bindingRepository.findAll().stream().anyMatch(binding ->
             indexProfile ? profileId.equals(binding.indexProfileId()) : profileId.equals(binding.retrievalProfileId())
@@ -966,6 +1272,91 @@ public class KnowledgeServiceFacade {
         if (inUse) {
             throw new IllegalStateException("Profile is still bound to a source: " + profileId);
         }
+    }
+
+    private void deleteOwnedProfileIfPresent(
+        ProfileRepository.ProfileRecord profile,
+        boolean indexProfile,
+        String sourceId,
+        String defaultProfileId
+    ) {
+        if (profile == null || profile.id().equals(defaultProfileId)) {
+            return;
+        }
+        if (profile.readonly() || !sourceId.equals(profile.ownerSourceId())) {
+            return;
+        }
+        if (indexProfile) {
+            profileRepository.deleteIndex(profile.id());
+        } else {
+            profileRepository.deleteRetrieval(profile.id());
+        }
+    }
+
+    private boolean shouldForkProfileForSource(ProfileRepository.ProfileRecord profile, String sourceId, String defaultProfileId) {
+        if (profile.readonly()) {
+            return true;
+        }
+        if (profile.id().equals(defaultProfileId)) {
+            return true;
+        }
+        return !sourceId.equals(profile.ownerSourceId());
+    }
+
+    private String sourceOwnedProfileName(
+        SourceRepository.SourceRecord source,
+        String profileType,
+        String requestedName,
+        String fallbackName,
+        boolean forNewSourceOwnedProfile
+    ) {
+        String normalizedRequestedName = requestedName != null ? requestedName.trim() : "";
+        if (!normalizedRequestedName.isBlank()) {
+            if (!normalizedRequestedName.startsWith("system-default-")) {
+                return normalizedRequestedName;
+            }
+        }
+        if (!forNewSourceOwnedProfile && fallbackName != null && !fallbackName.isBlank()) {
+            return fallbackName;
+        }
+        return source.id() + "-" + profileType + "-profile";
+    }
+
+    private void ensureProfileNameAvailable(String profileName, String currentProfileId, boolean indexProfile) {
+        if (profileName == null || profileName.isBlank()) {
+            return;
+        }
+        Optional<ProfileRepository.ProfileRecord> existing = indexProfile
+            ? profileRepository.findIndexByName(profileName)
+            : profileRepository.findRetrievalByName(profileName);
+        if (existing.isPresent() && !existing.get().id().equals(currentProfileId)) {
+            throw new ApiConflictException("PROFILE_NAME_ALREADY_EXISTS", "Profile name already exists: " + profileName);
+        }
+    }
+
+    private SourceRepository.SourceRecord withBoundProfiles(
+        SourceRepository.SourceRecord source,
+        String indexProfileId,
+        String retrievalProfileId,
+        boolean rebuildRequired,
+        Instant now
+    ) {
+        return new SourceRepository.SourceRecord(
+            source.id(),
+            source.name(),
+            source.description(),
+            source.status(),
+            source.storageMode(),
+            indexProfileId,
+            retrievalProfileId,
+            source.runtimeStatus(),
+            source.runtimeMessage(),
+            source.currentJobId(),
+            source.lastJobError(),
+            rebuildRequired,
+            source.createdAt(),
+            now
+        );
     }
 
     private void refreshDocumentChunkStats(String documentId) {
@@ -1391,6 +1782,59 @@ public class KnowledgeServiceFacade {
         return "REBUILD_DOCUMENT_FAILED";
     }
 
+    private ProfileController.ProfileSummary toProfileSummary(ProfileRepository.ProfileRecord profile) {
+        return new ProfileController.ProfileSummary(
+            profile.id(),
+            profile.name(),
+            profileScope(profile),
+            profile.readonly(),
+            profile.ownerSourceId(),
+            profile.derivedFromProfileId(),
+            profile.config(),
+            profile.createdAt(),
+            profile.updatedAt()
+        );
+    }
+
+    private ProfileController.ProfileDetail toProfileDetail(ProfileRepository.ProfileRecord profile) {
+        return new ProfileController.ProfileDetail(
+            profile.id(),
+            profile.name(),
+            profileScope(profile),
+            profile.readonly(),
+            profile.ownerSourceId(),
+            profile.derivedFromProfileId(),
+            profile.config(),
+            profile.createdAt(),
+            profile.updatedAt()
+        );
+    }
+
+    private SourceController.SourceProfileConfigResponse toSourceProfileConfigResponse(
+        SourceRepository.SourceRecord source,
+        ProfileRepository.ProfileRecord profile,
+        boolean createdFromDefault
+    ) {
+        return new SourceController.SourceProfileConfigResponse(
+            source.id(),
+            profile.id(),
+            profile.name(),
+            profileScope(profile),
+            profile.readonly(),
+            profile.ownerSourceId(),
+            profile.derivedFromProfileId(),
+            profile.config(),
+            source.rebuildRequired(),
+            createdFromDefault,
+            profile.createdAt(),
+            profile.updatedAt()
+        );
+    }
+
+    private String profileScope(ProfileRepository.ProfileRecord profile) {
+        return profile.ownerSourceId() == null || profile.ownerSourceId().isBlank() ? "system" : "source";
+    }
+
     private SourceController.SourceResponse toSourceResponse(SourceRepository.SourceRecord source) {
         return new SourceController.SourceResponse(
             source.id(), source.name(), source.description(), source.status(), source.storageMode(),
@@ -1505,7 +1949,11 @@ public class KnowledgeServiceFacade {
         int rrfK = override != null && override.rrfK() != null
             ? override.rrfK()
             : nestedInt(profileConfig, "retrieval", "rrfK").orElse(defaults.getRrfK());
-        Double scoreThreshold = override != null ? override.scoreThreshold() : null;
+        Double scoreThreshold = supportsThresholdForMode(mode)
+            ? (override != null && override.scoreThreshold() != null
+                ? override.scoreThreshold()
+                : resolveProfileScoreThreshold(mode, profileConfig))
+            : null;
         int snippetLength = override != null && override.snippetLength() != null
             ? override.snippetLength()
             : nestedInt(profileConfig, "result", "snippetLength").orElse(defaults.getSnippetLength());
@@ -1563,6 +2011,19 @@ public class KnowledgeServiceFacade {
             return Optional.of(number.doubleValue());
         }
         return Optional.empty();
+    }
+
+    private Double resolveProfileScoreThreshold(String mode, Map<String, Object> profileConfig) {
+        Optional<Double> legacyThreshold = nestedDouble(profileConfig, "retrieval", "scoreThreshold");
+        return switch ((mode == null ? "hybrid" : mode).toLowerCase()) {
+        case "semantic" -> nestedDouble(profileConfig, "retrieval", "semanticThreshold").or(() -> legacyThreshold).orElse(null);
+        case "lexical" -> nestedDouble(profileConfig, "retrieval", "lexicalThreshold").or(() -> legacyThreshold).orElse(null);
+        default -> null;
+        };
+    }
+
+    private boolean supportsThresholdForMode(String mode) {
+        return "semantic".equalsIgnoreCase(mode) || "lexical".equalsIgnoreCase(mode);
     }
 
     private String nestedString(Map<String, Object> root, String parentKey, String key) {

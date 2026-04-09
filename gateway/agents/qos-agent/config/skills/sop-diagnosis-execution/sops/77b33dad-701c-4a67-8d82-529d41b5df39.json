@@ -8,7 +8,7 @@
     "id" : "node-rcpa-0",
     "name" : "本进程检查",
     "type" : "start",
-    "hostTags" : [ "RCPA" ],
+    "tags" : [ "RCPA" ],
     "command" : "ps -eo pid,lstart,cmd | grep 8001| grep -v grep; echo '===CPU==='; top -bn1 | head -5; ps -eo pid,%cpu,comm | grep 8001| grep -v grep; echo '===MEM==='; free -m; ps -eo pid,%mem,rss,comm | grep 8001| grep -v grep",
     "variables" : [ ],
     "outputFormat" : "进程PID/启动时间 | 系统负载+进程CPU% | 系统内存+进程MEM%",
@@ -26,11 +26,15 @@
     "id" : "node-rcpa-3",
     "name" : "磁盘检查",
     "type" : "analysis",
-    "hostTags" : [ "RCPA" ],
+    "tags" : [ "RCPA" ],
     "command" : "df -h; echo '===IOPS==='; iostat -x 1 1 2>/dev/null || cat /proc/diskstats",
     "variables" : [ ],
     "outputFormat" : "磁盘使用率(%) | IOPS统计",
     "analysisInstruction" : "检查磁盘空间使用率和I/O性能。磁盘使用率超过85%或IOPS异常高视为异常",
     "transitions" : [ ]
-  } ]
+  } ],
+  "enabled" : false,
+  "mode" : "structured",
+  "stepsDescription" : "",
+  "tags" : [ ],
 }

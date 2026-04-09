@@ -3,8 +3,8 @@ package com.huawei.opsfactory.knowledge.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,10 +25,10 @@ class KnowledgeMaintenanceIntegrationTest extends KnowledgeApiIntegrationTestSup
     void indexProfileConfigChangesRequireRebuildButRetrievalConfigChangesDoNot() throws Exception {
         String sourceId = createSource();
         JsonNode before = getSource(sourceId);
-        String indexProfileId = before.path("indexProfileId").asText();
-        String retrievalProfileId = before.path("retrievalProfileId").asText();
+        String originalIndexProfileId = before.path("indexProfileId").asText();
+        String originalRetrievalProfileId = before.path("retrievalProfileId").asText();
 
-        mockMvc.perform(patch("/knowledge/profiles/retrieval/{profileId}", retrievalProfileId)
+        mockMvc.perform(put("/knowledge/sources/{sourceId}/config/retrieval-profile", sourceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -43,8 +43,9 @@ class KnowledgeMaintenanceIntegrationTest extends KnowledgeApiIntegrationTestSup
 
         JsonNode afterRetrievalChange = getSource(sourceId);
         assertThat(afterRetrievalChange.path("rebuildRequired").asBoolean()).isFalse();
+        assertThat(afterRetrievalChange.path("retrievalProfileId").asText()).isNotEqualTo(originalRetrievalProfileId);
 
-        mockMvc.perform(patch("/knowledge/profiles/index/{profileId}", indexProfileId)
+        mockMvc.perform(put("/knowledge/sources/{sourceId}/config/index-profile", sourceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -59,6 +60,7 @@ class KnowledgeMaintenanceIntegrationTest extends KnowledgeApiIntegrationTestSup
 
         JsonNode afterIndexChange = getSource(sourceId);
         assertThat(afterIndexChange.path("rebuildRequired").asBoolean()).isTrue();
+        assertThat(afterIndexChange.path("indexProfileId").asText()).isNotEqualTo(originalIndexProfileId);
     }
 
     @Test
@@ -95,10 +97,8 @@ class KnowledgeMaintenanceIntegrationTest extends KnowledgeApiIntegrationTestSup
     void rebuildSourceRunsAsAsyncJobAndClearsPendingFlagOnSuccess() throws Exception {
         String sourceId = createSource();
         uploadRunbook(sourceId);
-        JsonNode sourceBefore = getSource(sourceId);
-        String indexProfileId = sourceBefore.path("indexProfileId").asText();
 
-        mockMvc.perform(patch("/knowledge/profiles/index/{profileId}", indexProfileId)
+        mockMvc.perform(put("/knowledge/sources/{sourceId}/config/index-profile", sourceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {

@@ -46,12 +46,30 @@ public class ProfileBootstrapService {
     private void ensureDefaults() {
         Instant now = Instant.now();
         Map<String, Object> defaultRetrievalConfig = defaultRetrievalConfig();
-        profileRepository.findIndexByName(DEFAULT_INDEX_PROFILE_NAME).orElseGet(() -> {
+        profileRepository.findIndexByName(DEFAULT_INDEX_PROFILE_NAME).map(existing -> {
+            ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(
+                existing.id(),
+                existing.name(),
+                existing.config(),
+                existing.type(),
+                null,
+                true,
+                null,
+                existing.createdAt(),
+                now
+            );
+            profileRepository.updateIndex(updated);
+            log.debug("Refreshed default index profile name={} id={}", updated.name(), updated.id());
+            return updated;
+        }).orElseGet(() -> {
             ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(
                 com.huawei.opsfactory.knowledge.common.util.Ids.newId("ip"),
                 DEFAULT_INDEX_PROFILE_NAME,
                 defaultIndexConfig(),
                 "index",
+                null,
+                true,
+                null,
                 now,
                 now
             );
@@ -65,6 +83,9 @@ public class ProfileBootstrapService {
                 existing.name(),
                 defaultRetrievalConfig,
                 existing.type(),
+                null,
+                true,
+                null,
                 existing.createdAt(),
                 now
             );
@@ -77,6 +98,9 @@ public class ProfileBootstrapService {
                 DEFAULT_RETRIEVAL_PROFILE_NAME,
                 defaultRetrievalConfig,
                 "retrieval",
+                null,
+                true,
+                null,
                 now,
                 now
             );
@@ -127,6 +151,8 @@ public class ProfileBootstrapService {
                 "lexicalTopK", properties.getRetrieval().getLexicalTopK(),
                 "semanticTopK", properties.getRetrieval().getSemanticTopK(),
                 "rrfK", properties.getRetrieval().getRrfK(),
+                "semanticThreshold", properties.getRetrieval().getSemanticThreshold(),
+                "lexicalThreshold", properties.getRetrieval().getLexicalThreshold(),
                 "strategy", "rrf"
             ),
             "result", Map.of(

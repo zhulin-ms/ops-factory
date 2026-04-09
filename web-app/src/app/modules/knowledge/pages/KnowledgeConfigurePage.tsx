@@ -41,6 +41,9 @@ type UploadSessionState = 'idle' | 'uploading' | 'finished'
 
 const UPLOAD_BATCH_MAX_FILES = 10
 const UPLOAD_BATCH_MAX_SIZE_MB = 100
+const RETRIEVAL_SCORE_THRESHOLD_MIN = 0
+const RETRIEVAL_SCORE_THRESHOLD_MAX = 1
+const RETRIEVAL_SCORE_THRESHOLD_STEP = 0.01
 
 interface UploadQueueItem {
     id: string
@@ -200,6 +203,8 @@ const RETRIEVAL_PARAM_DESCRIPTION_KEYS: Record<string, string> = {
     'retrieval.lexicalTopK': 'knowledge.configDescLexicalTopK',
     'retrieval.semanticTopK': 'knowledge.configDescSemanticTopK',
     'retrieval.rrfK': 'knowledge.configDescRrfK',
+    'retrieval.semanticThreshold': 'knowledge.configDescSemanticThreshold',
+    'retrieval.lexicalThreshold': 'knowledge.configDescLexicalThreshold',
     'retrieval.strategy': 'knowledge.configDescRetrievalStrategy',
     'result.finalTopK': 'knowledge.configDescFinalTopK',
     'result.snippetLength': 'knowledge.configDescSnippetLength',
@@ -380,23 +385,44 @@ function getConfigNumber(
     return typeof value === 'number' ? value : fallback
 }
 
+function getOptionalConfigNumber(
+    config: Record<string, unknown> | null | undefined,
+    section: string,
+    key: string
+): number | null {
+    const value = getConfigSection(config, section)[key]
+    return typeof value === 'number' ? value : null
+}
+
+function isSourceOwnedProfile(profile: { scope?: string; readonly?: boolean } | null | undefined): boolean {
+    return profile?.scope === 'source' && profile?.readonly !== true
+}
+
 function ProfileReadonlyCard({
     title,
     description,
     bindingName,
     bindingId,
+    bindingStateLabel,
+    bindingStateDescription,
     groups,
     actionLabel,
     onEdit,
+    secondaryActionLabel,
+    onSecondaryAction,
     actionDisabled = false,
 }: {
     title: string
     description?: string
     bindingName: string
     bindingId: string
+    bindingStateLabel?: string
+    bindingStateDescription?: string
     groups: KnowledgeConfigGroup[]
     actionLabel: string
     onEdit: () => void
+    secondaryActionLabel?: string
+    onSecondaryAction?: () => void
     actionDisabled?: boolean
 }) {
     const { t } = useTranslation()
@@ -408,9 +434,21 @@ function ProfileReadonlyCard({
                     <h2 className="knowledge-section-title">{title}</h2>
                     {description ? <p className="knowledge-section-description">{description}</p> : null}
                 </div>
-                <button type="button" className="btn btn-secondary knowledge-section-action" onClick={onEdit} disabled={actionDisabled}>
-                    {actionLabel}
-                </button>
+                <div className="knowledge-section-actions">
+                    {secondaryActionLabel && onSecondaryAction ? (
+                        <button
+                            type="button"
+                            className="btn btn-secondary knowledge-section-action"
+                            onClick={onSecondaryAction}
+                            disabled={actionDisabled}
+                        >
+                            {secondaryActionLabel}
+                        </button>
+                    ) : null}
+                    <button type="button" className="btn btn-secondary knowledge-section-action" onClick={onEdit} disabled={actionDisabled}>
+                        {actionLabel}
+                    </button>
+                </div>
             </div>
 
             <div className="knowledge-kv-grid knowledge-kv-grid-compact">
@@ -422,6 +460,13 @@ function ProfileReadonlyCard({
                     <span className="knowledge-kv-label">{t('knowledge.profileId')}</span>
                     <span className="knowledge-kv-meta">{bindingId}</span>
                 </div>
+                {bindingStateLabel ? (
+                    <div className="knowledge-kv-item">
+                        <span className="knowledge-kv-label">{t('knowledge.profileState')}</span>
+                        <span className="knowledge-kv-value">{bindingStateLabel}</span>
+                        {bindingStateDescription ? <span className="knowledge-kv-meta">{bindingStateDescription}</span> : null}
+                    </div>
+                ) : null}
             </div>
 
             <div className="knowledge-config-readonly-groups">
@@ -924,6 +969,7 @@ function EditBasicInfoModal({
 
 function EditIndexProfileModal({
     name,
+    stateDescription,
     analyzerOptions,
     indexAnalyzer,
     queryAnalyzer,
@@ -947,6 +993,7 @@ function EditIndexProfileModal({
     onSave,
 }: {
     name: string
+    stateDescription?: string
     analyzerOptions: string[]
     indexAnalyzer: string
     queryAnalyzer: string
@@ -980,6 +1027,9 @@ function EditIndexProfileModal({
                 </div>
 
                 <div className="modal-body">
+                    {stateDescription ? (
+                        <p className="knowledge-section-description">{stateDescription}</p>
+                    ) : null}
                     <div className="knowledge-profile-editor-grid">
                         <label className="knowledge-profile-field">
                             <span className="knowledge-kv-label">{t('knowledge.profileName')}</span>
@@ -1039,12 +1089,15 @@ function EditIndexProfileModal({
 
 function EditRetrievalProfileModal({
     name,
+    stateDescription,
     retrievalModes,
     retrievalMode,
     lexicalTopK,
     semanticTopK,
     finalTopK,
     rrfK,
+    semanticThreshold,
+    lexicalThreshold,
     snippetLength,
     saving,
     onClose,
@@ -1054,16 +1107,21 @@ function EditRetrievalProfileModal({
     onSemanticTopKChange,
     onFinalTopKChange,
     onRrfKChange,
+    onSemanticThresholdChange,
+    onLexicalThresholdChange,
     onSnippetLengthChange,
     onSave,
 }: {
     name: string
+    stateDescription?: string
     retrievalModes: string[]
     retrievalMode: string
     lexicalTopK: string
     semanticTopK: string
     finalTopK: string
     rrfK: string
+    semanticThreshold: string
+    lexicalThreshold: string
     snippetLength: string
     saving: boolean
     onClose: () => void
@@ -1073,6 +1131,8 @@ function EditRetrievalProfileModal({
     onSemanticTopKChange: (value: string) => void
     onFinalTopKChange: (value: string) => void
     onRrfKChange: (value: string) => void
+    onSemanticThresholdChange: (value: string) => void
+    onLexicalThresholdChange: (value: string) => void
     onSnippetLengthChange: (value: string) => void
     onSave: () => void
 }) {
@@ -1087,6 +1147,9 @@ function EditRetrievalProfileModal({
                 </div>
 
                 <div className="modal-body">
+                    {stateDescription ? (
+                        <p className="knowledge-section-description">{stateDescription}</p>
+                    ) : null}
                     <div className="knowledge-profile-editor-grid">
                         <label className="knowledge-profile-field">
                             <span className="knowledge-kv-label">{t('knowledge.profileName')}</span>
@@ -1113,6 +1176,32 @@ function EditRetrievalProfileModal({
                         <label className="knowledge-profile-field">
                             <span className="knowledge-kv-label">{t('knowledge.rrfKLabel')}</span>
                             <input className="form-input" inputMode="numeric" value={rrfK} onChange={event => onRrfKChange(event.target.value)} />
+                        </label>
+                        <label className="knowledge-profile-field">
+                            <span className="knowledge-kv-label">{t('knowledge.retrievalSemanticThresholdLabel')}</span>
+                            <input
+                                className="form-input"
+                                type="number"
+                                inputMode="decimal"
+                                min={RETRIEVAL_SCORE_THRESHOLD_MIN}
+                                max={RETRIEVAL_SCORE_THRESHOLD_MAX}
+                                step={RETRIEVAL_SCORE_THRESHOLD_STEP}
+                                value={semanticThreshold}
+                                onChange={event => onSemanticThresholdChange(event.target.value)}
+                            />
+                        </label>
+                        <label className="knowledge-profile-field">
+                            <span className="knowledge-kv-label">{t('knowledge.retrievalLexicalThresholdLabel')}</span>
+                            <input
+                                className="form-input"
+                                type="number"
+                                inputMode="decimal"
+                                min={RETRIEVAL_SCORE_THRESHOLD_MIN}
+                                max={RETRIEVAL_SCORE_THRESHOLD_MAX}
+                                step={RETRIEVAL_SCORE_THRESHOLD_STEP}
+                                value={lexicalThreshold}
+                                onChange={event => onLexicalThresholdChange(event.target.value)}
+                            />
                         </label>
                         <label className="knowledge-profile-field">
                             <span className="knowledge-kv-label">{t('knowledge.snippetLengthLabel')}</span>
@@ -1179,6 +1268,50 @@ function DeleteKnowledgeModal({
                     </button>
                     <button className="btn btn-danger" onClick={onConfirm} disabled={deleting}>
                         {deleting ? t('knowledge.deleting') : t('common.delete')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function ResetProfileModal({
+    profileType,
+    saving,
+    onClose,
+    onConfirm,
+}: {
+    profileType: 'index' | 'retrieval'
+    saving: boolean
+    onClose: () => void
+    onConfirm: () => void
+}) {
+    const { t } = useTranslation()
+    const isIndex = profileType === 'index'
+
+    return (
+        <div className="modal-overlay" onClick={saving ? undefined : onClose}>
+            <div className="modal modal-sm" onClick={event => event.stopPropagation()}>
+                <div className="modal-header">
+                    <h2 className="modal-title">{t('knowledge.restoreDefaultConfig')}</h2>
+                    <button className="modal-close" onClick={onClose} disabled={saving}>&times;</button>
+                </div>
+                <div className="modal-body">
+                    <p style={{ fontSize: 'var(--font-size-base)', color: 'var(--color-text-primary)', marginBottom: 'var(--spacing-4)' }}>
+                        {isIndex ? t('knowledge.resetIndexProfileConfirm') : t('knowledge.resetRetrievalProfileConfirm')}
+                    </p>
+                    {isIndex ? (
+                        <p className="knowledge-section-description">{t('knowledge.resetIndexProfileHint')}</p>
+                    ) : (
+                        <p className="knowledge-section-description">{t('knowledge.resetRetrievalProfileHint')}</p>
+                    )}
+                </div>
+                <div className="modal-footer">
+                    <button className="btn btn-secondary" onClick={onClose} disabled={saving}>
+                        {t('common.cancel')}
+                    </button>
+                    <button className="btn btn-primary" onClick={onConfirm} disabled={saving}>
+                        {saving ? t('knowledge.savingConfig') : t('knowledge.restoreDefaultConfig')}
                     </button>
                 </div>
             </div>
@@ -1563,6 +1696,8 @@ export default function KnowledgeConfigure() {
         saveSource,
         saveIndexProfile,
         saveRetrievalProfile,
+        resetIndexProfile,
+        resetRetrievalProfile,
         deleteSource,
     } = useKnowledgeSourceDetail(sourceId)
     const [showEditBasicInfoModal, setShowEditBasicInfoModal] = useState(false)
@@ -1587,6 +1722,7 @@ export default function KnowledgeConfigure() {
     const [isRebuildingSource, setIsRebuildingSource] = useState(false)
     const [showEditIndexProfileModal, setShowEditIndexProfileModal] = useState(false)
     const [showEditRetrievalProfileModal, setShowEditRetrievalProfileModal] = useState(false)
+    const [pendingResetProfileType, setPendingResetProfileType] = useState<'index' | 'retrieval' | null>(null)
     const [indexProfileName, setIndexProfileName] = useState('')
     const [indexAnalyzer, setIndexAnalyzer] = useState('smartcn')
     const [queryAnalyzer, setQueryAnalyzer] = useState('smartcn')
@@ -1603,8 +1739,11 @@ export default function KnowledgeConfigure() {
     const [semanticTopKInput, setSemanticTopKInput] = useState('50')
     const [finalTopKInput, setFinalTopKInput] = useState('10')
     const [rrfKInput, setRrfKInput] = useState('60')
+    const [semanticThresholdInput, setSemanticThresholdInput] = useState('')
+    const [lexicalThresholdInput, setLexicalThresholdInput] = useState('')
     const [snippetLengthInput, setSnippetLengthInput] = useState('180')
     const [isSavingRetrievalProfile, setIsSavingRetrievalProfile] = useState(false)
+    const [isResettingProfile, setIsResettingProfile] = useState(false)
     const [maintenanceFailures, setMaintenanceFailures] = useState<KnowledgeMaintenanceFailure[]>([])
     const [maintenanceFailuresLoading, setMaintenanceFailuresLoading] = useState(false)
     const [expandedFailureJobId, setExpandedFailureJobId] = useState<string | null>(null)
@@ -1666,6 +1805,20 @@ export default function KnowledgeConfigure() {
     const analyzerOptions = capabilities?.analyzers?.length
         ? capabilities.analyzers
         : ['smartcn', 'standard', 'keyword']
+    const indexProfileIsCustom = isSourceOwnedProfile(indexProfileDetail)
+    const retrievalProfileIsCustom = isSourceOwnedProfile(retrievalProfileDetail)
+    const indexProfileStateLabel = indexProfileIsCustom
+        ? t('knowledge.profileStateSourceOwned')
+        : t('knowledge.profileStateSystemDefault')
+    const retrievalProfileStateLabel = retrievalProfileIsCustom
+        ? t('knowledge.profileStateSourceOwned')
+        : t('knowledge.profileStateSystemDefault')
+    const indexProfileStateDescription = indexProfileIsCustom
+        ? t('knowledge.profileStateSourceOwnedDescription')
+        : t('knowledge.profileStateSystemDefaultDescription')
+    const retrievalProfileStateDescription = retrievalProfileIsCustom
+        ? t('knowledge.profileStateSourceOwnedDescription')
+        : t('knowledge.profileStateSystemDefaultDescription')
 
     useEffect(() => {
         if (!indexProfileDetail) return
@@ -1685,12 +1838,36 @@ export default function KnowledgeConfigure() {
         if (!retrievalProfileDetail) return
         setRetrievalProfileName(retrievalProfileDetail.name || '')
         setRetrievalMode(getConfigString(retrievalProfileDetail.config, 'retrieval', 'mode', 'hybrid'))
-        setLexicalTopKInput(String(getConfigNumber(retrievalProfileDetail.config, 'retrieval', 'lexicalTopK', 50)))
-        setSemanticTopKInput(String(getConfigNumber(retrievalProfileDetail.config, 'retrieval', 'semanticTopK', 50)))
-        setFinalTopKInput(String(getConfigNumber(retrievalProfileDetail.config, 'result', 'finalTopK', 10)))
-        setRrfKInput(String(getConfigNumber(retrievalProfileDetail.config, 'retrieval', 'rrfK', 60)))
+        setLexicalTopKInput(String(getConfigNumber(
+            retrievalProfileDetail.config,
+            'retrieval',
+            'lexicalTopK',
+            defaults?.retrieval.lexicalTopK ?? 50,
+        )))
+        setSemanticTopKInput(String(getConfigNumber(
+            retrievalProfileDetail.config,
+            'retrieval',
+            'semanticTopK',
+            defaults?.retrieval.semanticTopK ?? 50,
+        )))
+        setFinalTopKInput(String(getConfigNumber(
+            retrievalProfileDetail.config,
+            'result',
+            'finalTopK',
+            defaults?.retrieval.finalTopK ?? 8,
+        )))
+        setRrfKInput(String(getConfigNumber(
+            retrievalProfileDetail.config,
+            'retrieval',
+            'rrfK',
+            defaults?.retrieval.rrfK ?? 60,
+        )))
+        const semanticThreshold = getOptionalConfigNumber(retrievalProfileDetail.config, 'retrieval', 'semanticThreshold')
+        const lexicalThreshold = getOptionalConfigNumber(retrievalProfileDetail.config, 'retrieval', 'lexicalThreshold')
+        setSemanticThresholdInput(String(semanticThreshold ?? defaults?.retrieval.semanticThreshold ?? 0.42))
+        setLexicalThresholdInput(String(lexicalThreshold ?? defaults?.retrieval.lexicalThreshold ?? 0.52))
         setSnippetLengthInput(String(getConfigNumber(retrievalProfileDetail.config, 'result', 'snippetLength', 180)))
-    }, [retrievalProfileDetail])
+    }, [defaults?.retrieval.finalTopK, defaults?.retrieval.lexicalThreshold, defaults?.retrieval.lexicalTopK, defaults?.retrieval.rrfK, defaults?.retrieval.semanticThreshold, defaults?.retrieval.semanticTopK, retrievalProfileDetail])
 
     const documentTypeOptions = useMemo(
         () => Array.from(new Set(documents.map(document => getDocumentType(document)))).sort(),
@@ -1817,7 +1994,12 @@ export default function KnowledgeConfigure() {
         setIsSavingIndexProfile(false)
 
         if (result.success) {
-            showToast('success', t('knowledge.configSaveSuccess'))
+            showToast(
+                'success',
+                result.data?.createdFromDefault
+                    ? t('knowledge.configSaveCreatedCustomSuccess')
+                    : t('knowledge.configSaveSuccess')
+            )
             return true
         }
 
@@ -1843,9 +2025,29 @@ export default function KnowledgeConfigure() {
         const nextSemanticTopK = Number(semanticTopKInput)
         const nextFinalTopK = Number(finalTopKInput)
         const nextRrfK = Number(rrfKInput)
+        const normalizedSemanticThreshold = semanticThresholdInput.trim()
+        const nextSemanticThreshold = normalizedSemanticThreshold === ''
+            ? null
+            : Number(normalizedSemanticThreshold)
+        const normalizedLexicalThreshold = lexicalThresholdInput.trim()
+        const nextLexicalThreshold = normalizedLexicalThreshold === ''
+            ? null
+            : Number(normalizedLexicalThreshold)
         const nextSnippetLength = Number(snippetLengthInput)
 
-        if ([nextLexicalTopK, nextSemanticTopK, nextFinalTopK, nextRrfK, nextSnippetLength].some(value => Number.isNaN(value))) {
+        if (
+            [nextLexicalTopK, nextSemanticTopK, nextFinalTopK, nextRrfK, nextSnippetLength].some(value => Number.isNaN(value))
+            || (nextSemanticThreshold !== null && (
+                Number.isNaN(nextSemanticThreshold)
+                || nextSemanticThreshold < RETRIEVAL_SCORE_THRESHOLD_MIN
+                || nextSemanticThreshold > RETRIEVAL_SCORE_THRESHOLD_MAX
+            ))
+            || (nextLexicalThreshold !== null && (
+                Number.isNaN(nextLexicalThreshold)
+                || nextLexicalThreshold < RETRIEVAL_SCORE_THRESHOLD_MIN
+                || nextLexicalThreshold > RETRIEVAL_SCORE_THRESHOLD_MAX
+            ))
+        ) {
             showToast('error', t('knowledge.configInvalidNumber'))
             return false
         }
@@ -1859,6 +2061,8 @@ export default function KnowledgeConfigure() {
                     lexicalTopK: nextLexicalTopK,
                     semanticTopK: nextSemanticTopK,
                     rrfK: nextRrfK,
+                    ...(nextSemanticThreshold !== null ? { semanticThreshold: nextSemanticThreshold } : {}),
+                    ...(nextLexicalThreshold !== null ? { lexicalThreshold: nextLexicalThreshold } : {}),
                     strategy: 'rrf',
                 },
                 result: {
@@ -1870,7 +2074,12 @@ export default function KnowledgeConfigure() {
         setIsSavingRetrievalProfile(false)
 
         if (result.success) {
-            showToast('success', t('knowledge.configSaveSuccess'))
+            showToast(
+                'success',
+                result.data?.createdFromDefault
+                    ? t('knowledge.configSaveCreatedCustomSuccess')
+                    : t('knowledge.configSaveSuccess')
+            )
             return true
         }
 
@@ -1883,11 +2092,39 @@ export default function KnowledgeConfigure() {
         retrievalProfileName,
         rrfKInput,
         saveRetrievalProfile,
+        semanticThresholdInput,
+        lexicalThresholdInput,
         semanticTopKInput,
         showToast,
         snippetLengthInput,
         t,
     ])
+
+    const handleResetProfile = useCallback(async (): Promise<boolean> => {
+        if (!pendingResetProfileType) {
+            return false
+        }
+
+        setIsResettingProfile(true)
+        const result = pendingResetProfileType === 'index'
+            ? await resetIndexProfile()
+            : await resetRetrievalProfile()
+        setIsResettingProfile(false)
+
+        if (result.success) {
+            showToast(
+                'success',
+                pendingResetProfileType === 'index'
+                    ? t('knowledge.resetIndexProfileSuccess')
+                    : t('knowledge.resetRetrievalProfileSuccess')
+            )
+            setPendingResetProfileType(null)
+            return true
+        }
+
+        showToast('error', result.error || t('knowledge.saveFailed'))
+        return false
+    }, [pendingResetProfileType, resetIndexProfile, resetRetrievalProfile, showToast, t])
 
     const loadDocuments = useCallback(async () => {
         if (!sourceId) return
@@ -2345,9 +2582,13 @@ export default function KnowledgeConfigure() {
                                 description={t('knowledge.indexProfileEditorDescription')}
                                 bindingName={getProfileName(indexProfileDetail, source.indexProfileId, t('knowledge.profileUnavailable'))}
                                 bindingId={source.indexProfileId || t('knowledge.notBound')}
+                                bindingStateLabel={indexProfileStateLabel}
+                                bindingStateDescription={indexProfileStateDescription}
                                 groups={indexReadonlyGroups}
-                                actionLabel={t('knowledge.editConfig')}
+                                actionLabel={indexProfileIsCustom ? t('knowledge.editConfig') : t('knowledge.customizeConfig')}
+                                secondaryActionLabel={indexProfileIsCustom ? t('knowledge.restoreDefaultConfig') : undefined}
                                 onEdit={() => setShowEditIndexProfileModal(true)}
+                                onSecondaryAction={indexProfileIsCustom ? () => setPendingResetProfileType('index') : undefined}
                                 actionDisabled={isSourceUnavailable}
                             />
 
@@ -2356,9 +2597,13 @@ export default function KnowledgeConfigure() {
                                 description={t('knowledge.retrievalProfileEditorDescription')}
                                 bindingName={getProfileName(retrievalProfileDetail, source.retrievalProfileId, t('knowledge.profileUnavailable'))}
                                 bindingId={source.retrievalProfileId || t('knowledge.notBound')}
+                                bindingStateLabel={retrievalProfileStateLabel}
+                                bindingStateDescription={retrievalProfileStateDescription}
                                 groups={retrievalReadonlyGroups}
-                                actionLabel={t('knowledge.editConfig')}
+                                actionLabel={retrievalProfileIsCustom ? t('knowledge.editConfig') : t('knowledge.customizeConfig')}
+                                secondaryActionLabel={retrievalProfileIsCustom ? t('knowledge.restoreDefaultConfig') : undefined}
                                 onEdit={() => setShowEditRetrievalProfileModal(true)}
+                                onSecondaryAction={retrievalProfileIsCustom ? () => setPendingResetProfileType('retrieval') : undefined}
                                 actionDisabled={isSourceUnavailable}
                             />
 
@@ -2671,6 +2916,7 @@ export default function KnowledgeConfigure() {
             {showEditIndexProfileModal && (
                 <EditIndexProfileModal
                     name={indexProfileName}
+                    stateDescription={indexProfileStateDescription}
                     analyzerOptions={analyzerOptions}
                     indexAnalyzer={indexAnalyzer}
                     queryAnalyzer={queryAnalyzer}
@@ -2706,12 +2952,15 @@ export default function KnowledgeConfigure() {
             {showEditRetrievalProfileModal && (
                 <EditRetrievalProfileModal
                     name={retrievalProfileName}
+                    stateDescription={retrievalProfileStateDescription}
                     retrievalModes={retrievalModes}
                     retrievalMode={retrievalMode}
                     lexicalTopK={lexicalTopKInput}
                     semanticTopK={semanticTopKInput}
                     finalTopK={finalTopKInput}
                     rrfK={rrfKInput}
+                    semanticThreshold={semanticThresholdInput}
+                    lexicalThreshold={lexicalThresholdInput}
                     snippetLength={snippetLengthInput}
                     saving={isSavingRetrievalProfile}
                     onClose={() => {
@@ -2725,12 +2974,27 @@ export default function KnowledgeConfigure() {
                     onSemanticTopKChange={setSemanticTopKInput}
                     onFinalTopKChange={setFinalTopKInput}
                     onRrfKChange={setRrfKInput}
+                    onSemanticThresholdChange={setSemanticThresholdInput}
+                    onLexicalThresholdChange={setLexicalThresholdInput}
                     onSnippetLengthChange={setSnippetLengthInput}
                     onSave={() => void handleSaveRetrievalProfile().then(success => {
                         if (success) {
                             setShowEditRetrievalProfileModal(false)
                         }
                     })}
+                />
+            )}
+
+            {pendingResetProfileType && (
+                <ResetProfileModal
+                    profileType={pendingResetProfileType}
+                    saving={isResettingProfile}
+                    onClose={() => {
+                        if (!isResettingProfile) {
+                            setPendingResetProfileType(null)
+                        }
+                    }}
+                    onConfirm={() => void handleResetProfile()}
                 />
             )}
 

@@ -27,15 +27,25 @@ public class ProfileRepository {
 
     public void insertIndex(ProfileRecord record) {
         jdbcTemplate.update(
-            "insert into index_profile (id, name, config_json, created_at, updated_at) values (?,?,?,?,?)",
-            record.id(), record.name(), Jsons.write(objectMapper, record.config()), record.createdAt().toString(), record.updatedAt().toString()
+            """
+            insert into index_profile (
+                id, name, config_json, owner_source_id, readonly, derived_from_profile_id, created_at, updated_at
+            ) values (?,?,?,?,?,?,?,?)
+            """,
+            record.id(), record.name(), Jsons.write(objectMapper, record.config()), record.ownerSourceId(),
+            record.readonly() ? 1 : 0, record.derivedFromProfileId(), record.createdAt().toString(), record.updatedAt().toString()
         );
     }
 
     public void insertRetrieval(ProfileRecord record) {
         jdbcTemplate.update(
-            "insert into retrieval_profile (id, name, config_json, created_at, updated_at) values (?,?,?,?,?)",
-            record.id(), record.name(), Jsons.write(objectMapper, record.config()), record.createdAt().toString(), record.updatedAt().toString()
+            """
+            insert into retrieval_profile (
+                id, name, config_json, owner_source_id, readonly, derived_from_profile_id, created_at, updated_at
+            ) values (?,?,?,?,?,?,?,?)
+            """,
+            record.id(), record.name(), Jsons.write(objectMapper, record.config()), record.ownerSourceId(),
+            record.readonly() ? 1 : 0, record.derivedFromProfileId(), record.createdAt().toString(), record.updatedAt().toString()
         );
     }
 
@@ -63,14 +73,36 @@ public class ProfileRepository {
         return jdbcTemplate.query("select * from retrieval_profile where name = ?", retrievalMapper, name).stream().findFirst();
     }
 
+    public Optional<ProfileRecord> findIndexByOwnerSourceId(String sourceId) {
+        return jdbcTemplate.query("select * from index_profile where owner_source_id = ?", indexMapper, sourceId).stream().findFirst();
+    }
+
+    public Optional<ProfileRecord> findRetrievalByOwnerSourceId(String sourceId) {
+        return jdbcTemplate.query("select * from retrieval_profile where owner_source_id = ?", retrievalMapper, sourceId).stream().findFirst();
+    }
+
     public void updateIndex(ProfileRecord record) {
-        jdbcTemplate.update("update index_profile set name=?, config_json=?, updated_at=? where id=?",
-            record.name(), Jsons.write(objectMapper, record.config()), record.updatedAt().toString(), record.id());
+        jdbcTemplate.update(
+            """
+            update index_profile
+            set name=?, config_json=?, owner_source_id=?, readonly=?, derived_from_profile_id=?, updated_at=?
+            where id=?
+            """,
+            record.name(), Jsons.write(objectMapper, record.config()), record.ownerSourceId(), record.readonly() ? 1 : 0,
+            record.derivedFromProfileId(), record.updatedAt().toString(), record.id()
+        );
     }
 
     public void updateRetrieval(ProfileRecord record) {
-        jdbcTemplate.update("update retrieval_profile set name=?, config_json=?, updated_at=? where id=?",
-            record.name(), Jsons.write(objectMapper, record.config()), record.updatedAt().toString(), record.id());
+        jdbcTemplate.update(
+            """
+            update retrieval_profile
+            set name=?, config_json=?, owner_source_id=?, readonly=?, derived_from_profile_id=?, updated_at=?
+            where id=?
+            """,
+            record.name(), Jsons.write(objectMapper, record.config()), record.ownerSourceId(), record.readonly() ? 1 : 0,
+            record.derivedFromProfileId(), record.updatedAt().toString(), record.id()
+        );
     }
 
     public void deleteIndex(String id) {
@@ -87,6 +119,9 @@ public class ProfileRepository {
             rs.getString("name"),
             Jsons.readMap(objectMapper, rs.getString("config_json")),
             type,
+            rs.getString("owner_source_id"),
+            rs.getInt("readonly") != 0,
+            rs.getString("derived_from_profile_id"),
             Instant.parse(rs.getString("created_at")),
             Instant.parse(rs.getString("updated_at"))
         );
@@ -97,6 +132,9 @@ public class ProfileRepository {
         String name,
         Map<String, Object> config,
         String type,
+        String ownerSourceId,
+        boolean readonly,
+        String derivedFromProfileId,
         Instant createdAt,
         Instant updatedAt
     ) {

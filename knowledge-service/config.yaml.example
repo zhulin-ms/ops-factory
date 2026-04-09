@@ -83,6 +83,8 @@ knowledge:
     final-top-k: 8
     max-top-k: 64
     rrf-k: 60
+    semantic-threshold: 0.42
+    lexical-threshold: 0.52
     snippet-length: 180
 
   fetch:

@@ -6,8 +6,8 @@ import type {
     KnowledgeDefaults,
     KnowledgeMaintenanceFailure,
     KnowledgeMaintenanceOverview,
-    KnowledgeProfileDetail,
     KnowledgeSource,
+    KnowledgeSourceProfileConfig,
     KnowledgeSourceStats,
     KnowledgeSourceUpdateRequest,
 } from '../../../../types/knowledge'
@@ -25,7 +25,7 @@ interface DeleteSourceResult {
 
 interface SaveProfileResult {
     success: boolean
-    data?: KnowledgeProfileDetail
+    data?: KnowledgeSourceProfileConfig
     error?: string
 }
 
@@ -34,8 +34,8 @@ interface UseKnowledgeSourceDetailResult {
     stats: KnowledgeSourceStats | null
     capabilities: KnowledgeCapabilities | null
     defaults: KnowledgeDefaults | null
-    indexProfileDetail: KnowledgeProfileDetail | null
-    retrievalProfileDetail: KnowledgeProfileDetail | null
+    indexProfileDetail: KnowledgeSourceProfileConfig | null
+    retrievalProfileDetail: KnowledgeSourceProfileConfig | null
     maintenance: KnowledgeMaintenanceOverview | null
     isLoading: boolean
     error: string | null
@@ -45,6 +45,8 @@ interface UseKnowledgeSourceDetailResult {
     saveSource: (updates: KnowledgeSourceUpdateRequest) => Promise<SaveSourceResult>
     saveIndexProfile: (updates: { name?: string; config?: Record<string, unknown> }) => Promise<SaveProfileResult>
     saveRetrievalProfile: (updates: { name?: string; config?: Record<string, unknown> }) => Promise<SaveProfileResult>
+    resetIndexProfile: () => Promise<SaveProfileResult>
+    resetRetrievalProfile: () => Promise<SaveProfileResult>
     deleteSource: () => Promise<DeleteSourceResult>
 }
 
@@ -83,8 +85,8 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
     const [stats, setStats] = useState<KnowledgeSourceStats | null>(null)
     const [capabilities, setCapabilities] = useState<KnowledgeCapabilities | null>(null)
     const [defaults, setDefaults] = useState<KnowledgeDefaults | null>(null)
-    const [indexProfileDetail, setIndexProfileDetail] = useState<KnowledgeProfileDetail | null>(null)
-    const [retrievalProfileDetail, setRetrievalProfileDetail] = useState<KnowledgeProfileDetail | null>(null)
+    const [indexProfileDetail, setIndexProfileDetail] = useState<KnowledgeSourceProfileConfig | null>(null)
+    const [retrievalProfileDetail, setRetrievalProfileDetail] = useState<KnowledgeSourceProfileConfig | null>(null)
     const [maintenance, setMaintenance] = useState<KnowledgeMaintenanceOverview | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -132,13 +134,13 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                     `${KNOWLEDGE_SERVICE_URL}/system/defaults`
                 ),
                 sourceData.indexProfileId
-                    ? requestJson<KnowledgeProfileDetail>(
-                        `${KNOWLEDGE_SERVICE_URL}/profiles/index/${sourceData.indexProfileId}`
+                    ? requestJson<KnowledgeSourceProfileConfig>(
+                        `${KNOWLEDGE_SERVICE_URL}/sources/${sourceId}/config/index-profile`
                     )
                     : Promise.resolve(null),
                 sourceData.retrievalProfileId
-                    ? requestJson<KnowledgeProfileDetail>(
-                        `${KNOWLEDGE_SERVICE_URL}/profiles/retrieval/${sourceData.retrievalProfileId}`
+                    ? requestJson<KnowledgeSourceProfileConfig>(
+                        `${KNOWLEDGE_SERVICE_URL}/sources/${sourceId}/config/retrieval-profile`
                     )
                     : Promise.resolve(null),
                 requestJson<KnowledgeMaintenanceOverview>(
@@ -220,8 +222,7 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
     }, [sourceId])
 
     const saveIndexProfile = useCallback(async (updates: { name?: string; config?: Record<string, unknown> }): Promise<SaveProfileResult> => {
-        const profileId = source?.indexProfileId
-        if (!profileId) {
+        if (!source?.indexProfileId || !sourceId) {
             return {
                 success: false,
                 error: 'Missing index profile id',
@@ -231,19 +232,15 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
         setError(null)
 
         try {
-            await requestJson<{ id: string; name: string; updatedAt: string }>(
-                `${KNOWLEDGE_SERVICE_URL}/profiles/index/${profileId}`,
+            const detail = await requestJson<KnowledgeSourceProfileConfig>(
+                `${KNOWLEDGE_SERVICE_URL}/sources/${sourceId}/config/index-profile`,
                 {
-                    method: 'PATCH',
+                    method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(updates),
                 }
-            )
-
-            const detail = await requestJson<KnowledgeProfileDetail>(
-                `${KNOWLEDGE_SERVICE_URL}/profiles/index/${profileId}`
             )
             setIndexProfileDetail(detail)
             await reload()
@@ -259,11 +256,10 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                 error: message,
             }
         }
-    }, [reload, source?.indexProfileId])
+    }, [reload, source?.indexProfileId, sourceId])
 
     const saveRetrievalProfile = useCallback(async (updates: { name?: string; config?: Record<string, unknown> }): Promise<SaveProfileResult> => {
-        const profileId = source?.retrievalProfileId
-        if (!profileId) {
+        if (!source?.retrievalProfileId || !sourceId) {
             return {
                 success: false,
                 error: 'Missing retrieval profile id',
@@ -273,19 +269,15 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
         setError(null)
 
         try {
-            await requestJson<{ id: string; name: string; updatedAt: string }>(
-                `${KNOWLEDGE_SERVICE_URL}/profiles/retrieval/${profileId}`,
+            const detail = await requestJson<KnowledgeSourceProfileConfig>(
+                `${KNOWLEDGE_SERVICE_URL}/sources/${sourceId}/config/retrieval-profile`,
                 {
-                    method: 'PATCH',
+                    method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(updates),
                 }
-            )
-
-            const detail = await requestJson<KnowledgeProfileDetail>(
-                `${KNOWLEDGE_SERVICE_URL}/profiles/retrieval/${profileId}`
             )
             setRetrievalProfileDetail(detail)
             await reload()
@@ -301,7 +293,73 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
                 error: message,
             }
         }
-    }, [reload, source?.retrievalProfileId])
+    }, [reload, source?.retrievalProfileId, sourceId])
+
+    const resetIndexProfile = useCallback(async (): Promise<SaveProfileResult> => {
+        if (!source?.indexProfileId || !sourceId) {
+            return {
+                success: false,
+                error: 'Missing index profile id',
+            }
+        }
+
+        setError(null)
+
+        try {
+            const detail = await requestJson<KnowledgeSourceProfileConfig>(
+                `${KNOWLEDGE_SERVICE_URL}/sources/${sourceId}/config/index-profile:reset`,
+                {
+                    method: 'POST',
+                }
+            )
+            setIndexProfileDetail(detail)
+            await reload()
+            return {
+                success: true,
+                data: detail,
+            }
+        } catch (err) {
+            const message = getErrorMessage(err)
+            setError(message)
+            return {
+                success: false,
+                error: message,
+            }
+        }
+    }, [reload, source?.indexProfileId, sourceId])
+
+    const resetRetrievalProfile = useCallback(async (): Promise<SaveProfileResult> => {
+        if (!source?.retrievalProfileId || !sourceId) {
+            return {
+                success: false,
+                error: 'Missing retrieval profile id',
+            }
+        }
+
+        setError(null)
+
+        try {
+            const detail = await requestJson<KnowledgeSourceProfileConfig>(
+                `${KNOWLEDGE_SERVICE_URL}/sources/${sourceId}/config/retrieval-profile:reset`,
+                {
+                    method: 'POST',
+                }
+            )
+            setRetrievalProfileDetail(detail)
+            await reload()
+            return {
+                success: true,
+                data: detail,
+            }
+        } catch (err) {
+            const message = getErrorMessage(err)
+            setError(message)
+            return {
+                success: false,
+                error: message,
+            }
+        }
+    }, [reload, source?.retrievalProfileId, sourceId])
 
     const deleteSource = useCallback(async (): Promise<DeleteSourceResult> => {
         if (!sourceId) {
@@ -355,6 +413,8 @@ export function useKnowledgeSourceDetail(sourceId: string | undefined): UseKnowl
         saveSource,
         saveIndexProfile,
         saveRetrievalProfile,
+        resetIndexProfile,
+        resetRetrievalProfile,
         deleteSource,
     }
 }

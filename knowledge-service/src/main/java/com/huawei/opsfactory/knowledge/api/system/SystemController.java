@@ -54,7 +54,9 @@ public class SystemController {
                 properties.getRetrieval().getLexicalTopK(),
                 properties.getRetrieval().getSemanticTopK(),
                 properties.getRetrieval().getFinalTopK(),
-                properties.getRetrieval().getRrfK()
+                properties.getRetrieval().getRrfK(),
+                properties.getRetrieval().getSemanticThreshold(),
+                properties.getRetrieval().getLexicalThreshold()
             ),
             new FeatureFlags(
                 properties.getFeatures().isAllowChunkEdit(),
@@ -105,7 +107,9 @@ public class SystemController {
         int lexicalTopK,
         int semanticTopK,
         int finalTopK,
-        int rrfK
+        int rrfK,
+        double semanticThreshold,
+        double lexicalThreshold
     ) {
     }
 

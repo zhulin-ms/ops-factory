@@ -1,0 +1,12 @@
+{
+  "id" : "6cf8995c-8cee-4658-b197-418d3d411fe5",
+  "name" : "E2E-NL-Test",
+  "description" : "test nl",
+  "version" : "1.0.0",
+  "triggerCondition" : "",
+  "nodes" : [ ],
+  "enabled" : false,
+  "mode" : "structured",
+  "stepsDescription" : "",
+  "tags" : [ ],
+}

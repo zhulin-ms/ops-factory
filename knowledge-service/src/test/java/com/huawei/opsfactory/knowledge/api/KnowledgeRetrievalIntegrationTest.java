@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -109,6 +110,226 @@ class KnowledgeRetrievalIntegrationTest extends KnowledgeApiIntegrationTestSuppo
         assertThat(compare.path("hybrid").path("hits")).isNotEmpty();
         assertThat(compare.path("semantic").path("hits")).isNotEmpty();
         assertThat(compare.path("lexical").path("hits")).isNotEmpty();
+    }
+
+    @Test
+    void shouldApplyLegacyProfileScoreThresholdForSemanticWhenOverrideOmitsThresholdField() throws Exception {
+        String sourceId = createSource();
+        uploadInputFiles(sourceId);
+        JsonNode documents = listDocuments(sourceId);
+        String documentId = documents.path("items").get(0).path("id").asText();
+
+        createChunk(
+            documentId,
+            900,
+            "cpu alert exact",
+            List.of("Operations", "cpu alert exact"),
+            List.of("exact-alert"),
+            "cpu alert exact is the authoritative incident trigger"
+        );
+        createChunk(
+            documentId,
+            901,
+            "alert for cpu spikes",
+            List.of("Operations", "alert for cpu spikes"),
+            List.of("alert", "cpu"),
+            "when cpu usage spikes, the oncall should receive an alert notification"
+        );
+
+        JsonNode baseline = search(sourceId, "cpu alert", null, 10, null, """
+            {
+              "mode": "semantic",
+              "scoreThreshold": 0.0,
+              "includeScores": true
+            }
+            """);
+        assertThat(baseline.path("total").asInt()).isGreaterThan(0);
+        double topScore = baseline.path("hits").get(0).path("score").asDouble();
+        double strictThreshold = topScore >= 0.999 ? 1.0 : Math.min(1.0, topScore + 0.01);
+
+        readJson(mockMvc.perform(put("/knowledge/sources/{sourceId}/config/retrieval-profile", sourceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "config": {
+                        "retrieval": {
+                          "mode": "semantic",
+                          "scoreThreshold": %.6f
+                        }
+                      }
+                    }
+                    """.formatted(strictThreshold)))
+            .andExpect(status().isOk())
+            .andReturn());
+
+        JsonNode filteredByProfileThreshold = search(sourceId, "cpu alert", null, 10, null, """
+            {
+              "mode": "semantic",
+              "includeScores": true
+            }
+            """);
+        assertThat(filteredByProfileThreshold.path("total").asInt()).isLessThan(baseline.path("total").asInt());
+
+        JsonNode overrideDisablesThreshold = search(sourceId, "cpu alert", null, 10, null, """
+            {
+              "mode": "semantic",
+              "scoreThreshold": 0.0,
+              "includeScores": true
+            }
+            """);
+        assertThat(overrideDisablesThreshold.path("total").asInt()).isEqualTo(baseline.path("total").asInt());
+    }
+
+    @Test
+    void shouldApplyModeSpecificProfileThresholdsForSemanticAndLexicalOnly() throws Exception {
+        String sourceId = createSource();
+        uploadInputFiles(sourceId);
+        JsonNode documents = listDocuments(sourceId);
+        String documentId = documents.path("items").get(0).path("id").asText();
+
+        createChunk(
+            documentId,
+            910,
+            "cpu alert exact",
+            List.of("Operations", "cpu alert exact"),
+            List.of("exact-alert"),
+            "cpu alert exact is the authoritative incident trigger"
+        );
+        createChunk(
+            documentId,
+            911,
+            "alert for cpu spikes",
+            List.of("Operations", "alert for cpu spikes"),
+            List.of("alert", "cpu"),
+            "when cpu usage spikes, the oncall should receive an alert notification"
+        );
+
+        assertProfileThresholdAppliesForMode(sourceId, "cpu alert", "semantic", "semanticThreshold");
+        assertProfileThresholdAppliesForMode(sourceId, "cpu alert", "lexical", "lexicalThreshold");
+    }
+
+    @Test
+    void shouldNotFilterHybridResultsUsingSemanticOrLexicalProfileThresholds() throws Exception {
+        String sourceId = createSource();
+        uploadInputFiles(sourceId);
+        JsonNode documents = listDocuments(sourceId);
+        String documentId = documents.path("items").get(0).path("id").asText();
+
+        createChunk(
+            documentId,
+            920,
+            "cpu alert exact",
+            List.of("Operations", "cpu alert exact"),
+            List.of("exact-alert"),
+            "cpu alert exact is the authoritative incident trigger"
+        );
+        createChunk(
+            documentId,
+            921,
+            "alert for cpu spikes",
+            List.of("Operations", "alert for cpu spikes"),
+            List.of("alert", "cpu"),
+            "when cpu usage spikes, the oncall should receive an alert notification"
+        );
+
+        JsonNode baseline = search(sourceId, "cpu alert", null, 10, null, """
+            {
+              "mode": "hybrid",
+              "scoreThreshold": 0.95,
+              "includeScores": true
+            }
+            """);
+        assertThat(baseline.path("total").asInt()).isGreaterThan(0);
+
+        readJson(mockMvc.perform(put("/knowledge/sources/{sourceId}/config/retrieval-profile", sourceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "config": {
+                        "retrieval": {
+                          "mode": "hybrid",
+                          "scoreThreshold": 0.95,
+                          "semanticThreshold": 0.95,
+                          "lexicalThreshold": 0.95
+                        }
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andReturn());
+
+        JsonNode hybrid = search(sourceId, "cpu alert", null, 10, null, """
+            {
+              "mode": "hybrid",
+              "includeScores": true
+            }
+            """);
+        assertThat(hybrid.path("total").asInt()).isEqualTo(baseline.path("total").asInt());
+    }
+
+    private void assertProfileThresholdAppliesForMode(
+        String sourceId,
+        String query,
+        String mode,
+        String profileThresholdField
+    ) throws Exception {
+        JsonNode baseline = search(sourceId, query, null, 10, null, """
+            {
+              "mode": "%s",
+              "scoreThreshold": 0.0,
+              "includeScores": true
+            }
+            """.formatted(mode));
+        assertThat(baseline.path("total").asInt()).isGreaterThan(1);
+
+        double topScore = baseline.path("hits").get(0).path("score").asDouble();
+        double strictThreshold = topScore >= 0.999 ? 1.0 : Math.min(1.0, topScore + 0.01);
+
+        readJson(mockMvc.perform(put("/knowledge/sources/{sourceId}/config/retrieval-profile", sourceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "config": {
+                        "retrieval": {
+                          "mode": "%s",
+                          "%s": %.6f
+                        }
+                      }
+                    }
+                    """.formatted(mode, profileThresholdField, strictThreshold)))
+            .andExpect(status().isOk())
+            .andReturn());
+
+        JsonNode filtered = search(sourceId, query, null, 10, null, """
+            {
+              "mode": "%s",
+              "includeScores": true
+            }
+            """.formatted(mode));
+        assertThat(filtered.path("total").asInt()).isLessThan(baseline.path("total").asInt());
+
+        readJson(mockMvc.perform(put("/knowledge/sources/{sourceId}/config/retrieval-profile", sourceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "config": {
+                        "retrieval": {
+                          "mode": "%s",
+                          "%s": 0.0
+                        }
+                      }
+                    }
+                    """.formatted(mode, profileThresholdField)))
+            .andExpect(status().isOk())
+            .andReturn());
+
+        JsonNode restored = search(sourceId, query, null, 10, null, """
+            {
+              "mode": "%s",
+              "includeScores": true
+            }
+            """.formatted(mode));
+        assertThat(restored.path("total").asInt()).isEqualTo(baseline.path("total").asInt());
     }
 
     private JsonNode createChunk(
