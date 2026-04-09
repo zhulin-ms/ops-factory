@@ -1287,7 +1287,20 @@
       "transitionCondition": "条件",
       "transitionNext": "下一节点",
       "commandNotInWhitelist": "命令未在白名单中授权: {{commands}}",
-      "duplicateName": "SOP名称已存在"
+      "duplicateName": "SOP名称已存在",
+      "mode": "模式",
+      "modeStructured": "结构化",
+      "modeNaturalLanguage": "自然语言",
+      "stepsDescription": "步骤描述",
+      "stepsDescriptionTitle": "诊断步骤",
+      "stepsDescriptionHint": "用自然语言描述诊断步骤，智能体将在运行时将其转换为具体命令。",
+      "stepsDescriptionPlaceholder": "示例：\n1. 检查进程是否运行\n2. 验证磁盘使用率\n3. 检查网络连通性\n4. 审查配置错误",
+      "sopTags": "标签",
+      "sopHostTags": "目标标签",
+      "sopEnabled": "启用",
+      "sopDisabled": "已禁用",
+      "toggleSuccess": "SOP「{{name}}」{{status}}",
+      "status": "状态"
     },
     "whitelist": {
       "title": "命令白名单",

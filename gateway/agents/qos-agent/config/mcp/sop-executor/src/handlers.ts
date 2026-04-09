@@ -44,12 +44,15 @@ export async function gw<T>(path: string, params?: Record<string, string>, metho
 export const tools = [
   {
     name: 'list_sops',
-    description: '列出所有可用的SOP诊断流程，包含id、名称、触发条件。可通过level和category过滤子SOP。level="sub"获取子SOP，不传则返回全部。',
+    description: '列出所有可用的SOP诊断流程，包含id、名称、触发条件。可通过tags过滤。',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        level: { type: 'string', description: '按层级过滤，如"sub"仅返回子SOP' },
-        category: { type: 'string', description: '按类别过滤，如NSLB/RCPA/RCPADB/GMDB/KAFKA' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '按标签过滤（如["haproxy"]），返回tags中包含任一指定标签的SOP',
+        },
       },
     },
   },
@@ -107,6 +110,10 @@ interface SopNode {
 interface SopData {
   name?: string
   nodes?: SopNode[]
+  mode?: string
+  enabled?: boolean
+  stepsDescription?: string
+  tags?: string[]
   [key: string]: unknown
 }
 
@@ -189,14 +196,16 @@ export function buildMermaidResource(mermaidCode: string, title: string): Conten
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-export async function handleListSops(level?: string, category?: string): Promise<string> {
+export async function handleListSops(tags?: string[]): Promise<string> {
   const data = await gw<{ sops: Record<string, unknown>[] }>(`${API_PREFIX}/sops`)
   let sops = data.sops ?? []
-  if (level) {
-    sops = sops.filter(s => String(s.level ?? '') === level)
-  }
-  if (category) {
-    sops = sops.filter(s => String(s.category ?? '') === category)
+  // Filter out disabled SOPs
+  sops = sops.filter(s => s.enabled !== false)
+  if (tags && tags.length > 0) {
+    sops = sops.filter(s => {
+      const sTags = (s.tags ?? []) as string[]
+      return sTags.some((t: string) => tags.includes(t))
+    })
   }
   return JSON.stringify({ sops }, null, 2)
 }
@@ -205,11 +214,38 @@ export async function handleGetSopDetail(sopId: string): Promise<ContentItem[]> 
   const data = await gw<Record<string, unknown>>(`${API_PREFIX}/sops/${sopId}`)
   // API returns { success: true, sop: { nodes: [...] } } — extract inner sop object
   const sop = (data.sop ?? data) as SopData
+
+  // Natural language mode — return steps description without mermaid flowchart
+  if (sop.mode === 'natural_language') {
+    const parts: string[] = []
+    parts.push(`📋 SOP 模式: 自然语言 (natural_language)`)
+    if (sop.tags && sop.tags.length > 0) {
+      parts.push(`目标标签: ${sop.tags.join(', ')}`)
+    }
+    parts.push('')
+    parts.push('---')
+    parts.push('')
+    parts.push('诊断步骤描述:')
+    parts.push(sop.stepsDescription || '（无步骤描述）')
+    parts.push('')
+    parts.push('---')
+    parts.push('')
+    parts.push('执行指引:')
+    parts.push('1. 根据上述步骤描述，逐步推导出具体的 shell 诊断命令（只读命令，符合白名单）')
+    parts.push('2. 根据 SOP 的 tags 调用 get_hosts，仅保留 IP 匹配告警的主机')
+    parts.push('3. 对每台目标主机调用 execute_remote_command 执行诊断命令')
+    parts.push('4. 分析输出，判断是否异常')
+    parts.push('5. 不需要生成 mermaid 流程图')
+    parts.push('')
+    parts.push(JSON.stringify(data, null, 2))
+
+    return [{ type: 'text', text: parts.join('\n') }]
+  }
+
+  // Structured mode — existing logic
   const mermaidCode = sopToMermaid(sop)
 
   // Embed confirmation warning directly into each transition that requires it.
-  // This makes the warning appear inline within the JSON data where the agent reads it,
-  // rather than as a separate note that the agent might skip over.
   const confirmWarning = '⛔ 匹配到此条件时必须立即停止，向用户确认后才能继续执行后续节点'
   const sopWithWarnings = JSON.parse(JSON.stringify(data)) as Record<string, unknown>
   const inner = (sopWithWarnings.sop ?? sopWithWarnings) as SopData
@@ -313,8 +349,7 @@ export async function dispatch(name: string, args: Record<string, unknown>): Pro
   switch (name) {
     case 'list_sops':
       return handleListSops(
-        (args as { level?: string }).level,
-        (args as { category?: string }).category,
+        (args as { tags?: string[] }).tags,
       )
     case 'get_sop_detail':
       return handleGetSopDetail((args as { sopId?: string }).sopId ?? '')

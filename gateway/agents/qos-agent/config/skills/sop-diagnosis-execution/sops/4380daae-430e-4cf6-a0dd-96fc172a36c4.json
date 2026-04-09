@@ -1,0 +1,14 @@
+{
+  "id" : "4380daae-430e-4cf6-a0dd-96fc172a36c4",
+  "name" : "haproxy环境检查",
+  "description" : "第一层-负载均衡节点环境诊断：本进程检查、下游RCPA连通性检查、磁盘检查",
+  "version" : "3.0",
+  "triggerCondition" : "haproxy检查，haproxy告警",
+  "nodes" : [ ],
+  "enabled" : true,
+  "mode" : "natural_language",
+  "stepsDescription" : "检查 haproxy 进程运行情况\n检查 CPU、内存的使用情况\n查看配置文件 /etc/haproxy/haproxy.cfg，根据配置的下游 ip 进行网络连通性测试\n查看磁盘的使用情况",
+  "hostTags" : [ ],
+  "level" : "sub",
+  "category" : "NSLB"
+}

@@ -320,6 +320,7 @@
     border-radius: 999px;
     background: rgba(203, 213, 225, 0.9);
     cursor: pointer;
+    font: inherit;
     transition: background var(--transition-fast);
 }
 
@@ -542,6 +543,26 @@
 .sop-workflow-transition-confirm-label {
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
+}
+
+.sop-workflow-node-type-nl {
+    color: #7c3aed;
+    background: rgba(139, 92, 246, 0.10);
+}
+
+.sop-workflow-steps-textarea {
+    min-height: 200px;
+    line-height: 1.6;
+}
+
+.sop-workflow-mode-select {
+    min-width: 160px;
+}
+
+.sop-workflow-enabled-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 @media (max-width: 900px) {

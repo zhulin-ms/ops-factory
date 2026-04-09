@@ -1287,7 +1287,20 @@
       "transitionCondition": "Condition",
       "transitionNext": "Next Nodes",
       "commandNotInWhitelist": "Commands not in whitelist: {{commands}}",
-      "duplicateName": "SOP name already exists"
+      "duplicateName": "SOP name already exists",
+      "mode": "Mode",
+      "modeStructured": "Structured",
+      "modeNaturalLanguage": "Natural Language",
+      "stepsDescription": "Steps Description",
+      "stepsDescriptionTitle": "Diagnostic Steps",
+      "stepsDescriptionHint": "Describe diagnostic steps in natural language. The agent will convert them to commands at runtime.",
+      "stepsDescriptionPlaceholder": "Example:\n1. Check if process is running\n2. Verify disk usage\n3. Check network connectivity\n4. Review configuration errors",
+      "sopTags": "Tags",
+      "sopHostTags": "Target Tags",
+      "sopEnabled": "Enabled",
+      "sopDisabled": "Disabled",
+      "toggleSuccess": "SOP \"{{name}}\" {{status}}",
+      "status": "Status"
     },
     "whitelist": {
       "title": "Command Whitelist",

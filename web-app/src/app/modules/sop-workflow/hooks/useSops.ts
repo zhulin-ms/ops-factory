@@ -16,6 +16,7 @@ export function useSops() {
         try {
             const res = await fetch(`${GATEWAY_URL}/sops`, {
                 headers: gatewayHeaders(userId),
+                cache: 'no-store',
                 signal: AbortSignal.timeout(10000),
             })
             if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`)

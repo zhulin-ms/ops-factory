@@ -9,7 +9,7 @@ export interface SopNode {
     id: string
     name: string
     type: 'start' | 'analysis' | 'browser' | 'end'
-    hostTags: string[]
+    tags: string[]
     command: string
     commandVariables: Record<string, SopCommandVariable>
     variables?: SopNodeVariable[]
@@ -41,7 +41,11 @@ export interface Sop {
     description: string
     version: string
     triggerCondition: string
+    enabled?: boolean
+    mode?: 'structured' | 'natural_language'
     nodes: SopNode[]
+    stepsDescription?: string
+    tags?: string[]
 }
 
 export interface SopCreateRequest {
@@ -49,5 +53,9 @@ export interface SopCreateRequest {
     description?: string
     version?: string
     triggerCondition?: string
+    enabled?: boolean
+    mode?: 'structured' | 'natural_language'
     nodes?: SopNode[]
+    stepsDescription?: string
+    tags?: string[]
 }
