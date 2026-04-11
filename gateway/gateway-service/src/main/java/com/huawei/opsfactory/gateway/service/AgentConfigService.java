@@ -586,6 +586,37 @@ public class AgentConfigService {
         return gatewayRoot.resolve(properties.getPaths().getUsersDir());
     }
 
+    @SuppressWarnings("unchecked")
+    public Path getKnowledgeCliRootDir(String agentId) {
+        Map<String, Object> config = loadAgentConfigYaml(agentId);
+        Object extensionsObj = config.get("extensions");
+        if (!(extensionsObj instanceof Map<?, ?> extensions)) {
+            throw new IllegalArgumentException("Agent config for '" + agentId + "' does not contain extensions");
+        }
+
+        Object extensionObj = extensions.get("knowledge-cli");
+        if (!(extensionObj instanceof Map<?, ?> extension)) {
+            throw new IllegalArgumentException("MCP 'knowledge-cli' not found for agent '" + agentId + "'");
+        }
+
+        Object opsfactoryObj = extension.get("x-opsfactory");
+        if (!(opsfactoryObj instanceof Map<?, ?> opsfactory)) {
+            throw new IllegalArgumentException("MCP 'knowledge-cli' does not contain x-opsfactory scope");
+        }
+
+        Object scopeObj = opsfactory.get("scope");
+        if (!(scopeObj instanceof Map<?, ?> scope)) {
+            throw new IllegalArgumentException("MCP 'knowledge-cli' does not contain scope");
+        }
+
+        Object rootDirObj = scope.get("rootDir");
+        String configuredRoot = rootDirObj instanceof String s && !s.isBlank() ? s.trim() : "../data";
+        Path configDir = getAgentConfigDir(agentId);
+        return Path.of(configuredRoot).isAbsolute()
+                ? Path.of(configuredRoot).normalize()
+                : configDir.resolve(configuredRoot).normalize();
+    }
+
     public Path getUserAgentDir(String userId, String agentId) {
         return getUsersDir().resolve(userId).resolve("agents").resolve(agentId);
     }

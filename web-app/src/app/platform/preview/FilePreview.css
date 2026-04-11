@@ -124,6 +124,85 @@
     font-family: inherit;
 }
 
+.file-preview-lined-text {
+    position: relative;
+    margin: 0;
+    padding: var(--spacing-4) 0;
+    font-family: var(--font-family-mono);
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--color-text-primary);
+    background:
+        linear-gradient(90deg, rgba(245, 247, 250, 0.98) 0 64px, transparent 64px),
+        linear-gradient(90deg, transparent 63px, rgba(226, 232, 240, 0.88) 63px 64px, transparent 64px),
+        #fbfcfe;
+    overflow: auto;
+    border-top: 1px solid rgba(226, 232, 240, 0.72);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+}
+
+.file-preview-lined-row {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: start;
+    min-height: 24px;
+    transition: background-color var(--transition-fast);
+}
+
+.file-preview-lined-row:hover {
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.file-preview-line-number {
+    position: sticky;
+    left: 0;
+    padding: 0 var(--spacing-4) 0 var(--spacing-5);
+    text-align: right;
+    color: #94a3b8;
+    background: transparent;
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+    transition: color var(--transition-fast);
+}
+
+.file-preview-lined-row:hover .file-preview-line-number {
+    color: #64748b;
+}
+
+.file-preview-line-content {
+    display: block;
+    padding: 0 var(--spacing-5);
+    white-space: pre;
+    word-break: normal;
+    min-width: max-content;
+}
+
+.file-preview-lined-text.is-highlighted .file-preview-line-content code {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    white-space: pre;
+}
+
+.file-preview-lined-text.is-log-view {
+    background: #fcfdff;
+}
+
+.file-preview-lined-text.is-log-view {
+    background:
+        linear-gradient(90deg, rgba(244, 247, 251, 0.98) 0 64px, transparent 64px),
+        linear-gradient(90deg, transparent 63px, rgba(226, 232, 240, 0.9) 63px 64px, transparent 64px),
+        #fcfdff;
+}
+
+.file-preview-lined-text.is-log-view .file-preview-lined-row:hover {
+    background: rgba(59, 130, 246, 0.07);
+}
+
 .file-preview-markdown {
     padding: var(--spacing-6);
     overflow: auto;

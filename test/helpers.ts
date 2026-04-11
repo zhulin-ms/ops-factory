@@ -3,7 +3,7 @@
  */
 import { ChildProcess, spawn } from 'node:child_process'
 import { resolve, join } from 'node:path'
-import { writeFileSync, unlinkSync } from 'node:fs'
+import { writeFileSync, unlinkSync, existsSync } from 'node:fs'
 import { stringify } from 'yaml'
 import { tmpdir } from 'node:os'
 import net from 'node:net'
@@ -174,7 +174,12 @@ export async function startJavaGateway(extraEnv: Record<string, string> = {}): P
   const jarPath = join(PROJECT_ROOT, 'gateway', 'gateway-service', 'target', 'gateway-service.jar')
   const libDir = join(PROJECT_ROOT, 'gateway', 'gateway-service', 'target', 'lib')
 
-  const log4jConfig = join(PROJECT_ROOT, 'gateway', 'gateway-service', 'target', 'resources', 'log4j2.xml')
+  const log4jCandidates = [
+    join(PROJECT_ROOT, 'gateway', 'gateway-service', 'target', 'resources', 'log4j2.xml'),
+    join(PROJECT_ROOT, 'gateway', 'gateway-service', 'target', 'test-classes', 'log4j2.xml'),
+    join(PROJECT_ROOT, 'gateway', 'gateway-service', 'src', 'test', 'resources', 'log4j2.xml'),
+  ]
+  const log4jConfig = log4jCandidates.find(candidate => existsSync(candidate))
   const javaArgs = [
     `-Dloader.path=${libDir}`,
     `-Dserver.port=${port}`,
@@ -184,9 +189,11 @@ export async function startJavaGateway(extraEnv: Record<string, string> = {}): P
     '-Dgateway.goose-tls=true',
     `-Dgateway.paths.project-root=${PROJECT_ROOT}`,
     '-Dgateway.cors-origin=*',
-    `-Dlogging.config=file:${log4jConfig}`,
     '-jar', jarPath,
   ]
+  if (log4jConfig) {
+    javaArgs.splice(javaArgs.length - 1, 0, `-Dlogging.config=file:${log4jConfig}`)
+  }
 
   const child = spawn('java', javaArgs, {
     cwd: join(PROJECT_ROOT, 'gateway'),

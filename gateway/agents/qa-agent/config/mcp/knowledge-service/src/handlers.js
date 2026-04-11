@@ -14,7 +14,7 @@ export { LOG_FILE_PATH }
 export const tools = [
   {
     name: 'search',
-    description: 'Search knowledge chunks. Uses the MCP knowledge scope when sourceIds is omitted.',
+    description: 'Search knowledge chunks. Uses the config.yaml knowledge scope when sourceIds is omitted.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -24,7 +24,7 @@ export const tools = [
         },
         sourceIds: {
           type: 'array',
-          description: 'Optional source IDs. Defaults to the configured MCP knowledge scope.',
+          description: 'Optional source IDs. Defaults to the config.yaml knowledge scope.',
           items: { type: 'string' },
         },
         documentIds: {

@@ -7,6 +7,7 @@ import { useToast } from '../../../platform/providers/ToastContext'
 import { useChat, convertBackendMessage } from '../../../platform/chat/useChat'
 import MessageList from '../../../platform/chat/MessageList'
 import ChatInput from '../../../platform/chat/ChatInput'
+import ChatPanelShell from '../../../platform/chat/ChatPanelShell'
 import type { Session, ImageData } from '@goosed/sdk'
 import type { AttachedFile } from '../../../../types/message'
 import { isScheduledSession } from '../../../../config/runtime'
@@ -25,6 +26,20 @@ interface LocationState {
 interface ModelInfo {
     provider: string
     model: string
+}
+
+const BOTTOM_THRESHOLD_PX = 24
+const USER_MESSAGE_TOP_ANCHOR_PX = 24
+const USER_MESSAGE_TOP_TOLERANCE_PX = 12
+const BOTTOM_CONTENT_GAP_PX = 24
+
+function setScrollTop(element: HTMLElement, top: number, behavior: ScrollBehavior) {
+    if (typeof element.scrollTo === 'function') {
+        element.scrollTo({ top, behavior })
+        return
+    }
+
+    element.scrollTop = top
 }
 
 function isNotFoundError(error: unknown): boolean {
@@ -51,7 +66,10 @@ export default function Chat() {
     const [isCreatingSession, setIsCreatingSession] = useState(false)
     const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
     const [showStopHint, setShowStopHint] = useState(false)
+    const [pendingUserMessageAnchorId, setPendingUserMessageAnchorId] = useState<string | null>(null)
+    const [showScrollToBottom, setShowScrollToBottom] = useState(false)
     const stopHintTimerRef = useRef<number | null>(null)
+    const messageScrollContainerRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         setLocatorState((current) => {
@@ -264,7 +282,10 @@ export default function Chat() {
 
     useEffect(() => {
         if (initialMessage && locatorState.kind === 'ready' && activeSessionId && !isInitializing && messages.length === 0) {
-            sendMessage(initialMessage)
+            const messageId = sendMessage(initialMessage)
+            if (messageId) {
+                setPendingUserMessageAnchorId(messageId)
+            }
             window.history.replaceState({}, document.title)
         }
     }, [initialMessage, locatorState, activeSessionId, isInitializing, messages.length, sendMessage])
@@ -287,8 +308,188 @@ export default function Chat() {
             stopHintTimerRef.current = null
         }
         setShowStopHint(false)
-        sendMessage(text, images, attachedFiles)
-    }, [locatorState, sendMessage])
+        const messageId = sendMessage(text, images, attachedFiles)
+        if (messageId) {
+            setPendingUserMessageAnchorId(messageId)
+        }
+    }, [activeSessionId, locatorState, sendMessage])
+
+    const resolveActiveScrollElement = useCallback((): HTMLElement => {
+        const scrollContainer = messageScrollContainerRef.current
+        if (scrollContainer && scrollContainer.scrollHeight - scrollContainer.clientHeight > BOTTOM_THRESHOLD_PX) {
+            return scrollContainer
+        }
+
+        return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : document.documentElement
+    }, [])
+
+    const getCurrentScrollTop = useCallback((element: HTMLElement): number => {
+        return element === document.scrollingElement || element === document.documentElement || element === document.body
+            ? window.scrollY
+            : element.scrollTop
+    }, [])
+
+    const getMaxScrollTop = useCallback((element: HTMLElement): number => {
+        return Math.max(element.scrollHeight - element.clientHeight, 0)
+    }, [])
+
+    const getBottomAnchorTop = useCallback((): number => {
+        const inputInner = document.querySelector('.chat-input-area-bottom .chat-input-area-inner') as HTMLElement | null
+        return inputInner ? inputInner.getBoundingClientRect().top - BOTTOM_CONTENT_GAP_PX : window.innerHeight - 180
+    }, [])
+
+    const getLastConversationElement = useCallback((): HTMLElement | null => {
+        const messageRoot = document.querySelector('.chat-messages') as HTMLElement | null
+        if (!messageRoot) return null
+
+        const elements = Array.from(messageRoot.querySelectorAll('[data-message-id]'))
+        return (elements[elements.length - 1] as HTMLElement | undefined) ?? null
+    }, [])
+
+    const getBottomScrollTarget = useCallback((): number => {
+        const activeScrollElement = resolveActiveScrollElement()
+        const lastElement = getLastConversationElement()
+        if (!lastElement) return activeScrollElement.scrollHeight
+
+        const currentTop = getCurrentScrollTop(activeScrollElement)
+        const anchorBottomTop = getBottomAnchorTop()
+        const delta = lastElement.getBoundingClientRect().bottom - anchorBottomTop
+
+        return Math.max(currentTop + delta, 0)
+    }, [getBottomAnchorTop, getCurrentScrollTop, getLastConversationElement, resolveActiveScrollElement])
+
+    const getClampedBottomScrollTarget = useCallback((): number => {
+        const activeScrollElement = resolveActiveScrollElement()
+        return Math.min(getBottomScrollTarget(), getMaxScrollTop(activeScrollElement))
+    }, [getBottomScrollTarget, getMaxScrollTop, resolveActiveScrollElement])
+
+    const updateScrollToBottomVisibility = useCallback(() => {
+        const activeScrollElement = resolveActiveScrollElement()
+        const lastElement = getLastConversationElement()
+        if (!lastElement) {
+            setShowScrollToBottom(false)
+            return
+        }
+
+        const currentTop = getCurrentScrollTop(activeScrollElement)
+        const remainingScrollableDistance = Math.max(getMaxScrollTop(activeScrollElement) - currentTop, 0)
+        const distancePastBottomAnchor = Math.max(lastElement.getBoundingClientRect().bottom - getBottomAnchorTop(), 0)
+
+        setShowScrollToBottom(
+            remainingScrollableDistance > BOTTOM_THRESHOLD_PX &&
+            distancePastBottomAnchor > BOTTOM_THRESHOLD_PX
+        )
+    }, [getBottomAnchorTop, getCurrentScrollTop, getLastConversationElement, getMaxScrollTop, resolveActiveScrollElement])
+
+    useEffect(() => {
+        updateScrollToBottomVisibility()
+
+        const scrollContainer = messageScrollContainerRef.current
+
+        if (scrollContainer) {
+            scrollContainer.addEventListener('scroll', updateScrollToBottomVisibility, { passive: true })
+        }
+        window.addEventListener('scroll', updateScrollToBottomVisibility, { passive: true })
+        window.addEventListener('resize', updateScrollToBottomVisibility)
+
+        return () => {
+            if (scrollContainer) {
+                scrollContainer.removeEventListener('scroll', updateScrollToBottomVisibility)
+            }
+            window.removeEventListener('scroll', updateScrollToBottomVisibility)
+            window.removeEventListener('resize', updateScrollToBottomVisibility)
+        }
+    }, [updateScrollToBottomVisibility])
+
+    useEffect(() => {
+        const frame = window.requestAnimationFrame(() => {
+            updateScrollToBottomVisibility()
+        })
+
+        return () => window.cancelAnimationFrame(frame)
+    }, [messages, isLoading, session?.id, updateScrollToBottomVisibility])
+
+    useEffect(() => {
+        if (!pendingUserMessageAnchorId) return
+        if (!messages.some(message => message.id === pendingUserMessageAnchorId && message.role === 'user')) return
+
+        const frame = window.requestAnimationFrame(() => {
+            const activeScrollElement = resolveActiveScrollElement()
+            const targetElement = document.querySelector(`[data-message-id="${pendingUserMessageAnchorId}"]`) as HTMLElement | null
+
+            if (!targetElement) return
+
+            const anchorTop = USER_MESSAGE_TOP_ANCHOR_PX
+            const currentTop =
+                activeScrollElement === document.scrollingElement ||
+                activeScrollElement === document.documentElement ||
+                activeScrollElement === document.body
+                    ? window.scrollY
+                    : activeScrollElement.scrollTop
+            const targetRect = targetElement.getBoundingClientRect()
+            const delta = targetRect.top - anchorTop
+            const isAnchored = Math.abs(delta) <= USER_MESSAGE_TOP_TOLERANCE_PX
+
+            if (isAnchored) {
+                setPendingUserMessageAnchorId(null)
+                return
+            }
+
+            setScrollTop(activeScrollElement, Math.max(currentTop + delta, 0), 'smooth')
+        })
+
+        return () => window.cancelAnimationFrame(frame)
+    }, [activeSessionId, isLoading, messages, pendingUserMessageAnchorId, resolveActiveScrollElement])
+
+    useEffect(() => {
+        if (!pendingUserMessageAnchorId) return
+
+        const activeScrollElement = resolveActiveScrollElement()
+        let frame: number | null = null
+
+        const completeAnchorIfSettled = () => {
+            frame = null
+            const targetElement = document.querySelector(`[data-message-id="${pendingUserMessageAnchorId}"]`) as HTMLElement | null
+            if (!targetElement) return
+
+            const currentTop = getCurrentScrollTop(activeScrollElement)
+            const maxScrollTop = getMaxScrollTop(activeScrollElement)
+            const delta = targetElement.getBoundingClientRect().top - USER_MESSAGE_TOP_ANCHOR_PX
+            const isAnchored = Math.abs(delta) <= USER_MESSAGE_TOP_TOLERANCE_PX
+            const isAtScrollLimit = Math.abs(maxScrollTop - currentTop) <= USER_MESSAGE_TOP_TOLERANCE_PX
+
+            if (isAnchored || isAtScrollLimit) {
+                setPendingUserMessageAnchorId(null)
+            }
+        }
+
+        const scheduleCheck = () => {
+            if (frame !== null) {
+                window.cancelAnimationFrame(frame)
+            }
+            frame = window.requestAnimationFrame(completeAnchorIfSettled)
+        }
+
+        activeScrollElement.addEventListener('scroll', scheduleCheck, { passive: true })
+        scheduleCheck()
+
+        return () => {
+            activeScrollElement.removeEventListener('scroll', scheduleCheck)
+            if (frame !== null) {
+                window.cancelAnimationFrame(frame)
+            }
+        }
+    }, [getCurrentScrollTop, getMaxScrollTop, pendingUserMessageAnchorId, resolveActiveScrollElement])
+
+    const handleJumpToBottom = useCallback(() => {
+        const activeScrollElement = resolveActiveScrollElement()
+        const bottomTarget = getClampedBottomScrollTarget()
+
+        activeScrollElement.scrollTo({
+            top: bottomTarget,
+            behavior: 'smooth',
+        })
+    }, [getClampedBottomScrollTarget, resolveActiveScrollElement])
 
     const handleUploadFile = useCallback(async (file: File): Promise<{ path: string }> => {
         if (locatorState.kind !== 'ready' || !client || !activeSessionId) {
@@ -305,7 +506,10 @@ export default function Chat() {
                 const textContent = msg.content.find(c => c.type === 'text')
                 const text = textContent && 'text' in textContent ? textContent.text : undefined
                 if (text) {
-                    sendMessage(text)
+                    const messageId = sendMessage(text)
+                    if (messageId) {
+                        setPendingUserMessageAnchorId(messageId)
+                    }
                     return
                 }
             }
@@ -402,25 +606,56 @@ export default function Chat() {
         )
     }
 
+    const sessionTitle = session?.name?.trim() || t('sidebar.newChat')
+
     return (
         <div className="chat-container">
-            {/* Session header */}
-            {session?.name && (
-                <div className="chat-session-header">
-                    <span className="chat-session-title">{session.name}</span>
+            <ChatPanelShell
+                className="chat-main-panel"
+                scrollBody={false}
+                header={(
+                    <div className="chat-session-header">
+                        <span className="chat-session-title">{sessionTitle}</span>
+                    </div>
+                )}
+            >
+                {/* Messages area - scrollable */}
+                <div className="chat-messages-area" ref={messageScrollContainerRef}>
+                    <div className="chat-messages-scroll">
+                        <MessageList
+                            messages={messages}
+                            isLoading={isLoading}
+                            chatState={chatState}
+                            agentId={activeAgentId}
+                            sessionId={activeSessionId || sessionId}
+                            outputFilesEvent={outputFilesEvent}
+                            onRetry={handleRetry}
+                            scrollContainerRef={messageScrollContainerRef}
+                            showAnchorSpacer={!!pendingUserMessageAnchorId}
+                        />
+                    </div>
                 </div>
-            )}
-
-            {/* Messages area - scrollable */}
-            <div className="chat-messages-area">
-                <div className="chat-messages-scroll">
-                    <MessageList messages={messages} isLoading={isLoading} chatState={chatState} agentId={activeAgentId} sessionId={activeSessionId || sessionId} outputFilesEvent={outputFilesEvent} onRetry={handleRetry} />
-                </div>
-            </div>
+            </ChatPanelShell>
 
             {/* Input at bottom - floating */}
             <div className="chat-input-area-bottom">
                 <div className="chat-input-area-inner">
+                    {showScrollToBottom && (
+                        <div className="chat-scroll-bottom-action">
+                            <button
+                                type="button"
+                                className="chat-scroll-bottom-button"
+                                onClick={handleJumpToBottom}
+                                aria-label={t('chat.jumpToBottom')}
+                                title={t('chat.jumpToBottom')}
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
+                                    <path d="M12 5v12" />
+                                    <path d="m6 13 6 6 6-6" />
+                                </svg>
+                            </button>
+                        </div>
+                    )}
                     <div className={`chat-inline-hint ${showStopHint ? 'visible' : ''}`}>
                         {t('chat.generationStopped')}
                     </div>

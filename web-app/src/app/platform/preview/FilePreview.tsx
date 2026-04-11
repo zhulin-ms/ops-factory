@@ -8,9 +8,12 @@ import remarkGfm from 'remark-gfm'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import './FilePreview.css'
-import { inferFileType } from '../../../utils/filePreview'
+import { inferFileType, needsTextContent } from '../../../utils/filePreview'
 import OnlyOfficePreview from './OnlyOfficePreview'
 import { GATEWAY_URL, GATEWAY_SECRET_KEY } from '../../../config/runtime'
+
+const MAX_LOG_LINE_NUMBER_LINES = 12000
+const MAX_LOG_LINE_NUMBER_CHARS = 1200000
 
 // Map file extensions to highlight.js language names
 const HLJS_LANG_MAP: Record<string, string> = {
@@ -111,6 +114,52 @@ function decodeFileName(name: string): string {
     }
 }
 
+function renderLineNumberText(content: string, className: string) {
+    const lines = content.split('\n')
+
+    return (
+        <div className={className}>
+            {lines.map((line, index) => (
+                <div key={`line-${index + 1}`} className="file-preview-lined-row">
+                    <span className="file-preview-line-number">{index + 1}</span>
+                    <span className="file-preview-line-content">{line || '\u00A0'}</span>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+function renderHighlightedLineNumberText(rawContent: string, highlightedContent: string, className: string) {
+    const rawLines = rawContent.split('\n')
+    const highlightedLines = highlightedContent.split('\n')
+
+    return (
+        <div className={`${className} is-highlighted`}>
+            {rawLines.map((_, index) => (
+                <div key={`line-${index + 1}`} className="file-preview-lined-row">
+                    <span className="file-preview-line-number">{index + 1}</span>
+                    <span className="file-preview-line-content">
+                        <code dangerouslySetInnerHTML={{ __html: highlightedLines[index] || '&nbsp;' }} />
+                    </span>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+function shouldUseLineNumbers(content: string, displayType: string, previewKind?: string): boolean {
+    if (previewKind === 'markdown' || displayType === 'txt') {
+        return true
+    }
+
+    if (displayType === 'log') {
+        const lineCount = content.split('\n').length
+        return lineCount <= MAX_LOG_LINE_NUMBER_LINES && content.length <= MAX_LOG_LINE_NUMBER_CHARS
+    }
+
+    return false
+}
+
 export default function FilePreview({ embedded = false }: { embedded?: boolean }) {
     const { t } = useTranslation()
     const { showToast } = useToast()
@@ -180,7 +229,11 @@ export default function FilePreview({ embedded = false }: { embedded?: boolean }
     const canCopyContent = !!previewFile?.content
     const canDownload = !!getDownloadUrl()
     const displayType = previewFile ? inferFileType(previewFile) : ''
-    const showLoadingOverlay = isLoading || (previewKind === 'markdown' && previewFile?.content === '')
+    const canUseLineNumbers = !!previewFile?.content && shouldUseLineNumbers(previewFile.content, displayType, previewKind)
+    const isLineNumberTextPreview = previewKind === 'code' && (displayType === 'txt' || displayType === 'log') && canUseLineNumbers
+    const showLineNumberSource = canUseLineNumbers && (isLineNumberTextPreview || (previewKind === 'markdown' && showSource))
+    const lineNumberClassName = `file-preview-lined-text${displayType === 'log' ? ' is-log-view' : ''}`
+    const showLoadingOverlay = isLoading || (!!previewKind && needsTextContent(previewKind) && previewFile?.content === '')
 
     const content = isOpen && previewFile ? (
                 <>
@@ -366,20 +419,28 @@ export default function FilePreview({ embedded = false }: { embedded?: boolean }
 
                                 {/* Source view for renderable types */}
                                 {canToggleSource && showSource && previewFile.content !== undefined && (
-                                    <pre className="file-preview-code">
-                                        <code
-                                            dangerouslySetInnerHTML={{ __html: highlightedCode || previewFile.content }}
-                                        />
-                                    </pre>
+                                    showLineNumberSource
+                                        ? renderHighlightedLineNumberText(previewFile.content, highlightedCode || previewFile.content, lineNumberClassName)
+                                        : (
+                                            <pre className="file-preview-code">
+                                                <code
+                                                    dangerouslySetInnerHTML={{ __html: highlightedCode || previewFile.content }}
+                                                />
+                                            </pre>
+                                        )
                                 )}
 
                                 {/* Code files: syntax highlighted */}
                                 {previewKind === 'code' && previewFile.content !== undefined && (
-                                    <pre className="file-preview-code">
-                                        <code
-                                            dangerouslySetInnerHTML={{ __html: highlightedCode || previewFile.content }}
-                                        />
-                                    </pre>
+                                    isLineNumberTextPreview
+                                        ? renderLineNumberText(previewFile.content, lineNumberClassName)
+                                        : (
+                                            <pre className="file-preview-code">
+                                                <code
+                                                    dangerouslySetInnerHTML={{ __html: highlightedCode || previewFile.content }}
+                                                />
+                                            </pre>
+                                        )
                                 )}
                             </>
                         )}

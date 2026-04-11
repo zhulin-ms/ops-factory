@@ -120,7 +120,7 @@ extensions:
     bundled: null
     available_tools: []
     x-opsfactory:
-      knowledgeScope: {sourceId: src_ac8da09a7cfd}
+      knowledgeScope: {sourceId: src_285c13458d3a}
   analyze:
     enabled: false
     type: platform

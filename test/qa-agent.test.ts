@@ -301,7 +301,6 @@ describe('qa-agent MCP runtime', () => {
         env: {
           ...process.env,
           KNOWLEDGE_SERVICE_URL: 'http://127.0.0.1:8092',
-          KNOWLEDGE_DEFAULT_SOURCE_ID: 'src_ac8da09a7cfd',
           KNOWLEDGE_REQUEST_TIMEOUT_MS: '15000',
         },
       })

@@ -87,4 +87,7 @@ agents:
   - {id: universal-agent, name: Universal Agent}
   - {id: kb-agent, name: KB Agent}
   - {id: report-agent, name: Report Agent}
+  - {id: qos-agent, name: QoS Agent}
+  - {id: qa-agent, name: QA Agent}
+  - {id: qa-cli-agent, name: QA CLI Agent}
   - {id: supervisor-agent, name: Supervisor Agent}

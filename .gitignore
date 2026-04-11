@@ -74,6 +74,7 @@ gateway/agents/*/data/sessions/
 *.bak.*
 
 # Playwright
+/.playwright-cli/
 test/test-results/
 test/playwright-report/
 
