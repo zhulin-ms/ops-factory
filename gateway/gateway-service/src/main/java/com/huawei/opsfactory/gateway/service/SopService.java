@@ -107,6 +107,7 @@ public class SopService {
         sop.put("mode", body.getOrDefault("mode", "structured"));
         sop.put("stepsDescription", body.getOrDefault("stepsDescription", ""));
         sop.put("tags", body.getOrDefault("tags", List.of()));
+        sop.put("requiredTools", body.getOrDefault("requiredTools", List.of()));
 
         writeSopFile(id, sop);
         log.info("Created SOP: id={}, name={}, mode={}", id, sop.get("name"), mode);
@@ -156,6 +157,9 @@ public class SopService {
         }
         if (body.containsKey("tags")) {
             sop.put("tags", body.get("tags"));
+        }
+        if (body.containsKey("requiredTools")) {
+            sop.put("requiredTools", body.get("requiredTools"));
         }
 
         writeSopFile(id, sop);
@@ -258,6 +262,7 @@ public class SopService {
             sop.putIfAbsent("mode", "structured");
             sop.putIfAbsent("stepsDescription", "");
             sop.putIfAbsent("tags", List.of());
+            sop.putIfAbsent("requiredTools", List.of());
             return sop;
         } catch (IOException e) {
             log.error("Failed to read SOP file: {}", file, e);

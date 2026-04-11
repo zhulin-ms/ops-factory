@@ -26,7 +26,18 @@ haproxy → RCPA → RCPADB / GMDB / KAFKA
 | `get_sop_detail(sopId)` | 获取SOP完整定义（含mermaid流程图） |
 | `get_hosts(tags?)` | 查询主机列表 |
 | `execute_remote_command(hostId, command, timeout?)` | 远程执行命令（输出自动保存为附件） |
+| `execute_remote_command_batch(hostIds, command, timeout?)` | 多台主机并行执行同一命令，返回聚合结果 |
+| `check_command_risk(command)` | 检查命令风险等级（low/medium/high） |
 | browser-use 系列 | 浏览器操作（navigate/click/type/screenshot/extract_content 等） |
+
+### 工具访问控制
+
+匹配到 SOP 后，检查其 `requiredTools` 字段：
+- 若包含 `"sop-executor"` → 可使用所有 sop-executor 工具
+- 若包含 `"browser-use"` → 可使用浏览器自动化工具
+- 若缺失 → 默认推断：含 browser 类型节点则加入 `"browser-use"`，始终包含 `"sop-executor"`
+
+**严格约束**：执行该 SOP 期间只能使用 `requiredTools` 中声明的工具。
 
 ## 触发场景与入口
 
@@ -83,6 +94,14 @@ haproxy → RCPA → RCPADB / GMDB / KAFKA
 - 基于各场景产出的 `{targetIPs, hostTags, alarmContext}`，确认最终的目标主机列表
 - 若目标主机为空，向用户说明并终止
 
+### 1.5 回忆Memory知识
+
+在进入SOP匹配与执行之前，检索 memory 中与目标主机类别相关的运维知识（如日志路径、配置文件位置、常见问题模式等），并在后续步骤中主动运用：
+
+- **命令构造**：用 memory 中的路径信息补充 SOP 命令模板的变量（如日志目录、配置文件路径）
+- **输出分析**：结合 memory 中的运维背景分析远程命令的执行结果
+- **自然语言模式**：利用 memory 知识将步骤描述转化为更精确的诊断命令
+
 ### 2. 匹配SOP（增强版）
 
 调用 `list_sops()` 建立 `tags → sopId` 映射，按以下优先级匹配 **一个最相关的SOP**：
@@ -92,6 +111,43 @@ haproxy → RCPA → RCPADB / GMDB / KAFKA
 - **综合**：两者结合选最佳 SOP
 
 若无法匹配任何 SOP，告知用户并终止。
+
+### 2.5 生成执行计划（预演模式）
+
+匹配到 SOP 后、执行任何远程命令之前，必须生成执行计划并等待用户确认：
+
+1. 调用 `get_sop_detail(sopId)` 获取完整 SOP 定义
+2. 对每个节点的命令调用 `check_command_risk(command)` 确定风险等级
+3. 整理以下信息并输出给用户：
+
+```
+## 执行计划
+**SOP**: {name} ({id})
+**模式**: {structured | natural_language}
+**目标主机**: {IP 列表及主机名}
+**可用工具**: {requiredTools 列表}
+**预计步骤**: {N} 个节点
+
+### 执行序列
+| # | 节点名称 | 类型 | 命令模板 | 风险等级 | 需确认 |
+|---|---------|------|---------|---------|--------|
+| 1 | ...     | ...  | ...     | low/medium/high | 是/否 |
+
+### 分支条件
+{列出每个 transition 的 condition 和目标节点}
+```
+
+4. ⛔ **立即停止，结束本轮对话**。输出确认提示：
+
+```
+⏸️ 请确认是否执行此计划？回复「执行」继续，「取消」终止，或调整目标主机。
+```
+
+**严格约束**：
+- 用户明确回复「执行」前，⛔ 禁止调用 `execute_remote_command` 或 `execute_remote_command_batch`
+- 必须结束本轮对话，等待用户下一轮回复后才可继续执行
+- 用户回复「取消」→ 终止流程
+- 用户调整目标主机 → 更新计划后重新展示并再次等待确认
 
 ### 3. 执行SOP
 
@@ -103,11 +159,24 @@ haproxy → RCPA → RCPADB / GMDB / KAFKA
 
 #### 每个节点的执行
 
+#### 风险分级执行策略
+
+执行节点命令前，调用 `check_command_risk(command)` 确定风险等级：
+
+| 风险等级 | 策略 | 示例命令 |
+|---------|------|---------|
+| **low** | 自动执行，直接报告结果 | ps, cat, grep, ls, df, free, tail, head, find, wc |
+| **medium** | 自动执行，标注提示 | netstat, top, iostat, ping |
+| **high** | **必须暂停**，展示命令和风险说明，等用户确认后才执行 | 白名单外的命令 |
+
+**覆盖规则**：`requireHumanConfirm: true` 的 transition 无论风险等级，一律需用户确认。
+
 **type=start 或 analysis：**
 1. 读取 `command` 模板，替换 `{{变量}}`（优先用上下文推断，其次用 `defaultValue`）
-2. 对每台目标主机调用 `execute_remote_command`
-3. 根据 `analysisInstruction` 和 `outputFormat` 分析输出
-4. 分支判断 → 见下方"分支判断规则"
+2. 若目标主机 > 1 且命令相同 → 调用 `execute_remote_command_batch(hostIds, command)` 并行执行
+3. 若目标主机 = 1 或命令因变量替换不同 → 分别调用 `execute_remote_command`
+4. 根据 `analysisInstruction` 和 `outputFormat` 分析输出
+5. 分支判断 → 见下方"分支判断规则"
 
 **type=browser：**
 1. `browser_navigate` 打开 `browserUrl` → 立即 `browser_screenshot`
@@ -138,7 +207,7 @@ haproxy → RCPA → RCPADB / GMDB / KAFKA
 1. 阅读 stepsDescription 中的步骤描述
 2. 根据 SOP 的 tags 调用 `get_hosts`，仅保留 IP 匹配目标主机列表的主机
 3. 逐步将描述转化为具体的 shell 诊断命令（只读命令，符合白名单）
-4. 对每台目标主机调用 `execute_remote_command` 执行
+4. 若目标主机 > 1 且命令相同 → 调用 `execute_remote_command_batch(hostIds, command)` 并行执行；若目标主机 = 1 或命令不同 → 分别调用 `execute_remote_command`
 5. 分析输出，判断是否异常
 6. 不需要生成 mermaid 流程图
 

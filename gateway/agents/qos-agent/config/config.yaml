@@ -54,7 +54,7 @@ extensions:
     bundled: true
     available_tools: []
   memory:
-    enabled: false
+    enabled: true
     type: builtin
     name: memory
     description: Teach goose your preferences as you go.

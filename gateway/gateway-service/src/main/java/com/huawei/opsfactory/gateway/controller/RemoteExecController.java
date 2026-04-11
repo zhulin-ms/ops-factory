@@ -1,6 +1,7 @@
 package com.huawei.opsfactory.gateway.controller;
 
 import com.huawei.opsfactory.gateway.filter.UserContextFilter;
+import com.huawei.opsfactory.gateway.service.CommandWhitelistService;
 import com.huawei.opsfactory.gateway.service.RemoteExecutionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,9 +22,12 @@ public class RemoteExecController {
     private static final Logger log = LoggerFactory.getLogger(RemoteExecController.class);
 
     private final RemoteExecutionService remoteExecutionService;
+    private final CommandWhitelistService commandWhitelistService;
 
-    public RemoteExecController(RemoteExecutionService remoteExecutionService) {
+    public RemoteExecController(RemoteExecutionService remoteExecutionService,
+                                CommandWhitelistService commandWhitelistService) {
         this.remoteExecutionService = remoteExecutionService;
+        this.commandWhitelistService = commandWhitelistService;
     }
 
     @PostMapping("/execute")
@@ -82,5 +86,26 @@ public class RemoteExecController {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
             }
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @PostMapping("/check-risk")
+    public Mono<ResponseEntity<Map<String, Object>>> checkRisk(
+            @RequestBody Map<String, Object> request,
+            ServerWebExchange exchange) {
+        UserContextFilter.requireAdmin(exchange);
+
+        String command = (String) request.get("command");
+        if (command == null || command.isBlank()) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("success", false);
+            body.put("error", "command is required");
+            return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body));
+        }
+
+        String riskLevel = commandWhitelistService.getRiskLevel(command);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("command", command);
+        body.put("riskLevel", riskLevel);
+        return Mono.just(ResponseEntity.ok(body));
     }
 }

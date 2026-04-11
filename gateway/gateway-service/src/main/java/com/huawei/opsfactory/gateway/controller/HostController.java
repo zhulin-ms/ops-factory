@@ -31,7 +31,7 @@ public class HostController {
 
     @GetMapping
     public Mono<Map<String, Object>> listHosts(
-            @RequestParam(required = false) String tags,
+            @RequestParam(value = "tags", required = false) String tags,
             ServerWebExchange exchange) {
         UserContextFilter.requireAdmin(exchange);
         List<String> tagList = (tags != null && !tags.isBlank())
@@ -48,7 +48,7 @@ public class HostController {
 
     @GetMapping("/{id}")
     public Mono<ResponseEntity<Map<String, Object>>> getHost(
-            @PathVariable String id,
+            @PathVariable("id") String id,
             ServerWebExchange exchange) {
         UserContextFilter.requireAdmin(exchange);
         return Mono.fromCallable(() -> {
@@ -90,7 +90,7 @@ public class HostController {
 
     @PutMapping("/{id}")
     public Mono<ResponseEntity<Map<String, Object>>> updateHost(
-            @PathVariable String id,
+            @PathVariable("id") String id,
             @RequestBody Map<String, Object> request,
             ServerWebExchange exchange) {
         UserContextFilter.requireAdmin(exchange);
@@ -119,7 +119,7 @@ public class HostController {
 
     @DeleteMapping("/{id}")
     public Mono<ResponseEntity<Map<String, Object>>> deleteHost(
-            @PathVariable String id,
+            @PathVariable("id") String id,
             ServerWebExchange exchange) {
         UserContextFilter.requireAdmin(exchange);
         return Mono.fromCallable(() -> {
@@ -149,7 +149,7 @@ public class HostController {
 
     @PostMapping("/{id}/test")
     public Mono<Map<String, Object>> testConnectivity(
-            @PathVariable String id,
+            @PathVariable("id") String id,
             ServerWebExchange exchange) {
         UserContextFilter.requireAdmin(exchange);
         return Mono.fromCallable(() -> {

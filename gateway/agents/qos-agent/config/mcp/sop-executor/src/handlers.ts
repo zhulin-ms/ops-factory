@@ -76,7 +76,7 @@ export const tools = [
         tags: {
           type: 'array',
           items: { type: 'string' },
-          description: '按标签过滤（如["RCPA"]），返回tags中包含任一指定标签的主机',
+          description: '按标签过滤（如["RCPA"]），返回tags中包含任一标签的主机',
         },
       },
     },
@@ -92,6 +92,30 @@ export const tools = [
         timeout: { type: 'number', description: '超时时间(秒)，默认30' },
       },
       required: ['hostId', 'command'],
+    },
+  },
+  {
+    name: 'check_command_risk',
+    description: '检查命令的风险等级。返回 low（自动执行）、medium（自动执行并标注）或 high（需用户确认）。',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        command: { type: 'string', description: '要检查的命令' },
+      },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'execute_remote_command_batch',
+    description: '通过SSH在多台远程主机上并行执行同一诊断命令，返回聚合结果。',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        hostIds: { type: 'array', items: { type: 'string' }, description: '目标主机ID列表' },
+        command: { type: 'string', description: '要执行的命令' },
+        timeout: { type: 'number', description: '超时(秒)，默认30' },
+      },
+      required: ['hostIds', 'command'],
     },
   },
 ]
@@ -114,6 +138,7 @@ interface SopData {
   enabled?: boolean
   stepsDescription?: string
   tags?: string[]
+  requiredTools?: string[]
   [key: string]: unknown
 }
 
@@ -215,6 +240,15 @@ export async function handleGetSopDetail(sopId: string): Promise<ContentItem[]> 
   // API returns { success: true, sop: { nodes: [...] } } — extract inner sop object
   const sop = (data.sop ?? data) as SopData
 
+  // Auto-infer requiredTools if missing
+  if (!sop.requiredTools || sop.requiredTools.length === 0) {
+    const tools = new Set<string>(['sop-executor'])
+    for (const node of sop.nodes ?? []) {
+      if (node.type === 'browser') tools.add('browser-use')
+    }
+    sop.requiredTools = Array.from(tools)
+  }
+
   // Natural language mode — return steps description without mermaid flowchart
   if (sop.mode === 'natural_language') {
     const parts: string[] = []
@@ -222,6 +256,7 @@ export async function handleGetSopDetail(sopId: string): Promise<ContentItem[]> 
     if (sop.tags && sop.tags.length > 0) {
       parts.push(`目标标签: ${sop.tags.join(', ')}`)
     }
+    parts.push(`可用工具范围: ${sop.requiredTools.join(', ')}`)
     parts.push('')
     parts.push('---')
     parts.push('')
@@ -269,6 +304,9 @@ export async function handleGetSopDetail(sopId: string): Promise<ContentItem[]> 
     parts.push('3. 结束本轮对话，等用户回复后再继续')
     parts.push('')
   }
+
+  parts.push(`可用工具范围: ${sop.requiredTools.join(', ')}`)
+  parts.push('')
 
   parts.push(JSON.stringify(sopWithWarnings, null, 2))
   parts.push('')
@@ -341,6 +379,88 @@ export async function handleExecuteRemote(hostId: string, command: string, timeo
   return JSON.stringify(data, null, 2)
 }
 
+export async function handleCheckCommandRisk(command: string): Promise<string> {
+  const data = await gw<Record<string, unknown>>(`${API_PREFIX}/remote/check-risk`, undefined, 'POST', {
+    command,
+  })
+  return JSON.stringify(data, null, 2)
+}
+
+const MAX_CONCURRENCY = 5
+
+export async function handleExecuteRemoteBatch(hostIds: string[], command: string, timeout?: number): Promise<string> {
+  const results: Record<string, unknown>[] = []
+  const errors: Record<string, unknown>[] = []
+  const finalTimeout = timeout ?? 30
+
+  // Process in chunks of MAX_CONCURRENCY
+  for (let i = 0; i < hostIds.length; i += MAX_CONCURRENCY) {
+    const chunk = hostIds.slice(i, i + MAX_CONCURRENCY)
+    const settled = await Promise.allSettled(
+      chunk.map(hostId =>
+        gw<Record<string, unknown>>(`${API_PREFIX}/remote/execute`, undefined, 'POST', {
+          hostId,
+          command,
+          timeout: finalTimeout,
+        }).then(data => {
+          // Save output file for each host
+          try {
+            const hostName = String(data.hostName || hostId)
+            const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
+            const safeName = hostName.replace(/[^a-zA-Z0-9_\u4e00-\u9fff-]/g, '_')
+            const fileName = `sop-exec-${safeName}-${timestamp}.log`
+
+            mkdirSync(OUTPUT_DIR, { recursive: true })
+
+            let content = [
+              `=== SOP 远程执行输出 ===`,
+              `主机: ${hostName} (${hostId})`,
+              `命令: ${command}`,
+              `退出码: ${data.exitCode}`,
+              `耗时: ${data.duration}ms`,
+              `时间: ${new Date().toISOString()}`,
+              ``,
+              `--- 标准输出 ---`,
+              String(data.output || ''),
+              ``,
+              `--- 标准错误 ---`,
+              String(data.error || ''),
+            ].join('\n')
+
+            if (content.length > MAX_OUTPUT_SIZE) {
+              content = content.slice(0, MAX_OUTPUT_SIZE) + '\n\n... [输出超过 1MB，已截断] ...'
+            }
+
+            writeFileSync(join(OUTPUT_DIR, fileName), content, 'utf-8')
+          } catch (writeErr) {
+            console.error('[sop-executor] Failed to write output file:', writeErr)
+          }
+
+          return { hostId, status: 'fulfilled', data }
+        })
+      )
+    )
+
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        results.push(result.value.data)
+      } else {
+        const failedHost = chunk[settled.indexOf(result)]
+        errors.push({ hostId: failedHost, error: String(result.reason) })
+      }
+    }
+  }
+
+  const summary = {
+    totalHosts: hostIds.length,
+    succeeded: results.length,
+    failed: errors.length,
+    results,
+    errors,
+  }
+  return JSON.stringify(summary, null, 2)
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
@@ -358,6 +478,14 @@ export async function dispatch(name: string, args: Record<string, unknown>): Pro
     case 'execute_remote_command':
       return handleExecuteRemote(
         (args as { hostId?: string }).hostId ?? '',
+        (args as { command?: string }).command ?? '',
+        (args as { timeout?: number }).timeout,
+      )
+    case 'check_command_risk':
+      return handleCheckCommandRisk((args as { command?: string }).command ?? '')
+    case 'execute_remote_command_batch':
+      return handleExecuteRemoteBatch(
+        (args as { hostIds?: string[] }).hostIds ?? [],
         (args as { command?: string }).command ?? '',
         (args as { timeout?: number }).timeout,
       )
