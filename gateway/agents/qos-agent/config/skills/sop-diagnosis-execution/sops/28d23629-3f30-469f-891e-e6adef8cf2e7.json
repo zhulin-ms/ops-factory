@@ -1,0 +1,16 @@
+{
+  "id" : "28d23629-3f30-469f-891e-e6adef8cf2e7",
+  "name" : "haproxy下游服务my_test_backends",
+  "description" : "",
+  "version" : "1.0",
+  "triggerCondition" : "haproxy下游服务检查",
+  "nodes" : [ ],
+  "enabled" : false,
+  "mode" : "natural_language",
+  "stepsDescription" : "1.检查8001监听是否存在\n2.检查服务是否能正常响应",
+  "hostTags" : [ ],
+  "level" : "",
+  "category" : "",
+  "tags" : [ "rcpa" ],
+  "requiredTools" : [ ]
+}
