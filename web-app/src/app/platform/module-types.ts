@@ -16,6 +16,7 @@ export type IconKey =
     | 'knowledge'
     | 'scheduler'
     | 'monitoring'
+    | 'hostResource'
 
 export type BadgeSource = 'none' | 'inboxUnread'
 

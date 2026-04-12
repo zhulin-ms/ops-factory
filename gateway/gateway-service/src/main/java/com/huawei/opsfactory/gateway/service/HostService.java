@@ -7,6 +7,7 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -26,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -41,9 +43,30 @@ public class HostService {
     private Path gatewayRoot;
     private Path hostsDir;
     private SecretKeySpec aesKey;
+    private HostRelationService hostRelationService;
+    private HostGroupService hostGroupService;
+    private ClusterService clusterService;
 
     public HostService(GatewayProperties properties) {
         this.properties = properties;
+    }
+
+    @Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setHostRelationService(HostRelationService hostRelationService) {
+        this.hostRelationService = hostRelationService;
+    }
+
+    @Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setHostGroupService(HostGroupService hostGroupService) {
+        this.hostGroupService = hostGroupService;
+    }
+
+    @Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setClusterService(ClusterService clusterService) {
+        this.clusterService = clusterService;
     }
 
     @PostConstruct
@@ -68,6 +91,50 @@ public class HostService {
     }
 
     // ── CRUD Operations ──────────────────────────────────────────────
+
+    /**
+     * Sync cluster type into the host's tags.
+     * Removes any previous cluster-type tag (prefixed with "cluster:") and adds the current one.
+     */
+    @SuppressWarnings("unchecked")
+    private void syncClusterTypeToTags(Map<String, Object> host) {
+        if (clusterService == null) return;
+        Object clusterIdObj = host.get("clusterId");
+        if (clusterIdObj == null || clusterIdObj.toString().isEmpty()) return;
+
+        String clusterId = clusterIdObj.toString();
+        String clusterTypeRaw = null;
+        try {
+            Map<String, Object> cluster = clusterService.getCluster(clusterId);
+            if (cluster != null && cluster.get("type") != null) {
+                clusterTypeRaw = cluster.get("type").toString();
+            }
+        } catch (Exception ignored) {}
+
+        final String clusterType = clusterTypeRaw;
+
+        // Get current tags
+        List<Object> tags = new ArrayList<>();
+        Object tagsObj = host.get("tags");
+        if (tagsObj instanceof List<?>) {
+            tags = new ArrayList<>((List<Object>) tagsObj);
+        }
+
+        // Remove any existing cluster type tags (exact match)
+        if (clusterType != null) {
+            final String ct = clusterType;
+            tags.removeIf(t -> t.toString().equals(ct));
+        }
+
+        // Add current cluster type tag
+        if (clusterType != null && !clusterType.isEmpty()) {
+            if (!tags.stream().anyMatch(t -> t.toString().equals(clusterType))) {
+                tags.add(clusterType);
+            }
+        }
+
+        host.put("tags", tags);
+    }
 
     public List<Map<String, Object>> listHosts(String[] tags) {
         List<Map<String, Object>> hosts = new ArrayList<>();
@@ -151,12 +218,19 @@ public class HostService {
         Map<String, Object> host = new LinkedHashMap<>();
         host.put("id", id);
         host.put("name", body.getOrDefault("name", ""));
+        host.put("hostname", body.getOrDefault("hostname", null));
         host.put("ip", body.getOrDefault("ip", ""));
         host.put("port", body.getOrDefault("port", 22));
+        host.put("os", body.getOrDefault("os", null));
+        host.put("location", body.getOrDefault("location", null));
         host.put("username", body.getOrDefault("username", ""));
         host.put("authType", body.getOrDefault("authType", "password"));
+        host.put("business", body.getOrDefault("business", null));
+        host.put("clusterId", body.getOrDefault("clusterId", null));
+        host.put("purpose", body.getOrDefault("purpose", null));
         host.put("tags", body.getOrDefault("tags", List.of()));
         host.put("description", body.getOrDefault("description", ""));
+        host.put("customAttributes", body.getOrDefault("customAttributes", List.of()));
         host.put("createdAt", now);
         host.put("updatedAt", now);
 
@@ -170,6 +244,7 @@ public class HostService {
             throw new RuntimeException("Failed to encrypt credential", e);
         }
 
+        syncClusterTypeToTags(host);
         writeHostFile(id, host);
         log.info("Created host: id={}, name={}", id, host.get("name"));
 
@@ -190,11 +265,20 @@ public class HostService {
         if (body.containsKey("name")) {
             host.put("name", body.get("name"));
         }
+        if (body.containsKey("hostname")) {
+            host.put("hostname", body.get("hostname"));
+        }
         if (body.containsKey("ip")) {
             host.put("ip", body.get("ip"));
         }
         if (body.containsKey("port")) {
             host.put("port", body.get("port"));
+        }
+        if (body.containsKey("os")) {
+            host.put("os", body.get("os"));
+        }
+        if (body.containsKey("location")) {
+            host.put("location", body.get("location"));
         }
         if (body.containsKey("username")) {
             host.put("username", body.get("username"));
@@ -202,11 +286,23 @@ public class HostService {
         if (body.containsKey("authType")) {
             host.put("authType", body.get("authType"));
         }
+        if (body.containsKey("business")) {
+            host.put("business", body.get("business"));
+        }
+        if (body.containsKey("clusterId")) {
+            host.put("clusterId", body.get("clusterId"));
+        }
+        if (body.containsKey("purpose")) {
+            host.put("purpose", body.get("purpose"));
+        }
         if (body.containsKey("tags")) {
             host.put("tags", body.get("tags"));
         }
         if (body.containsKey("description")) {
             host.put("description", body.get("description"));
+        }
+        if (body.containsKey("customAttributes")) {
+            host.put("customAttributes", body.get("customAttributes"));
         }
         if (body.containsKey("credential")) {
             Object credentialObj = body.get("credential");
@@ -223,6 +319,7 @@ public class HostService {
         }
 
         host.put("updatedAt", Instant.now().toString());
+        syncClusterTypeToTags(host);
         writeHostFile(id, host);
         log.info("Updated host: id={}", id);
 
@@ -233,6 +330,11 @@ public class HostService {
     }
 
     public boolean deleteHost(String id) {
+        // Cascade delete relations first
+        if (hostRelationService != null) {
+            hostRelationService.deleteRelationsByHost(id);
+        }
+
         Path file = hostsDir.resolve(id + ".json");
         try {
             if (Files.exists(file)) {
@@ -244,6 +346,68 @@ public class HostService {
         } catch (IOException e) {
             log.error("Failed to delete host file: {}", file, e);
             return false;
+        }
+    }
+
+    /**
+     * List hosts filtered by clusterId.
+     */
+    public List<Map<String, Object>> listHostsByCluster(String clusterId) {
+        List<Map<String, Object>> hosts = new ArrayList<>();
+        if (!Files.isDirectory(hostsDir)) {
+            return hosts;
+        }
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(hostsDir, "*.json")) {
+            for (Path file : stream) {
+                if (!Files.isRegularFile(file)) {
+                    continue;
+                }
+                try {
+                    Map<String, Object> host = readHostFile(file);
+                    if (host != null) {
+                        Object hostClusterId = host.get("clusterId");
+                        if (clusterId.equals(hostClusterId)) {
+                            host.put("credential", "***");
+                            hosts.add(host);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to read host file: {}", file, e);
+                }
+            }
+        } catch (IOException e) {
+            log.error("Failed to list hosts from {}", hostsDir, e);
+        }
+        return hosts;
+    }
+
+    /**
+     * List hosts filtered by groupId (via cluster lookup).
+     * Recursively resolves sub-groups so a top-level group finds all descendant hosts.
+     */
+    public List<Map<String, Object>> listHostsByGroup(String groupId, ClusterService clusterService) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        collectHostsByGroup(groupId, clusterService, new LinkedHashSet<>(), result);
+        return result;
+    }
+
+    private void collectHostsByGroup(String groupId, ClusterService clusterService,
+                                     Set<String> visited, List<Map<String, Object>> result) {
+        if (!visited.add(groupId)) return; // avoid cycles
+        // Direct clusters under this group
+        List<Map<String, Object>> clusters = clusterService.listClusters(groupId, null);
+        for (Map<String, Object> cluster : clusters) {
+            String clusterId = (String) cluster.get("id");
+            result.addAll(listHostsByCluster(clusterId));
+        }
+        // Recurse into sub-groups
+        if (hostGroupService != null) {
+            for (Map<String, Object> sub : hostGroupService.listGroups()) {
+                Object parentId = sub.get("parentId");
+                if (parentId != null && groupId.equals(parentId.toString())) {
+                    collectHostsByGroup((String) sub.get("id"), clusterService, visited, result);
+                }
+            }
         }
     }
 

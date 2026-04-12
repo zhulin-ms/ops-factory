@@ -143,6 +143,19 @@ function MonitoringIcon() {
     )
 }
 
+function HostResourceIcon() {
+    return (
+        <IconFrame strokeWidth={1.85}>
+            <rect x="4.1" y="4.7" width="15.8" height="5.6" rx="1.2" />
+            <rect x="4.1" y="13.1" width="15.8" height="5.6" rx="1.2" />
+            <path d="M7.2 7.5h.01" />
+            <path d="M7.2 15.9h.01" />
+            <path d="M9.8 7.5h7" />
+            <path d="M9.8 15.9h7" />
+        </IconFrame>
+    )
+}
+
 const ICONS: Record<IconKey, () => ReactNode> = {
     home: HomeIcon,
     plus: PlusIcon,
@@ -155,6 +168,7 @@ const ICONS: Record<IconKey, () => ReactNode> = {
     knowledge: KnowledgeIcon,
     scheduler: SchedulerIcon,
     monitoring: MonitoringIcon,
+    hostResource: HostResourceIcon,
 }
 
 export function renderIcon(icon: IconKey): ReactNode {
