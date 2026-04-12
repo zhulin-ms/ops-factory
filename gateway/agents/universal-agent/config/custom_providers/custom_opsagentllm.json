@@ -1,0 +1,16 @@
+{
+  "name": "custom_opsagentllm",
+  "engine": "openai",
+  "display_name": "OpsAgentLLM",
+  "description": "Custom OpsAgentLLM provider",
+  "api_key_env": "CUSTOM_OPSAGENTLLM_API_KEY",
+  "base_url": "https://api.moonshot.cn/v1",
+  "models": [
+    {
+      "name": "kimi-k2-turbo-preview",
+      "context_limit": 128000
+    }
+  ],
+  "supports_streaming": true,
+  "requires_auth": true
+}

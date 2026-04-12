@@ -14,6 +14,7 @@ const validIcons = new Set<IconKey>([
     'knowledge',
     'scheduler',
     'monitoring',
+    'hostResource',
 ])
 
 function assert(condition: unknown, message: string): asserts condition {

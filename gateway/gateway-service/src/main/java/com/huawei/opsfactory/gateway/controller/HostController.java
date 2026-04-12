@@ -1,5 +1,7 @@
 package com.huawei.opsfactory.gateway.controller;
 
+import com.huawei.opsfactory.gateway.service.ClusterService;
+import com.huawei.opsfactory.gateway.service.HostDiscoveryService;
 import com.huawei.opsfactory.gateway.service.HostService;
 import com.huawei.opsfactory.gateway.filter.UserContextFilter;
 import org.slf4j.Logger;
@@ -24,22 +26,35 @@ public class HostController {
     private static final Logger log = LoggerFactory.getLogger(HostController.class);
 
     private final HostService hostService;
+    private final ClusterService clusterService;
+    private final HostDiscoveryService hostDiscoveryService;
 
-    public HostController(HostService hostService) {
+    public HostController(HostService hostService, ClusterService clusterService, HostDiscoveryService hostDiscoveryService) {
         this.hostService = hostService;
+        this.clusterService = clusterService;
+        this.hostDiscoveryService = hostDiscoveryService;
     }
 
     @GetMapping
     public Mono<Map<String, Object>> listHosts(
             @RequestParam(value = "tags", required = false) String tags,
+            @RequestParam(value = "clusterId", required = false) String clusterId,
+            @RequestParam(value = "groupId", required = false) String groupId,
             ServerWebExchange exchange) {
         UserContextFilter.requireAdmin(exchange);
-        List<String> tagList = (tags != null && !tags.isBlank())
-                ? Arrays.asList(tags.split(","))
-                : Collections.emptyList();
 
         return Mono.fromCallable(() -> {
-            List<Map<String, Object>> hosts = hostService.listHosts(tagList.toArray(new String[0]));
+            List<Map<String, Object>> hosts;
+            if (clusterId != null && !clusterId.isEmpty()) {
+                hosts = hostService.listHostsByCluster(clusterId);
+            } else if (groupId != null && !groupId.isEmpty()) {
+                hosts = hostService.listHostsByGroup(groupId, clusterService);
+            } else {
+                List<String> tagList = (tags != null && !tags.isBlank())
+                        ? Arrays.asList(tags.split(","))
+                        : Collections.emptyList();
+                hosts = hostService.listHosts(tagList.toArray(new String[0]));
+            }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("hosts", hosts);
             return result;
@@ -144,6 +159,55 @@ public class HostController {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("tags", tags);
             return result;
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @PostMapping("/{id}/discover-plan")
+    public Mono<ResponseEntity<Map<String, Object>>> discoverPlan(
+            @PathVariable("id") String id,
+            ServerWebExchange exchange) {
+        UserContextFilter.requireAdmin(exchange);
+        return Mono.fromCallable(() -> {
+            try {
+                Map<String, Object> planResult = hostDiscoveryService.plan(id);
+                return ResponseEntity.ok(planResult);
+            } catch (Exception e) {
+                log.error("Discovery plan failed for host {}", id, e);
+                Map<String, Object> errorResult = new LinkedHashMap<>();
+                errorResult.put("success", false);
+                errorResult.put("hostId", id);
+                errorResult.put("error", e.getMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResult);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @PostMapping("/{id}/discover-execute")
+    public Mono<ResponseEntity<Map<String, Object>>> discoverExecute(
+            @PathVariable("id") String id,
+            @RequestBody Map<String, Object> body,
+            ServerWebExchange exchange) {
+        UserContextFilter.requireAdmin(exchange);
+        return Mono.fromCallable(() -> {
+            try {
+                @SuppressWarnings("unchecked")
+                List<Map<String, String>> commands = (List<Map<String, String>>) body.get("commands");
+                if (commands == null || commands.isEmpty()) {
+                    Map<String, Object> errorResult = new LinkedHashMap<>();
+                    errorResult.put("success", false);
+                    errorResult.put("error", "No commands provided");
+                    return ResponseEntity.badRequest().body(errorResult);
+                }
+                Map<String, Object> execResult = hostDiscoveryService.execute(id, commands);
+                return ResponseEntity.ok(execResult);
+            } catch (Exception e) {
+                log.error("Discovery execute failed for host {}", id, e);
+                Map<String, Object> errorResult = new LinkedHashMap<>();
+                errorResult.put("success", false);
+                errorResult.put("hostId", id);
+                errorResult.put("error", e.getMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResult);
+            }
         }).subscribeOn(Schedulers.boundedElastic());
     }
 

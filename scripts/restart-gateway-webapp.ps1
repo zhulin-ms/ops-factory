@@ -649,19 +649,19 @@ switch ($Component.ToLower()) {
     "all" {
         if (-not $NoBuild) { Build-Gateway }
         if (-not $NoBuild) { Build-SopExecutor }
-        if (-not $NoBuild) { Build-KnowledgeService }
-        if (-not $NoBuild) { Build-BIService }
-        if (-not $NoBuild) { Build-ControlCenter }
+        #if (-not $NoBuild) { Build-KnowledgeService }
+        #if (-not $NoBuild) { Build-BIService }
+        #if (-not $NoBuild) { Build-ControlCenter }
         if (-not $NoBuild) { Build-Webapp }
         Stop-Webapp
-        Stop-ControlCenter
-        Stop-BIService
-        Stop-KnowledgeService
+        #Stop-ControlCenter
+        #Stop-BIService
+        #Stop-KnowledgeService
         Stop-Gateway
         Start-GatewayService -JavaCmd $JAVA_CMD
-        Start-KnowledgeService -JavaCmd $JAVA_CMD
-        Start-BIService -JavaCmd $JAVA_CMD
-        Start-ControlCenter -JavaCmd $JAVA_CMD
+        #Start-KnowledgeService -JavaCmd $JAVA_CMD
+        #Start-BIService -JavaCmd $JAVA_CMD
+        #Start-ControlCenter -JavaCmd $JAVA_CMD
         Start-WebappService
     }
     default {

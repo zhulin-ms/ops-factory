@@ -421,6 +421,8 @@ export function HostsTab() {
         useHosts()
     const { showToast } = useToast()
 
+    const PAGE_SIZE = 10
+    const [currentPage, setCurrentPage] = useState(1)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [selectedTags, setSelectedTags] = useState<string[]>([])
     const [editingHost, setEditingHost] = useState<Host | null>(null)
@@ -669,8 +671,13 @@ export function HostsTab() {
                         </div>
                     </div>
                 ) : (
+                    (() => {
+                        const totalPages = Math.max(1, Math.ceil(filteredHosts.length / PAGE_SIZE))
+                        const safePage = Math.min(currentPage, totalPages)
+                        const paginatedHosts = filteredHosts.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+                        return <>
                     <div className="sop-workflow-host-grid">
-                        {filteredHosts.map(host => (
+                        {paginatedHosts.map(host => (
                             <div
                                 key={host.id}
                                 className="knowledge-section-card sop-workflow-host-card"
@@ -775,6 +782,32 @@ export function HostsTab() {
                             </div>
                         ))}
                     </div>
+                    {totalPages > 1 && (
+                        <div className="sop-workflow-pagination">
+                            <span className="sop-workflow-pagination-info">
+                                {t('common.showing', {
+                                    start: (safePage - 1) * PAGE_SIZE + 1,
+                                    end: Math.min(safePage * PAGE_SIZE, filteredHosts.length),
+                                    total: filteredHosts.length,
+                                })}
+                            </span>
+                            <div className="sop-workflow-pagination-controls">
+                                <button className="sop-workflow-pagination-btn"
+                                    disabled={safePage <= 1}
+                                    onClick={() => setCurrentPage(safePage - 1)}>
+                                    {t('common.previousPage')}
+                                </button>
+                                <span className="sop-workflow-pagination-page">{safePage} / {totalPages}</span>
+                                <button className="sop-workflow-pagination-btn"
+                                    disabled={safePage >= totalPages}
+                                    onClick={() => setCurrentPage(safePage + 1)}>
+                                    {t('common.nextPage')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </>
+                    })()
                 )}
             </section>
 

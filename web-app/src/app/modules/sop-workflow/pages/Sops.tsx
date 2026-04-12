@@ -925,6 +925,8 @@ export function SopsTab() {
     const { showToast } = useToast()
     const { userId } = useUser()
 
+    const PAGE_SIZE = 10
+    const [currentPage, setCurrentPage] = useState(1)
     const [editingSop, setEditingSop] = useState<Sop | null>(null)
     const [showAddModal, setShowAddModal] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1103,6 +1105,11 @@ export function SopsTab() {
                         </div>
                     </div>
                 ) : (
+                    (() => {
+                        const totalPages = Math.max(1, Math.ceil(sops.length / PAGE_SIZE))
+                        const safePage = Math.min(currentPage, totalPages)
+                        const paginatedSops = sops.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+                        return <>
                     <div className="sop-workflow-list-shell">
                         <div className="sop-workflow-table-wrap">
                             <table className="sop-workflow-table">
@@ -1121,7 +1128,7 @@ export function SopsTab() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {sops.map(sop => (
+                                    {paginatedSops.map(sop => (
                                         <SopExpandableRow
                                             key={sop.id}
                                             sop={sop}
@@ -1137,6 +1144,32 @@ export function SopsTab() {
                             </table>
                         </div>
                     </div>
+                    {totalPages > 1 && (
+                        <div className="sop-workflow-pagination">
+                            <span className="sop-workflow-pagination-info">
+                                {t('common.showing', {
+                                    start: (safePage - 1) * PAGE_SIZE + 1,
+                                    end: Math.min(safePage * PAGE_SIZE, sops.length),
+                                    total: sops.length,
+                                })}
+                            </span>
+                            <div className="sop-workflow-pagination-controls">
+                                <button className="sop-workflow-pagination-btn"
+                                    disabled={safePage <= 1}
+                                    onClick={() => setCurrentPage(safePage - 1)}>
+                                    {t('common.previousPage')}
+                                </button>
+                                <span className="sop-workflow-pagination-page">{safePage} / {totalPages}</span>
+                                <button className="sop-workflow-pagination-btn"
+                                    disabled={safePage >= totalPages}
+                                    onClick={() => setCurrentPage(safePage + 1)}>
+                                    {t('common.nextPage')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </>
+                    })()
                 )}
             </section>
 

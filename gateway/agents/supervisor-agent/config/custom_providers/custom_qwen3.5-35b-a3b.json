@@ -1,0 +1,24 @@
+{
+  "name": "custom_op-qwen3.5-35b-a3b",
+  "engine": "openai",
+  "display_name": "qwen/Qwen3.5-35B-A3B",
+  "description": "Custom OP-Qwen3.5-35B-A3B provider",
+  "api_key_env": "CUSTOM_OP-QWEN3.5-35B-A3B_API_KEY",
+  "base_url": "https://openrouter.ai/api/v1/chat/completions",
+  "models": [
+    {
+      "name": "qwen/Qwen3.5-35B-A3B",
+      "context_limit": 128000,
+      "input_token_cost": null,
+      "output_token_cost": null,
+      "currency": null,
+      "supports_cache_control": null
+    }
+  ],
+  "headers": null,
+  "timeout_seconds": null,
+  "supports_streaming": true,
+  "requires_auth": true,
+  "catalog_provider_id": null,
+  "base_path": null
+}
