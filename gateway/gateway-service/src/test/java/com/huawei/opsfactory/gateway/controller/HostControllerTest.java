@@ -3,7 +3,9 @@ package com.huawei.opsfactory.gateway.controller;
 import com.huawei.opsfactory.gateway.config.GatewayProperties;
 import com.huawei.opsfactory.gateway.filter.AuthWebFilter;
 import com.huawei.opsfactory.gateway.filter.UserContextFilter;
+import com.huawei.opsfactory.gateway.service.ClusterService;
 import com.huawei.opsfactory.gateway.service.HostService;
+import com.huawei.opsfactory.gateway.service.HostDiscoveryService;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +37,12 @@ public class HostControllerTest {
 
     @MockBean
     private com.huawei.opsfactory.gateway.process.PrewarmService prewarmService;
+
+    @MockBean
+    private ClusterService clusterService;
+
+    @MockBean
+    private HostDiscoveryService hostDiscoveryService;
 
     // ── listHosts ────────────────────────────────────────────────
 

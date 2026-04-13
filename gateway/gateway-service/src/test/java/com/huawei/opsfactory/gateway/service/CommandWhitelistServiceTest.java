@@ -70,7 +70,7 @@ public class CommandWhitelistServiceTest {
     @Test
     public void testAddCommand_success() {
         Map<String, Object> cmd = new LinkedHashMap<>();
-        cmd.put("pattern", "iostat");
+        cmd.put("pattern", "iostat2");
         cmd.put("description", "查看IO统计");
         cmd.put("enabled", true);
 
@@ -79,7 +79,7 @@ public class CommandWhitelistServiceTest {
         Map<String, Object> whitelist = whitelistService.getWhitelist();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> commands = (List<Map<String, Object>>) whitelist.get("commands");
-        boolean found = commands.stream().anyMatch(c -> "iostat".equals(c.get("pattern")));
+        boolean found = commands.stream().anyMatch(c -> "iostat2".equals(c.get("pattern")));
         assertTrue(found);
     }
 
