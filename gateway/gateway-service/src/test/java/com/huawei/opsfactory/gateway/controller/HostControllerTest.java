@@ -36,12 +36,6 @@ public class HostControllerTest {
     private HostService hostService;
 
     @MockBean
-    private com.huawei.opsfactory.gateway.service.ClusterService clusterService;
-
-    @MockBean
-    private com.huawei.opsfactory.gateway.service.HostDiscoveryService hostDiscoveryService;
-
-    @MockBean
     private com.huawei.opsfactory.gateway.service.BusinessServiceService businessServiceService;
 
     @MockBean
