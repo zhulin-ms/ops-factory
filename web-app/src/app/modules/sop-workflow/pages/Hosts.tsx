@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useHosts } from '../hooks/useHosts'
 import { useToast } from '../../../platform/providers/ToastContext'
+import { isValidIp } from '../../../../utils/ip-validation'
 import type { Host, HostCreateRequest } from '../../../../types/host'
 
 function TrashIcon() {
@@ -250,9 +251,7 @@ function HostFormModal({
             setError(t('remoteDiagnosis.hosts.ipRequired'))
             return
         }
-        // IPv4 regex: each octet 0-255
-        const ipv4Re = /^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/
-        if (!ipv4Re.test(ip.trim())) {
+        if (!isValidIp(ip)) {
             setError(t('remoteDiagnosis.hosts.ipInvalid'))
             return
         }
@@ -326,7 +325,7 @@ function HostFormModal({
                                 type="text"
                                 value={ip}
                                 onChange={e => setIp(e.target.value)}
-                                placeholder="192.168.1.100"
+                                placeholder="192.168.1.100 / 2409:808c:8a:109::20"
                             />
                         </div>
                         <div className="form-group" style={{ flex: 1 }}>

@@ -655,7 +655,7 @@ test.describe('咪咕视频彩铃西南大区生产环境 — Sample Data', () =
         await page.goto('/', { timeout: 30000, waitUntil: 'domcontentloaded' })
         await page.evaluate(() => localStorage.setItem('ops-factory-user', 'admin'))
         await page.goto('/#/host-resource', { timeout: 30000, waitUntil: 'domcontentloaded' })
-        await page.waitForSelector('.resource-page', { timeout: 30000 })
+        await page.waitForSelector('.host-resource-page', { timeout: 30000 })
         await page.waitForTimeout(2000)
         await ss(page, '01-page-loaded')
 

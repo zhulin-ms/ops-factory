@@ -337,7 +337,7 @@ public class BusinessServiceService {
             Map<String, Object> bsEdge = new LinkedHashMap<>();
             bsEdge.put("source", bs.get("id"));
             bsEdge.put("target", entryHostId);
-            bsEdge.put("description", "entry host");
+            bsEdge.put("description", "发起调用");
             bsEdge.put("type", "business-entry");
             edges.add(0, bsEdge);
         }

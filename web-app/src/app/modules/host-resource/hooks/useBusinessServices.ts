@@ -15,7 +15,13 @@ export function useBusinessServices() {
         try {
             const res = await fetch(apiBase(), { headers: gatewayHeaders(userId) })
             const data = await res.json()
-            setBusinessServices(data.businessServices || [])
+            setBusinessServices(
+                (data.businessServices || []).map((bs: any) => ({
+                    ...bs,
+                    hostIds: bs.hostIds ?? [],
+                    tags: bs.tags ?? [],
+                }))
+            )
         } catch (err) {
             console.error('Failed to fetch business services', err)
         } finally {

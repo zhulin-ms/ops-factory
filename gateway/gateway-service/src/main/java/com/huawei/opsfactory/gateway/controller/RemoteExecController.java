@@ -71,7 +71,8 @@ public class RemoteExecController {
                 }
 
                 Map<String, Object> body = new LinkedHashMap<>();
-                body.put("hostId", result.get("hostId"));
+                body.put("hostIp", result.get("hostIp"));
+                body.put("username", result.get("username"));
                 body.put("hostName", result.get("hostName"));
                 body.put("exitCode", result.get("exitCode"));
                 body.put("output", result.get("output"));

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { HostGroup, Cluster, Host, HostRelation, CustomAttribute, HostCreateRequest, DiscoveryCommand, DiscoveryPlan, HostDiscoveryResult, BusinessService, ClusterType, BusinessType } from '../../../../types/host'
+import { isValidIp } from '../../../../utils/ip-validation'
 import CustomAttributeEditor from './CustomAttributeEditor'
 
 type ResourceType = 'group' | 'cluster' | 'business-service' | 'host' | 'relation'
@@ -69,11 +70,11 @@ export default function ResourceFormModal({
     const [bsName, setBsName] = useState(editingItem?.type === 'business-service' ? editingItem.data.name : '')
     const [bsCode, setBsCode] = useState(editingItem?.type === 'business-service' ? editingItem.data.code : '')
     const [bsGroupId, setBsGroupId] = useState(editingItem?.type === 'business-service' ? (editingItem.data.groupId ?? '') : (defaultGroupId ?? ''))
-    const [bsClusterIds, setBsClusterIds] = useState<string[]>(editingItem?.type === 'business-service' ? editingItem.data.hostIds : [])
+    const [bsClusterIds, setBsClusterIds] = useState<string[]>(editingItem?.type === 'business-service' ? (editingItem.data.hostIds ?? []) : [])
     const [bsSelectedBusinessTypeId, setBsSelectedBusinessTypeId] = useState<string>(
         editingItem?.type === 'business-service' ? (editingItem.data.businessTypeId ?? '') : ''
     )
-    const [bsTags, setBsTags] = useState(editingItem?.type === 'business-service' ? editingItem.data.tags.join(', ') : '')
+    const [bsTags, setBsTags] = useState(editingItem?.type === 'business-service' ? (editingItem.data.tags ?? []).join(', ') : '')
     const [bsPriority, setBsPriority] = useState(editingItem?.type === 'business-service' ? editingItem.data.priority : '')
     const [bsDescription, setBsDescription] = useState(editingItem?.type === 'business-service' ? editingItem.data.description : '')
 
@@ -325,6 +326,7 @@ export default function ResourceFormModal({
                 })
             } else if (selectedType === 'host') {
                 if (!hostName.trim() || !hostIp.trim()) { setError(t('hostResource.nameAndIpRequired')); setSaving(false); return }
+                if (!isValidIp(hostIp)) { setError(t('hostResource.ipInvalid')); setSaving(false); return }
                 const payload: Record<string, unknown> = {
                     name: hostName.trim(), hostname: hostname.trim() || null, ip: hostIp.trim(), port: hostPort,
                     os: hostOs.trim() || null, location: hostLocation.trim() || null, username: hostUsername.trim(),
@@ -348,7 +350,8 @@ export default function ResourceFormModal({
         clusterGroupId, clusterDescription, hostName, hostname, hostIp, hostPort, hostOs, hostLocation,
         hostUsername, hostAuthType, hostCredential, hostClusterId, hostPurpose, hostBusiness,
         hostDescription, hostCustomAttributes, sourceHostId, targetHostId, relationDescription,
-        onSaveGroup, onSaveCluster, onSaveHost, onSaveRelation, onClose, t, editingItem])
+        bsName, bsCode, bsGroupId, bsSelectedBusinessTypeId, bsClusterIds, bsTags, bsPriority, bsDescription,
+        onSaveGroup, onSaveCluster, onSaveBusinessService, onSaveHost, onSaveRelation, onClose, t, editingItem])
 
     const canSave = () => {
         if (selectedType === 'group') return groupName.trim().length > 0
@@ -641,7 +644,7 @@ export default function ResourceFormModal({
                                     <div className="hr-form-row">
                                         <div className="form-group">
                                             <label className="form-label">{t('hostResource.ip')}</label>
-                                            <input className="form-input" value={hostIp} onChange={e => setHostIp(e.target.value)} />
+                                            <input className="form-input" value={hostIp} onChange={e => setHostIp(e.target.value)} placeholder="192.168.1.100 / 2409:808c:8a:109::20" />
                                         </div>
                                         <div className="form-group" style={{ maxWidth: 120 }}>
                                             <label className="form-label">{t('hostResource.port')}</label>

@@ -151,8 +151,8 @@ public class CommandWhitelistService {
             }
         }
 
-        // Split command by | and ;
-        String[] subcommands = command.split("[|;]");
+        // Split command by | and ; (shell-aware: respects quoting)
+        List<String> subcommands = splitShellPipe(command);
         for (String sub : subcommands) {
             String trimmed = sub.trim();
             if (trimmed.isEmpty()) {
@@ -189,7 +189,7 @@ public class CommandWhitelistService {
             Object r = cmd.get("riskLevel");
             if (p != null) riskMap.put(p.toString(), r != null ? r.toString() : "high");
         }
-        for (String sub : command.split("[|;]")) {
+        for (String sub : splitShellPipe(command)) {
             String trimmed = sub.trim();
             if (trimmed.isEmpty()) continue;
             String[] parts = trimmed.split("\\s+", 2);
@@ -200,6 +200,35 @@ public class CommandWhitelistService {
             if ("medium".equals(risk) && "low".equals(highestRisk)) highestRisk = "medium";
         }
         return highestRisk;
+    }
+
+    // ── Shell-Aware Pipe/Semicolon Splitter ─────────────────────────
+
+    /**
+     * Split a command string on unquoted {@code |} and {@code;} delimiters,
+     * respecting single quotes, double quotes, and backslash escaping.
+     */
+    private List<String> splitShellPipe(String command) {
+        List<String> parts = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inSingle = false, inDouble = false;
+        for (int i = 0; i < command.length(); i++) {
+            char c = command.charAt(i);
+            if (c == '\\' && !inSingle && i + 1 < command.length()) {
+                current.append(c).append(command.charAt(++i));
+                continue;
+            }
+            if (c == '\'' && !inDouble) { inSingle = !inSingle; current.append(c); continue; }
+            if (c == '"'  && !inSingle) { inDouble = !inDouble; current.append(c); continue; }
+            if ((c == '|' || c == ';') && !inSingle && !inDouble) {
+                parts.add(current.toString());
+                current.setLength(0);
+                continue;
+            }
+            current.append(c);
+        }
+        if (current.length() > 0) parts.add(current.toString());
+        return parts;
     }
 
     // ── Default Initialization ───────────────────────────────────────

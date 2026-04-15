@@ -119,15 +119,15 @@ extensions:
     args:
     - config/mcp/sop-executor/dist/index.js
     envs:
-      GATEWAY_SECRET_KEY: test
       GATEWAY_URL: http://127.0.0.1:3000
       OUTPUT_DIR: ./output
+      GATEWAY_SECRET_KEY: test
     env_keys: []
     timeout: 300
     bundled: null
     available_tools: []
   browser-use:
-    enabled: true
+    enabled: false
     type: stdio
     name: browser-use
     description: Browser automation via browser-use official MCP - navigate, click, type, extract, screenshot, tabs and more

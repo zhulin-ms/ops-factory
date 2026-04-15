@@ -458,9 +458,20 @@ export default function HostResourcePage() {
         <div className="page-container page-shell-fluid host-resource-page">
             <PageHeader
                 title={t('hostResource.title')}
+                action={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2, 8px)' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={handleExport} disabled={importing || allHosts.length === 0}>
+                            {t('hostResource.export')}
+                        </button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+                            {importing ? t('hostResource.importing', { current: 0, total: 0 }) : t('hostResource.import')}
+                        </button>
+                        <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+                    </div>
+                }
             />
 
-            {/* Tab bar with shared actions */}
+            {/* Tab bar with create action */}
             <div className="hr-tabs">
                 <div className="hr-tabs-left">
                     {tabs.map(tab => (
@@ -479,13 +490,6 @@ export default function HostResourcePage() {
                             + {t('hostResource.createResource')}
                         </button>
                     )}
-                    <button className="btn btn-secondary btn-sm" onClick={handleExport} disabled={importing || allHosts.length === 0}>
-                        {t('hostResource.export')}
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
-                        {importing ? t('hostResource.importing', { current: 0, total: 0 }) : t('hostResource.import')}
-                    </button>
-                    <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
                 </div>
             </div>
 

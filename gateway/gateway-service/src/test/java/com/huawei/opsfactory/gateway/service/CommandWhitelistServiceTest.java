@@ -233,4 +233,44 @@ public class CommandWhitelistServiceTest {
         assertTrue(rejected.contains("reboot"));
         assertTrue(rejected.contains("shutdown"));
     }
+
+    // ── validateCommand – pipes inside quotes (bug fix) ──────────
+
+    @Test
+    public void testValidateCommand_pipeInsideSingleQuotes() {
+        List<String> rejected = whitelistService.validateCommand(
+                "tail -100 /var/log/syslog | grep -E 'ERROR|WARN|Exception|Timeout' | tail -30");
+        assertTrue(rejected.isEmpty());
+    }
+
+    @Test
+    public void testValidateCommand_pipeInsideDoubleQuotes() {
+        List<String> rejected = whitelistService.validateCommand(
+                "grep \"ERROR|WARN\" /var/log/syslog | tail -20");
+        assertTrue(rejected.isEmpty());
+    }
+
+    @Test
+    public void testValidateCommand_escapedPipe() {
+        List<String> rejected = whitelistService.validateCommand(
+                "grep 'a\\|b' /var/log/syslog | tail -20");
+        assertTrue(rejected.isEmpty());
+    }
+
+    @Test
+    public void testValidateCommand_mixedQuotesAndPipes() {
+        List<String> rejected = whitelistService.validateCommand(
+                "grep -E 'ERROR|WARN' /var/log/syslog | rm -rf /");
+        assertEquals(1, rejected.size());
+        assertEquals("rm", rejected.get(0));
+    }
+
+    // ── getRiskLevel – pipes inside quotes ────────────────────────
+
+    @Test
+    public void testGetRiskLevel_pipeInsideQuotes() {
+        String risk = whitelistService.getRiskLevel(
+                "tail -100 /var/log/syslog | grep -E 'ERROR|WARN' | tail -30");
+        assertEquals("low", risk);
+    }
 }

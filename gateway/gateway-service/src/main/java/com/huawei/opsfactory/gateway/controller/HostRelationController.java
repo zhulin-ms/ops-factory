@@ -185,7 +185,7 @@ public class HostRelationController {
                     Map<String, Object> edge = new LinkedHashMap<>();
                     edge.put("source", bsId);
                     edge.put("target", hostId);
-                    edge.put("description", "entry host");
+                    edge.put("description", "发起调用");
                     edge.put("type", "business-entry");
                     edges.add(edge);
                 }
