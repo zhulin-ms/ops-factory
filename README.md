@@ -2,35 +2,63 @@
 
 A multi-tenant AI agent management platform built on [Goose](https://github.com/block/goose). Ops Factory provides a unified web interface for managing multiple AI agents that collaborate on operations tasks such as incident analysis, knowledge retrieval, and report generation.
 
-## Demo Videos
+## Demo Media
+
+### GIF Demos
 
 ### 1. Universal Agent Planning
 
-![Universal Agent Planning](videos/1-universal-agent-planning.gif)
+![Universal Agent Planning](media/demo-universal-agent-planning.gif)
 
 ### 2. Visualization & Chart
 
-![Visualization Chart](videos/2-visualization-chart.gif)
+![Visualization Chart](media/demo-visualization-chart.gif)
 
 ### 3. Artifacts Preview
 
-![Artifacts Preview](videos/3-artifacts-preview.gif)
+![Artifacts Preview](media/demo-artifacts-preview.gif)
 
 ### 4. Scheduler
 
-![Scheduler](videos/4-scheduler.gif)
+![Scheduler](media/demo-scheduler.gif)
 
 ### 5. Monitoring & Observation
 
-![Monitoring Observation](videos/5-monitoring-observation.gif)
+![Monitoring Observation](media/demo-monitoring-observation.gif)
 
 ### 6. KB Agent (Feishu)
 
-![KB Agent Feishu](videos/6-kb-agent-feishu.gif)
+![KB Agent Feishu](media/demo-kb-agent-feishu.gif)
 
 ### 7. Self-Supervisor Agent
 
-![Self-Supervisor Agent](videos/7-self-supervisor-agent.gif)
+![Self-Supervisor Agent](media/demo-self-supervisor-agent.gif)
+
+### UI Screenshots
+
+#### Home
+
+![Home](media/screenshot-home.png)
+
+#### Control Center
+
+![Control Center](media/screenshot-control-center.png)
+
+#### Channels
+
+![Channels](media/screenshot-channels.png)
+
+#### Files Preview
+
+![Files Preview](media/screenshot-files-preview.png)
+
+#### Knowledge Docs
+
+![Knowledge Docs](media/screenshot-knowledge-docs.png)
+
+#### Knowledge Recall Testing
+
+![Knowledge Recall Testing](media/screenshot-knowledge-recall-testing.png)
 
 ## Architecture
 
