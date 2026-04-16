@@ -105,8 +105,8 @@ export default function ClusterTypeTab({ clusterTypes, loading, onCreate, onUpda
 
             {/* Modal */}
             {showModal && (
-                <div className="hr-host-modal modal-overlay" onClick={() => setShowModal(false)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <div className="hr-host-modal modal-overlay">
+                    <div className="modal-content">
                         <div className="modal-header">
                             <h3>{editing ? t('hostResource.editClusterType') : t('hostResource.createClusterType')}</h3>
                             <button className="modal-close" onClick={() => setShowModal(false)}>×</button>

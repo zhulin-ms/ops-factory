@@ -300,8 +300,8 @@ function pickEach(arr: Record<string, unknown>[], keys: string[]): Record<string
   return arr.map(item => pick(item, keys))
 }
 
-const HOST_LIST_KEYS     = ['id', 'name', 'ip', 'clusterId', 'tags', 'purpose']
-const HOST_NODE_KEYS     = ['id', 'name', 'ip', 'clusterType', 'clusterName']
+const HOST_LIST_KEYS     = ['id', 'name', 'businessIp', 'clusterId', 'tags', 'purpose']
+const HOST_NODE_KEYS     = ['id', 'name', 'businessIp', 'clusterType', 'clusterName']
 const SOP_LIST_KEYS      = ['id', 'name', 'tags', 'mode', 'enabled']
 const CT_LIST_KEYS       = ['id', 'name', 'code', 'description', 'knowledge']
 const SYSTEM_LIST_KEYS   = ['id', 'name', 'code']
@@ -535,7 +535,7 @@ export async function handleQueryHostsByScope(params?: {
       reason,
       evidence: evidence ?? '',
       filter: { clusterType },
-      hosts: pickEach(filtered, HOST_LIST_KEYS),
+      hosts: pickEach(filtered, HOST_LIST_KEYS).map(({ businessIp, ...rest }) => ({ ...rest, ip: businessIp })),
     }, null, 2)
   }
 
@@ -554,7 +554,7 @@ export async function handleQueryHostsByScope(params?: {
     success: true,
     reason,
     evidence: evidence ?? '',
-    hosts: pickEach(data.hosts ?? [], HOST_LIST_KEYS),
+    hosts: pickEach(data.hosts ?? [], HOST_LIST_KEYS).map(({ businessIp, ...rest }) => ({ ...rest, ip: businessIp })),
   }, null, 2)
 }
 
@@ -705,7 +705,7 @@ export async function handleGetHostNeighbors(hostId: string): Promise<string> {
     (arr ?? []).map((n: Record<string, unknown>) => {
       const node = (n.host ?? n.node) as Record<string, unknown> | undefined
       return {
-        ...(node ? { node: pick(node, HOST_NODE_KEYS) } : {}),
+        ...(node ? { node: (({ businessIp, ...rest }: Record<string, unknown>) => ({ ...rest, ip: businessIp }))(pick(node, HOST_NODE_KEYS) as Record<string, unknown>) } : {}),
         ...((n.relationDescription ?? n.relationType) != null
           ? { relationDescription: n.relationDescription ?? n.relationType }
           : {}),
@@ -843,7 +843,20 @@ export async function handleExecuteRemoteBatch(hostIds: string[], command: strin
 
 export async function handleGetClusterTypeKnowledge(hostId: string): Promise<string> {
   // Step 1: Get host to find clusterId
-  const hostData = await gw<Record<string, unknown>>(`${API_PREFIX}/hosts/${encodeURIComponent(hostId)}`)
+  let hostData: Record<string, unknown>
+  try {
+    hostData = await gw<Record<string, unknown>>(`${API_PREFIX}/hosts/${encodeURIComponent(hostId)}`)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const hint = /returned 404/.test(msg)
+      ? `hostId 应为主机的 id 字段（UUID），而非 IP 地址。请使用 query_hosts_by_scope 先获取主机列表，从中取 id 字段`
+      : msg
+    return JSON.stringify({
+      found: false,
+      reason: 'host_not_found',
+      message: `未找到主机 ${hostId}：${hint}`,
+    }, null, 2)
+  }
   const host = (hostData.host ?? hostData) as Record<string, unknown>
   const clusterId = host.clusterId as string | undefined
 

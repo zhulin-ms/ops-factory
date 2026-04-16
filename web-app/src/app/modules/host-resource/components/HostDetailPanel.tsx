@@ -25,7 +25,8 @@ export default function HostDetailPanel({ host, cluster, onClose, onEdit }: Prop
             <AttributeGroup title={t('hostResource.basicInfo')} fields={[
                 { label: t('hostResource.hostName'), value: host.name },
                 { label: t('hostResource.hostname'), value: host.hostname },
-                { label: 'IP', value: `${host.ip}:${host.port}` },
+                { label: t('hostResource.ip'), value: `${host.ip}:${host.port}` },
+                { label: t('hostResource.businessIp'), value: host.businessIp || '-' },
             ]} />
 
             <AttributeGroup title={t('hostResource.systemInfo')} fields={[

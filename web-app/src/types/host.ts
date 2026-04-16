@@ -3,6 +3,7 @@ export interface Host {
     name: string
     hostname?: string
     ip: string
+    businessIp?: string
     port: number
     os?: string
     location?: string
@@ -28,6 +29,7 @@ export interface HostCreateRequest {
     name: string
     hostname?: string
     ip: string
+    businessIp?: string
     port: number
     os?: string
     location?: string
@@ -120,6 +122,7 @@ export interface GraphNode {
     id: string
     name: string
     ip: string | null
+    businessIp?: string | null
     clusterType?: string | null
     clusterName?: string | null
     purpose?: string | null

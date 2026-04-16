@@ -453,6 +453,7 @@ public class HostRelationService {
         node.put("id", h.get("id"));
         node.put("name", h.get("name"));
         node.put("ip", h.get("ip"));
+        node.put("businessIp", h.get("businessIp"));
         String hostClusterId = h.get("clusterId") != null ? h.get("clusterId").toString() : null;
         Map<String, Object> cluster = hostClusterId != null ? clusterMap.get(hostClusterId) : null;
         node.put("clusterType", cluster != null ? cluster.get("type") : null);

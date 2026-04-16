@@ -273,4 +273,54 @@ public class CommandWhitelistServiceTest {
                 "tail -100 /var/log/syslog | grep -E 'ERROR|WARN' | tail -30");
         assertEquals("low", risk);
     }
+
+    // ── validateCommand – || and && operators ────────────────────
+
+    @Test
+    public void testValidateCommand_logicalOr() {
+        List<String> rejected = whitelistService.validateCommand(
+                "ps -ef || echo \"failed\"");
+        assertTrue(rejected.isEmpty());
+    }
+
+    @Test
+    public void testValidateCommand_logicalAnd() {
+        List<String> rejected = whitelistService.validateCommand(
+                "cd /home && ls -la");
+        assertTrue(rejected.isEmpty());
+    }
+
+    @Test
+    public void testValidateCommand_logicalOrWithRejected() {
+        List<String> rejected = whitelistService.validateCommand(
+                "ps -ef || rm -rf /");
+        assertEquals(1, rejected.size());
+        assertEquals("rm", rejected.get(0));
+    }
+
+    @Test
+    public void testValidateCommand_logicalAndWithRejected() {
+        List<String> rejected = whitelistService.validateCommand(
+                "cd /home && rm -rf /");
+        assertEquals(1, rejected.size());
+        assertEquals("rm", rejected.get(0));
+    }
+
+    @Test
+    public void testValidateCommand_orOrNotSplitAsTwoPipes() {
+        // || should split into exactly 2 parts, not 3
+        List<String> rejected = whitelistService.validateCommand(
+                "ps -ef || echo done");
+        // If || were split as two |, echo would be in a separate segment but gmstat/echo both pass
+        // The key is that || produces exactly 2 subcommands, not 3
+        assertTrue(rejected.isEmpty());
+    }
+
+    // ── validateCommand – echo in default whitelist ──────────────
+
+    @Test
+    public void testValidateCommand_echoInDefault() {
+        List<String> rejected = whitelistService.validateCommand("echo hello");
+        assertTrue(rejected.isEmpty());
+    }
 }

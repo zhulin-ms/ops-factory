@@ -68,13 +68,41 @@ public class HostController {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
+    @GetMapping("/by-ip")
+    public Mono<ResponseEntity<Map<String, Object>>> getHostByIp(
+            @RequestParam("ip") String ip,
+            ServerWebExchange exchange) {
+        UserContextFilter.requireAdmin(exchange);
+        return Mono.fromCallable(() -> {
+            Map<String, Object> host = hostService.findByIp(ip);
+            if (host == null) {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("success", false);
+                body.put("error", "Host not found for IP: " + ip);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+            }
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("success", true);
+            body.put("host", host);
+            return ResponseEntity.ok(body);
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
     @GetMapping("/{id}")
     public Mono<ResponseEntity<Map<String, Object>>> getHost(
             @PathVariable("id") String id,
             ServerWebExchange exchange) {
         UserContextFilter.requireAdmin(exchange);
         return Mono.fromCallable(() -> {
-            Map<String, Object> host = hostService.getHost(id);
+            Map<String, Object> host;
+            try {
+                host = hostService.getHost(id);
+            } catch (IllegalArgumentException e) {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("success", false);
+                body.put("error", "Host not found: " + id);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+            }
             if (host == null) {
                 Map<String, Object> body = new LinkedHashMap<>();
                 body.put("success", false);

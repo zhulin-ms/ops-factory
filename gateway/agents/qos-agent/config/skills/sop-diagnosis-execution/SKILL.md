@@ -54,6 +54,16 @@ version: 10.0.0
 | `get_cluster_types()` | 列出所有集群类型知识 |
 | browser-use 系列 | 浏览器操作（navigate/click/type/screenshot/extract_content 等） |
 
+## IP 使用规则
+
+主机查询结果中 `ip` 字段为业务IP。
+
+**严格约束**：
+1. 所有面向用户的展示（拓扑链路、诊断结果、报告、告警关联）中提到的 IP **必须**使用 `ip` 字段
+2. `{targetIPs}` 必须取自 `ip` 字段
+3. 执行远程命令时仅通过 `hostId` 调用 `execute_remote_command`，无需关心 IP 地址
+4. MCP 工具不暴露 SSH IP，远程命令的 SSH 连接由后端根据 hostId 自动处理
+
 ### 工具访问控制
 
 匹配到 SOP 后，检查其 `requiredTools` 字段：

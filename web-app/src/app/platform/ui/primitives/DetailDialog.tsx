@@ -1,4 +1,4 @@
-import type { ReactNode, MouseEvent } from 'react'
+import type { ReactNode } from 'react'
 
 type DetailDialogVariant = 'default' | 'wide'
 
@@ -24,17 +24,9 @@ export default function DetailDialog({
     const contentClassName = ['modal-content', `modal-${variant}`, className].filter(Boolean).join(' ')
     const contentBodyClassName = ['modal-body', bodyClassName].filter(Boolean).join(' ')
 
-    const handleOverlayClick = () => {
-        onClose()
-    }
-
-    const handleContentClick = (event: MouseEvent<HTMLDivElement>) => {
-        event.stopPropagation()
-    }
-
     return (
-        <div className="modal-overlay" role="dialog" aria-modal="true" onClick={handleOverlayClick}>
-            <div className={contentClassName} onClick={handleContentClick}>
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+            <div className={contentClassName}>
                 <div className="modal-header">
                     <h3 className="modal-title">{title}</h3>
                     <button type="button" className="modal-close" onClick={onClose} aria-label="Close dialog">

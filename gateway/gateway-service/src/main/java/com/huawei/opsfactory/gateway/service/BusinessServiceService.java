@@ -538,6 +538,7 @@ public class BusinessServiceService {
         node.put("id", h.get("id"));
         node.put("name", h.get("name"));
         node.put("ip", h.get("ip"));
+        node.put("businessIp", h.get("businessIp"));
         String hostClusterId = h.get("clusterId") != null ? h.get("clusterId").toString() : null;
         node.put("clusterId", hostClusterId);
         Map<String, Object> cluster = hostClusterId != null ? clusterMap.get(hostClusterId) : null;

@@ -54,6 +54,12 @@ export default function HostCard({ host, cluster, selected, testing, testResult,
                         </span>
                     )}
                 </div>
+                {host.businessIp && (
+                    <div className="hr-host-card-meta-field">
+                        <span className="hr-host-card-meta-label">{t('hostResource.businessIp')}</span>
+                        <span className="hr-host-card-meta-value hr-host-card-mono">{host.businessIp}</span>
+                    </div>
+                )}
                 {host.os && (
                     <div className="hr-host-card-meta-field">
                         <span className="hr-host-card-meta-label">{t('hostResource.os')}</span>

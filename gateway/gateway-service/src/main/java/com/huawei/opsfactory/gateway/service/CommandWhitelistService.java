@@ -25,14 +25,15 @@ public class CommandWhitelistService {
 
     private static final List<String> DEFAULT_COMMANDS = List.of(
             "ps", "tail", "grep", "cat", "ls", "df", "free", "netstat",
-            "top", "cd", "find", "wc", "head", "date", "uptime",
+            "top", "cd", "find", "wc", "head", "date", "uptime", "echo",
             "iostat", "ping"
     );
 
     private static final Map<String, String> DEFAULT_RISK_LEVELS = Map.ofEntries(
             Map.entry("ps", "low"), Map.entry("tail", "low"), Map.entry("grep", "low"),
             Map.entry("cat", "low"), Map.entry("ls", "low"), Map.entry("df", "low"),
-            Map.entry("free", "low"), Map.entry("head", "low"), Map.entry("date", "low"),
+            Map.entry("free", "low"), Map.entry("head", "low"), Map.entry("echo", "low"),
+            Map.entry("date", "low"),
             Map.entry("uptime", "low"), Map.entry("cd", "low"), Map.entry("find", "low"),
             Map.entry("wc", "low"),
             Map.entry("netstat", "medium"), Map.entry("top", "medium"),
@@ -205,7 +206,7 @@ public class CommandWhitelistService {
     // ── Shell-Aware Pipe/Semicolon Splitter ─────────────────────────
 
     /**
-     * Split a command string on unquoted {@code |} and {@code;} delimiters,
+     * Split a command string on unquoted {@code |}, {@code ||}, {@code &&}, and {@code ;} delimiters,
      * respecting single quotes, double quotes, and backslash escaping.
      */
     private List<String> splitShellPipe(String command) {
@@ -220,10 +221,27 @@ public class CommandWhitelistService {
             }
             if (c == '\'' && !inDouble) { inSingle = !inSingle; current.append(c); continue; }
             if (c == '"'  && !inSingle) { inDouble = !inDouble; current.append(c); continue; }
-            if ((c == '|' || c == ';') && !inSingle && !inDouble) {
-                parts.add(current.toString());
-                current.setLength(0);
-                continue;
+            if (!inSingle && !inDouble) {
+                // Handle || (logical OR)
+                if (c == '|' && i + 1 < command.length() && command.charAt(i + 1) == '|') {
+                    parts.add(current.toString());
+                    current.setLength(0);
+                    i++; // skip second |
+                    continue;
+                }
+                // Handle && (logical AND)
+                if (c == '&' && i + 1 < command.length() && command.charAt(i + 1) == '&') {
+                    parts.add(current.toString());
+                    current.setLength(0);
+                    i++; // skip second &
+                    continue;
+                }
+                // Handle | (pipe) and ; (semicolon)
+                if (c == '|' || c == ';') {
+                    parts.add(current.toString());
+                    current.setLength(0);
+                    continue;
+                }
             }
             current.append(c);
         }

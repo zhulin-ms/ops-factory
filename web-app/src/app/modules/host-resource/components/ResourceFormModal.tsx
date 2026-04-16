@@ -83,6 +83,7 @@ export default function ResourceFormModal({
     const [hostName, setHostName] = useState(editingItem?.type === 'host' ? editingItem.data.name : '')
     const [hostname, setHostname] = useState(editingItem?.type === 'host' ? (editingItem.data.hostname ?? '') : '')
     const [hostIp, setHostIp] = useState(editingItem?.type === 'host' ? editingItem.data.ip : '')
+    const [hostBusinessIp, setHostBusinessIp] = useState(editingItem?.type === 'host' ? (editingItem.data.businessIp ?? '') : '')
     const [hostPort, setHostPort] = useState(editingItem?.type === 'host' ? editingItem.data.port : 22)
     const [hostOs, setHostOs] = useState(editingItem?.type === 'host' ? (editingItem.data.os ?? '') : '')
     const [hostLocation, setHostLocation] = useState(editingItem?.type === 'host' ? (editingItem.data.location ?? '') : '')
@@ -372,11 +373,13 @@ export default function ResourceFormModal({
             } else if (selectedType === 'host') {
                 if (!hostName.trim() || !hostIp.trim()) { setError(t('hostResource.nameAndIpRequired')); setSaving(false); return }
                 if (!isValidIp(hostIp)) { setError(t('hostResource.ipInvalid')); setSaving(false); return }
+                if (hostBusinessIp.trim() && !isValidIp(hostBusinessIp)) { setError(t('hostResource.businessIpInvalid')); setSaving(false); return }
                 const payload: Record<string, unknown> = {
                     name: hostName.trim(), hostname: hostname.trim() || null, ip: hostIp.trim(), port: hostPort,
                     os: hostOs.trim() || null, location: hostLocation.trim() || null, username: hostUsername.trim(),
                     authType: hostAuthType, clusterId: hostClusterId || null, purpose: hostPurpose.trim() || null,
                     business: hostBusiness.trim() || null, description: hostDescription.trim(), customAttributes: hostCustomAttributes,
+                    businessIp: hostBusinessIp.trim() || null,
                 }
                 if (hostCredential && hostCredential !== '***') payload.credential = hostCredential
                 await onSaveHost(payload as unknown as HostCreateRequest)
@@ -392,7 +395,7 @@ export default function ResourceFormModal({
             setSaving(false)
         }
     }, [selectedType, groupName, groupParentId, groupDescription, groupCode, clusterName, clusterType, clusterPurpose,
-        clusterGroupId, clusterDescription, hostName, hostname, hostIp, hostPort, hostOs, hostLocation,
+        clusterGroupId, clusterDescription, hostName, hostname, hostIp, hostBusinessIp, hostPort, hostOs, hostLocation,
         hostUsername, hostAuthType, hostCredential, hostClusterId, hostPurpose, hostBusiness,
         hostDescription, hostCustomAttributes, sourceHostId, targetHostId, relationDescription, sourceType,
         bsName, bsCode, bsGroupId, bsSelectedBusinessTypeId, bsTags, bsPriority, bsDescription,
@@ -417,8 +420,8 @@ export default function ResourceFormModal({
     ]
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: selectedType === 'host' ? 640 : 520 }}>
+        <div className="modal-overlay">
+            <div className="modal" style={{ maxWidth: selectedType === 'host' ? 640 : 520 }}>
                 <div className="modal-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {!editingItem && selectedType && (
@@ -702,6 +705,12 @@ export default function ResourceFormModal({
                                         <div className="form-group" style={{ maxWidth: 120 }}>
                                             <label className="form-label">{t('hostResource.port')}</label>
                                             <input className="form-input" type="number" value={hostPort} onChange={e => setHostPort(Number(e.target.value))} />
+                                        </div>
+                                    </div>
+                                    <div className="hr-form-row">
+                                        <div className="form-group">
+                                            <label className="form-label">{t('hostResource.businessIp')}</label>
+                                            <input className="form-input" value={hostBusinessIp} onChange={e => setHostBusinessIp(e.target.value)} placeholder={t('hostResource.businessIpPlaceholder')} />
                                         </div>
                                     </div>
 
