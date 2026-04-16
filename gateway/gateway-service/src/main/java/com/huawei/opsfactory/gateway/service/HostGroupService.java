@@ -160,6 +160,7 @@ public class HostGroupService {
         group.put("name", body.getOrDefault("name", ""));
         group.put("parentId", body.get("parentId"));
         group.put("description", body.getOrDefault("description", ""));
+        group.put("code", body.getOrDefault("code", ""));
         group.put("createdAt", now);
         group.put("updatedAt", now);
 
@@ -183,6 +184,9 @@ public class HostGroupService {
         }
         if (body.containsKey("description")) {
             group.put("description", body.get("description"));
+        }
+        if (body.containsKey("code")) {
+            group.put("code", body.get("code"));
         }
 
         group.put("updatedAt", Instant.now().toString());

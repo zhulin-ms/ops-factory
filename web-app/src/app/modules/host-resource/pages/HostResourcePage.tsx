@@ -189,6 +189,7 @@ export default function HostResourcePage() {
                 id: g.id,
                 type: 'subgroup' as TreeNodeType,
                 name: g.name,
+                subtitle: g.code || undefined,
                 children: childNodes.length > 0 ? childNodes : undefined,
                 raw: g,
             }
@@ -347,7 +348,7 @@ export default function HostResourcePage() {
                 name: bt.name, code: bt.code, description: bt.description,
                 color: bt.color, knowledge: bt.knowledge,
             })),
-            groups: groups.map(({ id, name, parentId, description }) => ({ id, name, parentId, description })),
+            groups: groups.map(({ id, name, code, parentId, description }) => ({ id, name, code, parentId, description })),
             clusters: clusters.map(({ id, name, type, purpose, groupId, description }) => ({ id, name, type, purpose, groupId, description })),
             businessServices: businessServices.map(({ id, name, code, groupId, businessTypeId, description, hostIds, tags, priority, contactInfo }) =>
                 ({ id, name, code, groupId, businessTypeId, description, hostIds, tags, priority, contactInfo })),

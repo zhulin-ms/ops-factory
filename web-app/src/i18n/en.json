@@ -1474,6 +1474,8 @@
     "editHost": "Edit Host",
     "editRelation": "Edit Relation",
     "groupName": "Group Name",
+    "groupCode": "Code",
+    "groupCodePlaceholder": "Optional, e.g. PROD",
     "parentGroup": "Parent Group",
     "noParent": "None (top level)",
     "clusterName": "Cluster Name",

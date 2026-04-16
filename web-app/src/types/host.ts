@@ -51,6 +51,7 @@ export interface HostTestResult {
 export interface HostGroup {
     id: string
     name: string
+    code?: string
     parentId?: string | null
     description: string
     createdAt: string

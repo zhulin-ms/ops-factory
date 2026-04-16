@@ -1474,6 +1474,8 @@
     "editHost": "编辑主机",
     "editRelation": "编辑关系",
     "groupName": "环境组名称",
+    "groupCode": "编码",
+    "groupCodePlaceholder": "选填，如 PROD",
     "parentGroup": "父级组",
     "noParent": "无（顶层）",
     "clusterName": "集群名称",

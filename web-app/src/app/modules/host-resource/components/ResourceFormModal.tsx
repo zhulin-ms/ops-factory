@@ -58,6 +58,7 @@ export default function ResourceFormModal({
     const [groupName, setGroupName] = useState(editingItem?.type === 'group' ? editingItem.data.name : '')
     const [groupParentId, setGroupParentId] = useState(editingItem?.type === 'group' ? (editingItem.data.parentId ?? '') : '')
     const [groupDescription, setGroupDescription] = useState(editingItem?.type === 'group' ? editingItem.data.description : '')
+    const [groupCode, setGroupCode] = useState(editingItem?.type === 'group' ? (editingItem.data.code ?? '') : '')
 
     // ── Cluster form state ──
     const [clusterName, setClusterName] = useState(editingItem?.type === 'cluster' ? editingItem.data.name : '')
@@ -342,7 +343,7 @@ export default function ResourceFormModal({
         try {
             if (selectedType === 'group') {
                 if (!groupName.trim()) { setError(t('hostResource.nameRequired')); setSaving(false); return }
-                await onSaveGroup({ name: groupName.trim(), parentId: groupParentId || null, description: groupDescription.trim() })
+                await onSaveGroup({ name: groupName.trim(), code: groupCode.trim(), parentId: groupParentId || null, description: groupDescription.trim() })
             } else if (selectedType === 'cluster') {
                 if (!clusterName.trim()) { setError(t('hostResource.nameRequired')); setSaving(false); return }
                 await onSaveCluster({
@@ -390,7 +391,7 @@ export default function ResourceFormModal({
         } finally {
             setSaving(false)
         }
-    }, [selectedType, groupName, groupParentId, groupDescription, clusterName, clusterType, clusterPurpose,
+    }, [selectedType, groupName, groupParentId, groupDescription, groupCode, clusterName, clusterType, clusterPurpose,
         clusterGroupId, clusterDescription, hostName, hostname, hostIp, hostPort, hostOs, hostLocation,
         hostUsername, hostAuthType, hostCredential, hostClusterId, hostPurpose, hostBusiness,
         hostDescription, hostCustomAttributes, sourceHostId, targetHostId, relationDescription, sourceType,
@@ -459,6 +460,10 @@ export default function ResourceFormModal({
                                     <div className="form-group">
                                         <label className="form-label">{t('hostResource.groupName')}</label>
                                         <input className="form-input" value={groupName} onChange={e => setGroupName(e.target.value)} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">{t('hostResource.groupCode')}</label>
+                                        <input className="form-input" value={groupCode} onChange={e => setGroupCode(e.target.value)} placeholder={t('hostResource.groupCodePlaceholder', { defaultValue: '' })} />
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">{t('hostResource.parentGroup')}</label>
@@ -547,10 +552,14 @@ export default function ResourceFormModal({
                                                     if (btId) {
                                                         const bt = businessTypes.find(b => b.id === btId)
                                                         if (bt) {
-                                                            setBsName(bt.name)
                                                             setBsCode(bt.code)
-                                                            setBsDescription(bt.description)
+                                                            if (!editingItem) {
+                                                                setBsName(bt.name)
+                                                                setBsDescription(bt.description)
+                                                            }
                                                         }
+                                                    } else {
+                                                        setBsCode('')
                                                     }
                                                 }}
                                             >
@@ -569,34 +578,15 @@ export default function ResourceFormModal({
                                         <label className="form-label">{t('hostResource.bsName')}</label>
                                         <input className="form-input" value={bsName} onChange={e => setBsName(e.target.value)} />
                                     </div>
-                                    <div className="hr-form-row">
-                                        <div className="form-group">
-                                            <label className="form-label">{t('hostResource.bsCode')}</label>
-                                            {businessTypes.length > 0 ? (
-                                                <select
-                                                    className="form-input"
-                                                    value={bsCode}
-                                                    onChange={e => setBsCode(e.target.value)}
-                                                >
-                                                    <option value="">{t('hostResource.selectBusinessType')}</option>
-                                                    {businessTypes.map(bt => (
-                                                        <option key={bt.id} value={bt.code}>{bt.code} ({bt.name})</option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                <input className="form-input" value={bsCode} onChange={e => setBsCode(e.target.value)} placeholder="CRCX..." />
-                                            )}
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">{t('hostResource.bsPriority')}</label>
-                                            <select className="form-input" value={bsPriority} onChange={e => setBsPriority(e.target.value)}>
-                                                <option value="">--</option>
-                                                <option value="P0">P0</option>
-                                                <option value="P1">P1</option>
-                                                <option value="P2">P2</option>
-                                                <option value="P3">P3</option>
-                                            </select>
-                                        </div>
+                                    <div className="form-group">
+                                        <label className="form-label">{t('hostResource.bsPriority')}</label>
+                                        <select className="form-input" value={bsPriority} onChange={e => setBsPriority(e.target.value)}>
+                                            <option value="">--</option>
+                                            <option value="P0">P0</option>
+                                            <option value="P1">P1</option>
+                                            <option value="P2">P2</option>
+                                            <option value="P3">P3</option>
+                                        </select>
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">{t('hostResource.bsGroup')}</label>
