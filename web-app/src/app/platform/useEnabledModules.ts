@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { isAdminUser } from '../../config/runtime'
 import { useUser } from './providers/UserContext'
 import { loadModules } from './ModuleLoader'
@@ -19,5 +20,8 @@ export function useModuleContext(): ModuleContext {
 export function useEnabledModules() {
     const ctx = useModuleContext()
 
-    return ALL_MODULES.filter((module) => module.enabled?.(ctx) ?? true)
+    return useMemo(
+        () => ALL_MODULES.filter((module) => module.enabled?.(ctx) ?? true),
+        [ctx.isAdmin, ctx.isAuthenticated, ctx.userId]
+    )
 }

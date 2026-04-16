@@ -10,6 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_DIR="$(dirname "${SCRIPT_DIR}")"
+ROOT_DIR="$(dirname "${SERVICE_DIR}")"
 
 # --- Configuration (read from config.json) ---
 config_val() {
@@ -32,16 +33,19 @@ log_ok()    { echo -e "${GREEN}[OK]${NC}    $1"; }
 log_fail()  { echo -e "${RED}[FAIL]${NC}  $1"; }
 
 LOG_DIR="${SERVICE_DIR}/logs"
+PID_FILE="${LOG_DIR}/webapp.pid"
+DAEMON_HELPER="${ROOT_DIR}/scripts/lib/service-daemon.sh"
+
+# shellcheck source=/dev/null
+source "${DAEMON_HELPER}"
 
 # --- Utilities ---
-check_port() { lsof -ti:"$1" >/dev/null 2>&1; }
+check_port() { daemon_port_has_listener "$1"; }
 
 stop_port() {
     local port=$1 name=$2
-    if lsof -ti:"${port}" >/dev/null 2>&1; then
-        log_info "Stopping ${name} on port ${port}..."
-        kill $(lsof -ti:"${port}") 2>/dev/null || true
-        sleep 1
+    if check_port "${port}"; then
+        daemon_stop_listener_port "${port}" "${name}" || true
     fi
 }
 
@@ -55,32 +59,34 @@ wait_http_ok() {
     return 1
 }
 
-start_detached() {
-    local log_file="$1"
-    shift
-
-    mkdir -p "${LOG_DIR}"
-    if command -v setsid >/dev/null 2>&1; then
-        nohup setsid "$@" </dev/null >>"${log_file}" 2>&1 &
-    else
-        nohup "$@" </dev/null >>"${log_file}" 2>&1 &
-    fi
-    echo $!
-}
-
 # --- Webapp actions ---
 WEBAPP_PID=""
 
 do_startup() {
     local mode="${1:-foreground}"
-    stop_port "${VITE_PORT}" "webapp"
+
+    if [ "${mode}" = "background" ] && daemon_is_running "${PID_FILE}"; then
+        local existing_pid
+        existing_pid="$(daemon_read_pid "${PID_FILE}")"
+        if curl -fsS "http://127.0.0.1:${VITE_PORT}" >/dev/null 2>&1; then
+            log_info "Webapp already running (PID: ${existing_pid})"
+            return 0
+        fi
+        log_warn "Managed webapp process exists but health check failed; restarting"
+        daemon_stop "${PID_FILE}" "webapp" 5 || true
+    fi
+
+    if check_port "${VITE_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "Webapp port ${VITE_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${VITE_PORT}" "webapp"
+    fi
 
     log_info "Starting webapp at http://${VITE_HOST}:${VITE_PORT}"
     cd "${SERVICE_DIR}"
 
     local log_file="${LOG_DIR}/webapp.log"
     if [ "${mode}" = "background" ]; then
-        WEBAPP_PID="$(start_detached "${log_file}" npm run dev -- --host "${VITE_HOST}")"
+        WEBAPP_PID="$(daemon_start "${PID_FILE}" "${log_file}" npm run dev -- --host "${VITE_HOST}")"
     else
         npm run dev -- --host "${VITE_HOST}" &
         WEBAPP_PID=$!
@@ -92,6 +98,9 @@ do_startup() {
     fi
 
     if ! wait_http_ok "Webapp" "http://127.0.0.1:${VITE_PORT}" 120 1; then
+        if [ "${mode}" = "background" ]; then
+            daemon_stop "${PID_FILE}" "webapp" 5 || true
+        fi
         return 1
     fi
 
@@ -107,17 +116,27 @@ do_startup() {
 }
 
 do_shutdown() {
-    stop_port "${VITE_PORT}" "webapp"
+    daemon_stop "${PID_FILE}" "webapp" 20 || true
+    if ! daemon_wait_for_port_release "${VITE_PORT}" 20 0.1 && check_port "${VITE_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "Webapp port ${VITE_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${VITE_PORT}" "webapp"
+    fi
+    rm -f "${PID_FILE}" 2>/dev/null || true
 }
 
 do_status() {
-    if check_port "${VITE_PORT}"; then
+    if daemon_is_running "${PID_FILE}"; then
+        local pid
+        pid="$(daemon_read_pid "${PID_FILE}")"
         if curl -fsS "http://127.0.0.1:${VITE_PORT}" >/dev/null 2>&1; then
-            log_ok "Webapp running (http://localhost:${VITE_PORT})"
+            log_ok "Webapp running (http://localhost:${VITE_PORT}, PID: ${pid})"
         else
-            log_warn "Webapp port open but HTTP check failed"
+            log_warn "Webapp process running (PID: ${pid}) but HTTP check failed"
             return 1
         fi
+    elif check_port "${VITE_PORT}"; then
+        log_warn "Webapp port open on ${VITE_PORT} but service is unmanaged (missing/stale pidfile)"
+        return 1
     else
         log_fail "Webapp not running on port ${VITE_PORT}"
         return 1

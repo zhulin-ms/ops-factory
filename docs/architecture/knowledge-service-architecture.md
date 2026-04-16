@@ -25,8 +25,8 @@
 
 不负责的内容：
 
-- 浏览器侧统一鉴权与租户隔离
-- 前端绕过网关访问的放开策略
+- 浏览器侧鉴权、租户隔离与访问控制策略
+- 跨服务入口收口策略
 - LLM 最终问答编排本身，这部分由 Agent 或上层编排服务承担
 
 ## 3. 总体架构
@@ -120,15 +120,15 @@
 
 ### 4.2 前端调用方式
 
-当前前端运行时通过 `KNOWLEDGE_SERVICE_URL` 直接访问 `knowledge-service`。这满足本地开发和当前实现，但仓库约束仍建议生产由 `gateway` 统一代理与鉴权收口。
+当前前端运行时通过 `KNOWLEDGE_SERVICE_URL` 直接访问 `knowledge-service`。在当前架构下，`knowledge-service` 作为独立服务对外提供能力，前端可按服务边界直接访问，无需再经由 `gateway` 收口。
 
 ### 4.3 前端检索测试链路
 
 `KnowledgeRetrievalTab` 是知识服务前端链路里最重要的运行态界面，承担三类能力：
 
-- 单次检索测试：调用 `POST /ops-knowledge/search`
-- 多模式对比：调用 `POST /ops-knowledge/search/compare`
-- 命中详情展开：调用 `GET /ops-knowledge/fetch/{chunkId}`
+- 单次检索测试：调用 `POST /knowledge/search`
+- 多模式对比：调用 `POST /knowledge/search/compare`
+- 命中详情展开：调用 `GET /knowledge/fetch/{chunkId}`
 
 这个页面还管理本地历史与缓存：
 
@@ -258,7 +258,7 @@ User          RetrievalTab            knowledge-service
 主路径如下：
 
 1. 创建 `source`
-2. 调用 `POST /ops-knowledge/sources/{sourceId}/documents:ingest`
+2. 调用 `POST /knowledge/sources/{sourceId}/documents:ingest`
 3. 原始文件写入 `upload/.../original/`
 4. 转换引擎把原件转换为文本和 markdown artifact
 5. `ChunkingService` 生成 chunk 草稿
@@ -288,7 +288,7 @@ Client      DocumentController   Facade      Converter/Chunking     Storage/Inde
 
 ### 6.2 切块默认策略
 
-切块相关默认参数来自 `ops-knowledge.chunking`，关键参数包括：
+切块相关默认参数来自 `knowledge.chunking`，关键参数包括：
 
 - `mode`
 - `targetTokens`
@@ -424,7 +424,7 @@ lexical hits                 semantic hits
 
 1. 请求 `override.mode`
 2. retrieval profile 中 `retrieval.mode`
-3. 系统默认 `ops-knowledge.retrieval.mode`
+3. 系统默认 `knowledge.retrieval.mode`
 4. 如果以上都没有，兜底为 `hybrid`
 
 ### 7.5 TopK 解析与缺省路径
@@ -489,11 +489,13 @@ request.retrievalProfileId ?
 - `snippetLength`
 - `topK`
 
+其中 `scoreThreshold` 当前只对 `semantic / lexical` 模式生效，`hybrid` 不走阈值过滤。
+
 而 `includeScores`、`includeExplain` 等字段目前主要是接口预留。
 
 ### 7.8 Compare 的默认路径
 
-`POST /ops-knowledge/search/compare` 的当前实现有两个显著特点：
+`POST /knowledge/search/compare` 的当前实现有两个显著特点：
 
 - compare 固定用 `COMPARE_FETCH_TOP_K = 64` 拉取三种模式的原始候选
 - 如果未指定 `modes`，默认比较 `hybrid`、`semantic`、`lexical`
@@ -513,7 +515,7 @@ request.retrievalProfileId ?
 当前约束：
 
 - `neighborWindow` 必须大于 0
-- 且不能超过 `ops-knowledge.fetch.max-neighbor-window`
+- 且不能超过 `knowledge.fetch.max-neighbor-window`
 - `includeMarkdown` 和 `includeRawText` 参数已暴露，但目前不会改变返回裁剪行为
 
 ### 7.10 Retrieve 的默认路径
@@ -567,22 +569,22 @@ Caller            Facade                Search                Fetch
 
 ### 8.1 系统与配置
 
-- `GET /ops-knowledge/capabilities`
+- `GET /knowledge/capabilities`
   - 返回服务支持的 retrieval modes、chunk modes、analyzers、editable fields、feature flags
 
-- `GET /ops-knowledge/system/defaults`
+- `GET /knowledge/system/defaults`
   - 返回当前系统生效的默认 ingest/chunking/retrieval/features 配置
 
 ### 8.2 Source
 
-- `GET /ops-knowledge/sources`
-- `POST /ops-knowledge/sources`
-- `GET /ops-knowledge/sources/{sourceId}`
-- `PATCH /ops-knowledge/sources/{sourceId}`
-- `DELETE /ops-knowledge/sources/{sourceId}`
-- `GET /ops-knowledge/sources/{sourceId}/stats`
-- `POST /ops-knowledge/sources/{sourceId}:rebuild`
-- `GET /ops-knowledge/sources/{sourceId}/maintenance`
+- `GET /knowledge/sources`
+- `POST /knowledge/sources`
+- `GET /knowledge/sources/{sourceId}`
+- `PATCH /knowledge/sources/{sourceId}`
+- `DELETE /knowledge/sources/{sourceId}`
+- `GET /knowledge/sources/{sourceId}/stats`
+- `POST /knowledge/sources/{sourceId}:rebuild`
+- `GET /knowledge/sources/{sourceId}/maintenance`
 
 适用场景：
 
@@ -592,20 +594,20 @@ Caller            Facade                Search                Fetch
 
 ### 8.3 Document
 
-- `GET /ops-knowledge/documents`
-- `POST /ops-knowledge/sources/{sourceId}/documents:ingest`
-- `GET /ops-knowledge/documents/{documentId}`
-- `PATCH /ops-knowledge/documents/{documentId}`
-- `DELETE /ops-knowledge/documents/{documentId}`
-- `GET /ops-knowledge/documents/{documentId}/chunks`
-- `GET /ops-knowledge/documents/{documentId}/preview`
-- `GET /ops-knowledge/documents/{documentId}/artifacts`
-- `GET /ops-knowledge/documents/{documentId}/artifacts/markdown`
-- `GET /ops-knowledge/documents/{documentId}/original`
-- `POST /ops-knowledge/documents/{documentId}:rebuild`
-- `POST /ops-knowledge/documents/{documentId}:reindex`
-- `POST /ops-knowledge/documents/{documentId}:rechunk`
-- `GET /ops-knowledge/documents/{documentId}/stats`
+- `GET /knowledge/documents`
+- `POST /knowledge/sources/{sourceId}/documents:ingest`
+- `GET /knowledge/documents/{documentId}`
+- `PATCH /knowledge/documents/{documentId}`
+- `DELETE /knowledge/documents/{documentId}`
+- `GET /knowledge/documents/{documentId}/chunks`
+- `GET /knowledge/documents/{documentId}/preview`
+- `GET /knowledge/documents/{documentId}/artifacts`
+- `GET /knowledge/documents/{documentId}/artifacts/markdown`
+- `GET /knowledge/documents/{documentId}/original`
+- `POST /knowledge/documents/{documentId}:rebuild`
+- `POST /knowledge/documents/{documentId}:reindex`
+- `POST /knowledge/documents/{documentId}:rechunk`
+- `GET /knowledge/documents/{documentId}/stats`
 
 适用场景：
 
@@ -615,14 +617,14 @@ Caller            Facade                Search                Fetch
 
 ### 8.4 Chunk
 
-- `GET /ops-knowledge/chunks`
-- `GET /ops-knowledge/chunks/{chunkId}`
-- `POST /ops-knowledge/documents/{documentId}/chunks`
-- `PATCH /ops-knowledge/chunks/{chunkId}`
-- `PATCH /ops-knowledge/chunks/{chunkId}/keywords`
-- `DELETE /ops-knowledge/chunks/{chunkId}`
-- `POST /ops-knowledge/documents/{documentId}/chunks:reorder`
-- `POST /ops-knowledge/chunks/{chunkId}:reindex`
+- `GET /knowledge/chunks`
+- `GET /knowledge/chunks/{chunkId}`
+- `POST /knowledge/documents/{documentId}/chunks`
+- `PATCH /knowledge/chunks/{chunkId}`
+- `PATCH /knowledge/chunks/{chunkId}/keywords`
+- `DELETE /knowledge/chunks/{chunkId}`
+- `POST /knowledge/documents/{documentId}/chunks:reorder`
+- `POST /knowledge/chunks/{chunkId}:reindex`
 
 适用场景：
 
@@ -632,38 +634,38 @@ Caller            Facade                Search                Fetch
 
 ### 8.5 Retrieval
 
-- `POST /ops-knowledge/search`
+- `POST /knowledge/search`
   - 用于先召回 chunk，再展示或进一步 `fetch`
 
-- `POST /ops-knowledge/search/compare`
+- `POST /knowledge/search/compare`
   - 用于比较三种检索模式的命中差异
 
-- `GET /ops-knowledge/fetch/{chunkId}`
+- `GET /knowledge/fetch/{chunkId}`
   - 用于按 chunkId 取全文和相邻 chunk
 
-- `POST /ops-knowledge/retrieve`
+- `POST /knowledge/retrieve`
   - 用于直接返回 evidence 列表给上层 RAG
 
-- `POST /ops-knowledge/explain`
+- `POST /knowledge/explain`
   - 用于解释 query 对某 chunk 的命中原因
 
 ### 8.6 Profile 与 Binding
 
-- `GET /ops-knowledge/profiles/index`
-- `POST /ops-knowledge/profiles/index`
-- `GET /ops-knowledge/profiles/index/{profileId}`
-- `PATCH /ops-knowledge/profiles/index/{profileId}`
-- `DELETE /ops-knowledge/profiles/index/{profileId}`
+- `GET /knowledge/profiles/index`
+- `POST /knowledge/profiles/index`
+- `GET /knowledge/profiles/index/{profileId}`
+- `PATCH /knowledge/profiles/index/{profileId}`
+- `DELETE /knowledge/profiles/index/{profileId}`
 
-- `GET /ops-knowledge/profiles/retrieval`
-- `POST /ops-knowledge/profiles/retrieval`
-- `GET /ops-knowledge/profiles/retrieval/{profileId}`
-- `PATCH /ops-knowledge/profiles/retrieval/{profileId}`
-- `DELETE /ops-knowledge/profiles/retrieval/{profileId}`
+- `GET /knowledge/profiles/retrieval`
+- `POST /knowledge/profiles/retrieval`
+- `GET /knowledge/profiles/retrieval/{profileId}`
+- `PATCH /knowledge/profiles/retrieval/{profileId}`
+- `DELETE /knowledge/profiles/retrieval/{profileId}`
 
-- `GET /ops-knowledge/profiles/bindings`
-- `POST /ops-knowledge/profiles/bind`
-- `PATCH /ops-knowledge/profiles/bindings/{sourceId}`
+- `GET /knowledge/profiles/bindings`
+- `POST /knowledge/profiles/bind`
+- `PATCH /knowledge/profiles/bindings/{sourceId}`
 
 注意：
 
@@ -672,13 +674,13 @@ Caller            Facade                Search                Fetch
 
 ### 8.7 Job 与统计
 
-- `GET /ops-knowledge/jobs`
-- `GET /ops-knowledge/jobs/{jobId}`
-- `POST /ops-knowledge/jobs/{jobId}:cancel`
-- `POST /ops-knowledge/jobs/{jobId}:retry`
-- `GET /ops-knowledge/jobs/{jobId}/logs`
-- `GET /ops-knowledge/jobs/{jobId}/failures`
-- `GET /ops-knowledge/stats/overview`
+- `GET /knowledge/jobs`
+- `GET /knowledge/jobs/{jobId}`
+- `POST /knowledge/jobs/{jobId}:cancel`
+- `POST /knowledge/jobs/{jobId}:retry`
+- `GET /knowledge/jobs/{jobId}/logs`
+- `GET /knowledge/jobs/{jobId}/failures`
+- `GET /knowledge/stats/overview`
 
 ## 9. 推荐接入方式
 
@@ -700,13 +702,13 @@ Caller            Facade                Search                Fetch
 3. 如果只需要快速拿证据，优先 `retrieve`
 4. 如果命中解释很重要，再补 `explain`
 
-### 9.3 给生产网关
+### 9.3 给生产部署
 
 推荐链路：
 
-1. 由网关统一代理 `knowledge-service`
-2. 在网关实现鉴权、审计、限流、租户边界
-3. 不建议浏览器在生产环境直接访问知识服务
+1. 保持 `knowledge-service` 作为独立服务部署与演进
+2. 由 `knowledge-service` 自身负责鉴权、审计、限流与租户边界
+3. 前端按服务边界直接访问知识服务，并保持接口契约稳定
 
 ## 10. 当前实现限制
 
@@ -715,7 +717,7 @@ Caller            Facade                Search                Fetch
 - `retrieve` 目前仍是“search 后逐条 fetch”的轻量封装，不是完整的上下文扩展器
 - `fetch` 的 `includeMarkdown` 与 `includeRawText` 目前不参与返回裁剪
 - profile 更新是浅合并，嵌套配置更新时要传完整一级对象
-- 前端当前直接访问 `knowledge-service`，生产部署仍建议经由 `gateway`
+- 前端当前直接访问 `knowledge-service`，这与独立服务部署模式一致
 
 ## 11. 结论
 

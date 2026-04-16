@@ -135,9 +135,9 @@ MCP 依赖以下环境变量：
 ```text
 MCP tools
    |
-   +-- search --> POST /ops-knowledge/search
+   +-- search --> POST /knowledge/search
    |
-   +-- fetch  --> GET  /ops-knowledge/fetch/{chunkId}
+   +-- fetch  --> GET  /knowledge/fetch/{chunkId}
 ```
 
 ## 6.1 `search`
@@ -149,7 +149,7 @@ search(query, sourceIds?, documentIds?, topK?)
  normalizeSourceIds()
               |
               v
- POST /ops-knowledge/search
+ POST /knowledge/search
               |
               v
    JSON string response
@@ -172,7 +172,7 @@ search(query, sourceIds?, documentIds?, topK?)
 
 MCP `search` 会映射到：
 
-- `POST /ops-knowledge/search`
+- `POST /knowledge/search`
 
 请求体结构：
 
@@ -227,7 +227,7 @@ fetch(chunkId, includeNeighbors?, neighborWindow?)
  validate neighborWindow in [1,2]
               |
               v
- GET /ops-knowledge/fetch/{chunkId}
+ GET /knowledge/fetch/{chunkId}
    ?includeNeighbors=...
    &neighborWindow=...
    &includeMarkdown=true
@@ -254,7 +254,7 @@ fetch(chunkId, includeNeighbors?, neighborWindow?)
 
 MCP `fetch` 会映射到：
 
-- `GET /ops-knowledge/fetch/{chunkId}`
+- `GET /knowledge/fetch/{chunkId}`
 
 请求参数固定包含：
 
@@ -365,7 +365,7 @@ MCP 调用 HTTP 时使用 `AbortSignal.timeout(...)`，默认超时为 `15000ms`
 3. 错误格式类似：
 
 ```text
-Knowledge service /ops-knowledge/search returned 500: ...
+Knowledge service /knowledge/search returned 500: ...
 ```
 
 这保证 Agent 至少能知道是哪个底层接口失败，而不是只得到一个模糊错误。

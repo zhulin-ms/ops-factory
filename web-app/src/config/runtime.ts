@@ -1,14 +1,26 @@
 import type { UserRole } from '../app/platform/providers/UserContext'
+import { trackedFetch } from '../app/platform/logging/requestClient'
+import { configureWebappLogging, type WebappLoggingRuntimeConfig } from '../app/platform/logging/settings'
 
 interface RuntimeConfig {
     gatewayUrl?: string
     gatewaySecretKey?: string
+    controlCenterUrl?: string
+    controlCenterSecretKey?: string
     knowledgeServiceUrl?: string
     businessIntelligenceServiceUrl?: string
+    logging?: {
+        level?: WebappLoggingRuntimeConfig['level']
+        consoleEnabled?: boolean
+        bufferSize?: number
+        sink?: 'console'
+        logDirectory?: string | null
+    }
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1'])
 const GATEWAY_PATH_PREFIX = '/gateway'
+const CONTROL_CENTER_PATH_PREFIX = '/control-center'
 const KNOWLEDGE_PATH_PREFIX = '/knowledge'
 const BUSINESS_INTELLIGENCE_PATH_PREFIX = '/business-intelligence'
 
@@ -25,7 +37,7 @@ function resolveGatewayUrl(raw: string | undefined): string {
 
     try {
         const url = new URL(raw)
-        if (isLoopbackHost(url.hostname) && !isLoopbackHost(pageHost)) {
+        if (isLoopbackHost(url.hostname) && url.hostname !== pageHost) {
             url.hostname = pageHost
         }
         return `${url.origin}${GATEWAY_PATH_PREFIX}`
@@ -43,12 +55,30 @@ function resolveKnowledgeServiceUrl(raw: string | undefined): string {
 
     try {
         const url = new URL(raw)
-        if (isLoopbackHost(url.hostname) && !isLoopbackHost(pageHost)) {
+        if (isLoopbackHost(url.hostname) && url.hostname !== pageHost) {
             url.hostname = pageHost
         }
         return `${url.origin}${KNOWLEDGE_PATH_PREFIX}`
     } catch {
         return `${fallbackOrigin}${KNOWLEDGE_PATH_PREFIX}`
+    }
+}
+
+function resolveControlCenterUrl(raw: string | undefined): string {
+    const pageHost = window.location.hostname || '127.0.0.1'
+    const pageProtocol = window.location.protocol || 'http:'
+    const fallbackOrigin = `${pageProtocol}//${pageHost}:8094`
+
+    if (!raw) return `${CONTROL_CENTER_PATH_PREFIX}`
+
+    try {
+        const url = new URL(raw)
+        if (isLoopbackHost(url.hostname) && url.hostname !== pageHost) {
+            url.hostname = pageHost
+        }
+        return `${url.origin}${CONTROL_CENTER_PATH_PREFIX}`
+    } catch {
+        return `${fallbackOrigin}${CONTROL_CENTER_PATH_PREFIX}`
     }
 }
 
@@ -61,7 +91,7 @@ function resolveBusinessIntelligenceServiceUrl(raw: string | undefined): string 
 
     try {
         const url = new URL(raw)
-        if (isLoopbackHost(url.hostname) && !isLoopbackHost(pageHost)) {
+        if (isLoopbackHost(url.hostname) && url.hostname !== pageHost) {
             url.hostname = pageHost
         }
         return `${url.origin}${BUSINESS_INTELLIGENCE_PATH_PREFIX}`
@@ -73,18 +103,27 @@ function resolveBusinessIntelligenceServiceUrl(raw: string | undefined): string 
 const DEFAULT_SECRET_KEY = 'test'
 export let GATEWAY_URL = resolveGatewayUrl(undefined)
 export let GATEWAY_SECRET_KEY = DEFAULT_SECRET_KEY
+export let CONTROL_CENTER_URL = resolveControlCenterUrl(undefined)
+export let CONTROL_CENTER_SECRET_KEY = DEFAULT_SECRET_KEY
 export let KNOWLEDGE_SERVICE_URL = resolveKnowledgeServiceUrl(undefined)
 export let BUSINESS_INTELLIGENCE_SERVICE_URL = resolveBusinessIntelligenceServiceUrl(undefined)
 
 function setRuntimeConfig(config: RuntimeConfig): void {
     GATEWAY_URL = resolveGatewayUrl(config.gatewayUrl)
     GATEWAY_SECRET_KEY = config.gatewaySecretKey || DEFAULT_SECRET_KEY
+    CONTROL_CENTER_URL = resolveControlCenterUrl(config.controlCenterUrl)
+    CONTROL_CENTER_SECRET_KEY = config.controlCenterSecretKey || DEFAULT_SECRET_KEY
     KNOWLEDGE_SERVICE_URL = resolveKnowledgeServiceUrl(config.knowledgeServiceUrl)
     BUSINESS_INTELLIGENCE_SERVICE_URL = resolveBusinessIntelligenceServiceUrl(config.businessIntelligenceServiceUrl)
+    configureWebappLogging(config.logging)
 }
 
 async function loadRuntimeConfig(): Promise<RuntimeConfig> {
-    const response = await fetch('/config.json', { cache: 'no-store' })
+    const response = await trackedFetch('/config.json', {
+        cache: 'no-store',
+        category: 'app',
+        name: 'app.context_init',
+    })
     if (!response.ok) {
         throw new Error(`Failed to load /config.json (${response.status})`)
     }
@@ -118,6 +157,13 @@ export function gatewayHeaders(userId?: string | null): Record<string, string> {
     }
     if (userId) h['x-user-id'] = userId
     return h
+}
+
+export function controlCenterHeaders(): Record<string, string> {
+    return {
+        'Content-Type': 'application/json',
+        'x-secret-key': CONTROL_CENTER_SECRET_KEY,
+    }
 }
 
 /** Convert a display name to a kebab-case ID. */

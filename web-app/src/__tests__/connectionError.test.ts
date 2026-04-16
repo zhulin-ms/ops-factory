@@ -101,29 +101,6 @@ describe('Inbox page — connection error handling', () => {
     })
 })
 
-describe('Monitoring page — connection error handling', () => {
-    it('imports useGoosed', () => {
-        const src = readSource('app/modules/monitoring/pages/MonitoringPage.tsx')
-        expect(src).toContain("import { useGoosed } from '../../../platform/providers/GoosedContext'")
-    })
-
-    it('shows page-level conn-banner error from GoosedContext', () => {
-        const src = readSource('app/modules/monitoring/pages/MonitoringPage.tsx')
-        expect(src).toContain('DependencyStatus')
-        expect(src).toContain("t('common.connectionError'")
-    })
-
-    it('does not use mon-error-banner class', () => {
-        const src = readSource('app/modules/monitoring/pages/MonitoringPage.tsx')
-        expect(src).not.toContain('mon-error-banner')
-    })
-
-    it('does not have retry button in error banners', () => {
-        const src = readSource('app/modules/monitoring/pages/MonitoringPage.tsx')
-        expect(src).not.toContain('mon-retry-btn')
-    })
-})
-
 describe('Unified error banner CSS class — conn-banner', () => {
     const pagesToCheck = [
         { file: 'app/modules/home/pages/HomePage.tsx', name: 'Home' },
@@ -182,13 +159,6 @@ describe('Error banner position — after page header, before content', () => {
         expect(bannerPos).toBeLessThan(toolbarPos)
     })
 
-    it('Monitoring: page-level conn-banner appears before config-tabs', () => {
-        const src = readSource('app/modules/monitoring/pages/MonitoringPage.tsx')
-        const dependencyStatusPos = src.indexOf('{connectionError && (')
-        const tabsPos = src.indexOf('<div className="config-tabs">')
-        expect(dependencyStatusPos).toBeGreaterThan(-1)
-        expect(dependencyStatusPos).toBeLessThan(tabsPos)
-    })
 })
 
 describe('GoosedContext — timeout and error propagation', () => {

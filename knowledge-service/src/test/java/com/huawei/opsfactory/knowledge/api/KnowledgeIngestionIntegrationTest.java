@@ -137,4 +137,33 @@ class KnowledgeIngestionIntegrationTest extends KnowledgeApiIntegrationTestSuppo
         JsonNode docs = listDocuments(sourceId);
         assertThat(docs.path("total").asInt()).isEqualTo(1);
     }
+
+    @Test
+    void shouldPersistDetectedContentTypeWhenUploadUsesGenericMime() throws Exception {
+        String sourceId = createSource();
+        MockMultipartFile file = new MockMultipartFile(
+            "files",
+            "guide.html",
+            "application/octet-stream",
+            """
+            <html>
+              <body>
+                <h1>CHM import path smoke test</h1>
+                <p>Use detected content type instead of octet-stream.</p>
+              </body>
+            </html>
+            """.getBytes()
+        );
+
+        JsonNode ingest = readJson(mockMvc.perform(multipart("/knowledge/sources/{sourceId}/documents:ingest", sourceId)
+                .file(file))
+            .andExpect(status().isOk())
+            .andReturn());
+        assertThat(ingest.path("documentCount").asInt()).isEqualTo(1);
+
+        JsonNode docs = listDocuments(sourceId);
+        assertThat(docs.path("total").asInt()).isEqualTo(1);
+        assertThat(contentTypeByName(docs, "guide.html"))
+            .isEqualTo("text/html");
+    }
 }

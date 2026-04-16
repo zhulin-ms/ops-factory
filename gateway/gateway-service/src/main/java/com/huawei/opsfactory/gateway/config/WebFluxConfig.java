@@ -36,7 +36,7 @@ public class WebFluxConfig {
                 headers.set("Vary", "Origin");
             }
             headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            headers.set("Access-Control-Allow-Headers", "x-secret-key, x-user-id, content-type, authorization");
+            headers.set("Access-Control-Allow-Headers", "x-secret-key, x-user-id, x-request-id, content-type, authorization");
             headers.set("Access-Control-Expose-Headers", "*");
             headers.set("Access-Control-Max-Age", "3600");
 

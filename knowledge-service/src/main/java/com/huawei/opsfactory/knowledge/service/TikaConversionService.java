@@ -19,6 +19,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.nodes.TextNode;
+import org.jsoup.parser.Parser;
 import org.springframework.stereotype.Service;
 import org.xml.sax.SAXException;
 
@@ -64,7 +65,7 @@ public class TikaConversionService {
             return normalizeMarkdown(Files.readString(file));
         }
         if ("text/html".equalsIgnoreCase(contentType) || lowerFileName.endsWith(".html") || lowerFileName.endsWith(".htm")) {
-            return toMarkdownFromXhtml(Files.readString(file));
+            return toMarkdownFromHtml(Files.readString(file));
         }
         String markdown = toMarkdownFromXhtml(xhtml);
         if (markdown.isBlank()) {
@@ -77,7 +78,17 @@ public class TikaConversionService {
         if (xhtml == null || xhtml.isBlank()) {
             return "";
         }
-        Document document = Jsoup.parse(xhtml);
+        return toMarkdown(Jsoup.parse(xhtml, "", Parser.xmlParser()));
+    }
+
+    private String toMarkdownFromHtml(String html) {
+        if (html == null || html.isBlank()) {
+            return "";
+        }
+        return toMarkdown(Jsoup.parse(html));
+    }
+
+    private String toMarkdown(Document document) {
         document.outputSettings().prettyPrint(false);
         document.select("script,style,meta,link,head,title").remove();
         Element body = document.body();

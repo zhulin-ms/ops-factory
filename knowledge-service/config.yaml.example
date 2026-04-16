@@ -10,12 +10,15 @@ knowledge:
     pool:
       max-size: 5
       min-idle: 1
-
-ops-knowledge:
+  logging:
+    include-query-text: false
   ingest:
     max-file-size-mb: 100
     allowed-content-types:
       - application/pdf
+      - application/vnd.ms-htmlhelp
+      - application/chm
+      - application/x-chm
       - application/vnd.openxmlformats-officedocument.wordprocessingml.document
       - application/vnd.openxmlformats-officedocument.presentationml.presentation
       - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
@@ -83,6 +86,8 @@ ops-knowledge:
     final-top-k: 8
     max-top-k: 64
     rrf-k: 60
+    semantic-threshold: 0.42
+    lexical-threshold: 0.52
     snippet-length: 180
 
   fetch:
@@ -104,3 +109,10 @@ ops-knowledge:
     allow-chunk-delete: true
     allow-explain: true
     allow-request-override: true
+
+logging:
+  level:
+    root: INFO
+    com.huawei.opsfactory.knowledge: INFO
+    com.huawei.opsfactory.knowledge.service.EmbeddingService: WARN
+    com.huawei.opsfactory.knowledge.service.SearchService: INFO

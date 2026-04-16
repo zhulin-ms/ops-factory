@@ -1,1 +1,2 @@
-powershell.exe -ExecutionPolicy Bypass -File                                                    "D:/ss/code/TMP/ops-factory-main/scripts/restart-gateway-webapp.ps1" all 2>&1
+@echo off
+powershell.exe -ExecutionPolicy Bypass -File "%~dp0restart-gateway-webapp.ps1" %*

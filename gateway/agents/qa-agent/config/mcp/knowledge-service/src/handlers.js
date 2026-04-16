@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+import YAML from 'yaml'
 const KNOWLEDGE_SERVICE_URL = process.env.KNOWLEDGE_SERVICE_URL || 'http://127.0.0.1:8092'
-const KNOWLEDGE_DEFAULT_SOURCE_ID = process.env.KNOWLEDGE_DEFAULT_SOURCE_ID || 'src_ac8da09a7cfd'
 const KNOWLEDGE_REQUEST_TIMEOUT_MS = parseInt(process.env.KNOWLEDGE_REQUEST_TIMEOUT_MS || '15000', 10)
 const KNOWLEDGE_FETCH_MAX_NEIGHBOR_WINDOW = 2
+const CONFIG_FILE_PATH = fileURLToPath(new URL('../../../config.yaml', import.meta.url))
 
 const API_PREFIX = '/knowledge'
 import { LOG_FILE_PATH, logError, logInfo } from './logger.js'
@@ -11,7 +14,7 @@ export { LOG_FILE_PATH }
 export const tools = [
   {
     name: 'search',
-    description: 'Search knowledge chunks. Uses the configured default source when sourceIds is omitted.',
+    description: 'Search knowledge chunks. Uses the config.yaml knowledge scope when sourceIds is omitted.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -21,7 +24,7 @@ export const tools = [
         },
         sourceIds: {
           type: 'array',
-          description: 'Optional source IDs. Defaults to the configured QA knowledge source.',
+          description: 'Optional source IDs. Defaults to the config.yaml knowledge scope.',
           items: { type: 'string' },
         },
         documentIds: {
@@ -65,11 +68,27 @@ export const tools = [
   },
 ]
 
-function normalizeSourceIds(sourceIds) {
+async function readSettings() {
+  try {
+    const content = await readFile(CONFIG_FILE_PATH, 'utf-8')
+    const parsed = YAML.parse(content)
+    const sourceId = parsed?.extensions?.['knowledge-service']?.['x-opsfactory']?.knowledgeScope?.sourceId
+    return {
+      sourceId: typeof sourceId === 'string' && sourceId.trim() ? sourceId.trim() : null,
+    }
+  } catch {
+    return {
+      sourceId: null,
+    }
+  }
+}
+
+async function normalizeSourceIds(sourceIds) {
   if (Array.isArray(sourceIds) && sourceIds.length > 0) {
     return sourceIds.filter(Boolean)
   }
-  return KNOWLEDGE_DEFAULT_SOURCE_ID ? [KNOWLEDGE_DEFAULT_SOURCE_ID] : []
+  const settings = await readSettings()
+  return settings.sourceId ? [settings.sourceId] : []
 }
 
 function createTimeoutSignal() {
@@ -124,9 +143,22 @@ export async function handleSearch(args) {
     throw new Error('search.query is required')
   }
 
+  const sourceIds = await normalizeSourceIds(args.sourceIds)
+
+  if (sourceIds.length === 0) {
+    logInfo('knowledge_scope_empty_search_skipped', {
+      query,
+    })
+    return JSON.stringify({
+      query,
+      hits: [],
+      total: 0,
+    }, null, 2)
+  }
+
   const body = {
     query,
-    sourceIds: normalizeSourceIds(args.sourceIds),
+    sourceIds,
     documentIds: args.documentIds || [],
     topK: args.topK ?? 8,
   }

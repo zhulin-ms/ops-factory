@@ -6,12 +6,14 @@ import com.huawei.opsfactory.gateway.common.constants.GatewayConstants;
 import com.huawei.opsfactory.gateway.common.model.ManagedInstance;
 import com.huawei.opsfactory.gateway.common.util.FileUtil;
 import com.huawei.opsfactory.gateway.filter.UserContextFilter;
+import com.huawei.opsfactory.gateway.filter.RequestContextFilter;
+import com.huawei.opsfactory.gateway.logging.GatewayLogContext;
 import com.huawei.opsfactory.gateway.process.InstanceManager;
 import com.huawei.opsfactory.gateway.proxy.GoosedProxy;
 import com.huawei.opsfactory.gateway.service.AgentConfigService;
 import com.huawei.opsfactory.gateway.service.SessionService;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -34,7 +36,7 @@ import org.springframework.http.MediaType;
 @RequestMapping(value = "/gateway")
 public class SessionController {
 
-    private static final Logger log = LogManager.getLogger(SessionController.class);
+    private static final Logger log = LoggerFactory.getLogger(SessionController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final InstanceManager instanceManager;
@@ -56,6 +58,7 @@ public class SessionController {
                                      @RequestBody String body,
                                      ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
+        String requestId = exchange.getAttribute(RequestContextFilter.REQUEST_ID_ATTR);
         long requestStart = System.currentTimeMillis();
         // Inject working_dir into the request body (override any client-supplied value)
         String workingDir = agentConfigService.getUserAgentDir(userId, agentId)
@@ -72,13 +75,13 @@ public class SessionController {
         }
         String finalBody = modifiedBody;
         boolean resident = agentConfigService.isResidentInstance(agentId, userId);
-        log.info("[SESSION-START] begin agentId={} userId={} resident={} bodyLen={}",
-                agentId, userId, resident, body.length());
+        GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-START] begin agentId={} userId={} resident={} bodyLen={}",
+                agentId, userId, resident, body.length()));
         return instanceManager.getOrSpawn(agentId, userId)
                 .flatMap(instance -> {
                     long afterInstanceMs = System.currentTimeMillis() - requestStart;
-                    log.info("[SESSION-START] instance resolved agentId={} userId={} resident={} port={} pid={} resolveMs={}",
-                            agentId, userId, resident, instance.getPort(), instance.getPid(), afterInstanceMs);
+                    GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-START] instance resolved agentId={} userId={} resident={} port={} pid={} resolveMs={}",
+                            agentId, userId, resident, instance.getPort(), instance.getPid(), afterInstanceMs));
                     long startCallStart = System.currentTimeMillis();
                     return goosedProxy.fetchJson(
                         instance.getPort(), HttpMethod.POST, "/agent/start", finalBody, 120, instance.getSecretKey())
@@ -90,17 +93,17 @@ public class SessionController {
                             String sessionId = extractSessionId(startResponse);
                             String resumeBody = "{\"session_id\":\"" + sessionId
                                     + "\",\"load_model_and_extensions\":true}";
-                            log.info("[SESSION-START] goosed start complete agentId={} userId={} sessionId={} port={} startCallMs={}",
-                                    agentId, userId, sessionId, instance.getPort(), startCallMs);
+                            GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-START] goosed start complete agentId={} userId={} sessionId={} port={} startCallMs={}",
+                                    agentId, userId, sessionId, instance.getPort(), startCallMs));
                             long resumeStart = System.currentTimeMillis();
                             return goosedProxy.fetchJson(
                                     instance.getPort(), HttpMethod.POST, "/agent/resume", resumeBody, 120, instance.getSecretKey())
                                     .doOnNext(r -> {
                                         long resumeMs = System.currentTimeMillis() - resumeStart;
                                         instance.markSessionResumed(sessionId);
-                                        log.info("[SESSION-START] session ready agentId={} userId={} sessionId={} resident={} port={} resumeMs={} totalMs={}",
+                                        GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-START] session ready agentId={} userId={} sessionId={} resident={} port={} resumeMs={} totalMs={}",
                                                 agentId, userId, sessionId, resident, instance.getPort(), resumeMs,
-                                                System.currentTimeMillis() - requestStart);
+                                                System.currentTimeMillis() - requestStart));
                                     })
                                     .thenReturn(startResponse);
                         });
@@ -121,6 +124,8 @@ public class SessionController {
     @GetMapping(value = "/sessions", produces = MediaType.APPLICATION_JSON_VALUE)
     public Mono<String> listAllSessions(ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
+        String requestId = exchange.getAttribute(RequestContextFilter.REQUEST_ID_ATTR);
+        GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-LIST] begin userId={}", userId));
         return Flux.fromIterable(instanceManager.getAllInstances())
                 .filter(inst -> inst.getUserId().equals(userId)
                         || GatewayConstants.SYSTEM_USER.equals(inst.getUserId()))
@@ -133,6 +138,7 @@ public class SessionController {
                     for (List<String> batch : lists) {
                         allSessions.addAll(batch);
                     }
+                    GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-LIST] complete userId={} sessions={}", userId, allSessions.size()));
                     return "{\"sessions\":[" + String.join(",", allSessions) + "]}";
                 });
     }
@@ -189,9 +195,13 @@ public class SessionController {
                                     @PathVariable String sessionId,
                                     ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
+        String requestId = exchange.getAttribute(RequestContextFilter.REQUEST_ID_ATTR);
+        GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-GET] begin agentId={} userId={} sessionId={}", agentId, userId, sessionId));
         return instanceManager.getOrSpawn(agentId, userId)
                 .flatMap(instance -> goosedProxy.fetchJson(instance.getPort(), "/sessions/" + sessionId, instance.getSecretKey()))
                 .map(json -> injectAgentId(json, agentId))
+                .doOnSuccess(json -> GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-GET] complete agentId={} userId={} sessionId={}",
+                        agentId, userId, sessionId)))
                 .onErrorResume(WebClientResponseException.class, e -> {
                     if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
                         return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "session not found"));
@@ -208,9 +218,13 @@ public class SessionController {
                                           @RequestParam String agentId,
                                           ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
+        String requestId = exchange.getAttribute(RequestContextFilter.REQUEST_ID_ATTR);
+        GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-GET] begin agentId={} userId={} sessionId={} scope=global", agentId, userId, sessionId));
         return instanceManager.getOrSpawn(agentId, userId)
                 .flatMap(instance -> goosedProxy.fetchJson(instance.getPort(), "/sessions/" + sessionId, instance.getSecretKey()))
                 .map(json -> injectAgentId(json, agentId))
+                .doOnSuccess(json -> GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-GET] complete agentId={} userId={} sessionId={} scope=global",
+                        agentId, userId, sessionId)))
                 .onErrorResume(WebClientResponseException.class, e -> {
                     if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
                         return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "session not found"));
@@ -224,12 +238,16 @@ public class SessionController {
                                      @PathVariable String sessionId,
                                      ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
+        String requestId = exchange.getAttribute(RequestContextFilter.REQUEST_ID_ATTR);
+        GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-DELETE] begin agentId={} userId={} sessionId={}", agentId, userId, sessionId));
         Mono.fromRunnable(() -> cleanupUploads(userId, agentId, sessionId))
                 .subscribeOn(Schedulers.boundedElastic()).subscribe();
         return instanceManager.getOrSpawn(agentId, userId)
                 .flatMap(instance -> goosedProxy.proxy(
                         exchange.getRequest(), exchange.getResponse(),
-                        instance.getPort(), "/sessions/" + sessionId, instance.getSecretKey()));
+                        instance.getPort(), "/sessions/" + sessionId, instance.getSecretKey()))
+                .doOnSuccess(ignored -> GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-DELETE] complete agentId={} userId={} sessionId={}",
+                        agentId, userId, sessionId)));
     }
 
     /**
@@ -240,12 +258,16 @@ public class SessionController {
                                            @RequestParam String agentId,
                                            ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
+        String requestId = exchange.getAttribute(RequestContextFilter.REQUEST_ID_ATTR);
+        GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-DELETE] begin agentId={} userId={} sessionId={} scope=global", agentId, userId, sessionId));
         Mono.fromRunnable(() -> cleanupUploads(userId, agentId, sessionId))
                 .subscribeOn(Schedulers.boundedElastic()).subscribe();
         return instanceManager.getOrSpawn(agentId, userId)
                 .flatMap(instance -> goosedProxy.proxy(
                         exchange.getRequest(), exchange.getResponse(),
-                        instance.getPort(), "/sessions/" + sessionId, instance.getSecretKey()));
+                        instance.getPort(), "/sessions/" + sessionId, instance.getSecretKey()))
+                .doOnSuccess(ignored -> GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-DELETE] complete agentId={} userId={} sessionId={} scope=global",
+                        agentId, userId, sessionId)));
     }
 
     /**
@@ -287,10 +309,15 @@ public class SessionController {
                                      @RequestBody String body,
                                      ServerWebExchange exchange) {
         String userId = exchange.getAttribute(UserContextFilter.USER_ID_ATTR);
+        String requestId = exchange.getAttribute(RequestContextFilter.REQUEST_ID_ATTR);
+        GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-RENAME] begin agentId={} userId={} sessionId={} bodyLen={}",
+                agentId, userId, sessionId, body.length()));
         return instanceManager.getOrSpawn(agentId, userId)
                 .flatMap(instance -> goosedProxy.proxyWithBody(
                         exchange.getResponse(), instance.getPort(),
                         "/sessions/" + sessionId + "/name",
-                        HttpMethod.PUT, body, instance.getSecretKey()));
+                        HttpMethod.PUT, body, instance.getSecretKey()))
+                .doOnSuccess(ignored -> GatewayLogContext.run(requestId, userId, () -> log.info("[SESSION-RENAME] complete agentId={} userId={} sessionId={}",
+                        agentId, userId, sessionId)));
     }
 }

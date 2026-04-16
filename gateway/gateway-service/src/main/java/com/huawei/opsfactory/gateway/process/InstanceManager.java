@@ -7,8 +7,8 @@ import com.huawei.opsfactory.gateway.common.model.ManagedInstance;
 import com.huawei.opsfactory.gateway.common.util.ProcessUtil;
 import com.huawei.opsfactory.gateway.config.GatewayProperties;
 import com.huawei.opsfactory.gateway.service.AgentConfigService;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -47,7 +47,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @org.springframework.context.annotation.DependsOn("systemUserMigrationService")
 public class InstanceManager {
 
-    private static final Logger log = LogManager.getLogger(InstanceManager.class);
+    private static final Logger log = LoggerFactory.getLogger(InstanceManager.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -479,7 +479,8 @@ public class InstanceManager {
         env.put("GOOSE_SERVER__SECRET_KEY", hexSecret.toString());
         env.put("GOOSE_PATH_ROOT", runtimeRoot.toString());
         env.put("GOOSE_DISABLE_KEYRING", "1");
-
+        env.put("XDG_CONFIG_HOME",
+                agentConfigService.getAgentConfigDir(agentId).toAbsolutePath().normalize().toString());
         boolean gooseTlsValue = properties.isGooseTls();
         env.put("GOOSE_TLS", String.valueOf(gooseTlsValue));
         log.info("buildEnvironment: properties.isGooseTls()={}, setting GOOSE_TLS={} for {}:{}",

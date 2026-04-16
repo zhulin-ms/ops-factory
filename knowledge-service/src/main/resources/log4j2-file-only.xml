@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+    <Properties>
+        <Property name="APP_NAME">knowledge-service</Property>
+        <Property name="LOG_DIR">${sys:user.dir}/logs</Property>
+        <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [service=${APP_NAME} requestId=%X{requestId} sourceId=%X{sourceId} documentId=%X{documentId} jobId=%X{jobId}] [%t] %logger{36} - %msg%n%throwable</Property>
+    </Properties>
+
+    <Appenders>
+        <RollingFile name="File"
+                     fileName="${LOG_DIR}/knowledge-service.log"
+                     filePattern="${LOG_DIR}/knowledge-service-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="${LOG_PATTERN}" />
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" />
+                <SizeBasedTriggeringPolicy size="100MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="30" />
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <Logger name="com.huawei.opsfactory.knowledge" level="${sys:logging.level.com.huawei.opsfactory.knowledge:-INFO}" />
+        <Logger name="org.springframework" level="${sys:logging.level.org.springframework:-WARN}" />
+        <Logger name="org.flywaydb" level="${sys:logging.level.org.flywaydb:-INFO}" />
+        <Logger name="com.zaxxer.hikari" level="${sys:logging.level.com.zaxxer.hikari:-INFO}" />
+
+        <Root level="${sys:logging.level.root:-INFO}">
+            <AppenderRef ref="File" />
+        </Root>
+    </Loggers>
+</Configuration>

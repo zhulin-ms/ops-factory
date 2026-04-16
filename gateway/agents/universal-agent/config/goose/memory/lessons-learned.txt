@@ -1,0 +1,20 @@
+# redis connection-pool
+2024-11 Redis 连接池耗尽导致订单服务雪崩，根因是 Jedis 默认 maxTotal=8 太小
+修复：统一调整为 maxTotal=64、maxIdle=32、minIdle=8，增加连接池监控告警
+
+# dns-ttl
+2024-09 切换数据库 VIP 后部分 Pod 仍连旧地址，因为 JVM 默认缓存 DNS 永不过期
+修复：JVM 启动参数加 -Dsun.net.inetaddr.ttl=30，CoreDNS TTL 设为 30s
+
+# oom-kill
+2025-01 Elasticsearch 节点频繁 OOM Kill，kernel 日志显示 memory cgroup 限制触发
+根因：ES JVM heap 设为节点内存 80%，没给 OS page cache 留空间
+修复：JVM heap 调为节点内存 50%，file cache 需求靠剩余内存满足
+
+# cert-expiry
+2024-12 凌晨 TLS 证书过期导致全站 502，cert-manager 续签失败但没人注意告警
+修复：增加证书到期 30 天 / 7 天 / 1 天三级告警，续签失败直接 PagerDuty 电话通知
+
+# cronjob-overlap
+2025-02 数据同步 CronJob 执行时间超过调度间隔，导致多实例并发写入数据错乱
+修复：CronJob 设置 concurrencyPolicy=Forbid，脚本内加 flock 文件锁

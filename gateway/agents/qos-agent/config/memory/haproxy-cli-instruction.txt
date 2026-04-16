@@ -1,0 +1,2 @@
+1.haproxy的关键日志在$HOME下
+2.haproxy的下游监听配置文件位置：/etc/haproxy/haproxy.cfg

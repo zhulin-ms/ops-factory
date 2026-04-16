@@ -3,6 +3,7 @@ package com.huawei.opsfactory.gateway.controller;
 import com.huawei.opsfactory.gateway.config.GatewayProperties;
 import com.huawei.opsfactory.gateway.filter.AuthWebFilter;
 import com.huawei.opsfactory.gateway.filter.UserContextFilter;
+import com.huawei.opsfactory.gateway.service.CommandWhitelistService;
 import com.huawei.opsfactory.gateway.service.RemoteExecutionService;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -33,6 +34,9 @@ public class RemoteExecControllerTest {
 
     @MockBean
     private com.huawei.opsfactory.gateway.process.PrewarmService prewarmService;
+
+    @MockBean
+    private CommandWhitelistService commandWhitelistService;
 
     // ── execute: validation ──────────────────────────────────────
 

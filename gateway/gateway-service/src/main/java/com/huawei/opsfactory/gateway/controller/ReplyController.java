@@ -11,8 +11,8 @@ import com.huawei.opsfactory.gateway.proxy.GoosedProxy;
 import com.huawei.opsfactory.gateway.proxy.SseRelayService;
 import com.huawei.opsfactory.gateway.service.AgentConfigService;
 import com.huawei.opsfactory.gateway.service.FileService;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpMethod;
@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @RequestMapping("/gateway/agents/{agentId}")
 public class ReplyController {
 
-    private static final Logger log = LogManager.getLogger(ReplyController.class);
+    private static final Logger log = LoggerFactory.getLogger(ReplyController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final InstanceManager instanceManager;
@@ -180,7 +180,7 @@ public class ReplyController {
      */
     private List<Map<String, Object>> snapshotFiles(Path workingDir) {
         try {
-            return fileService.listFiles(workingDir);
+            return fileService.listTopLevelFiles(workingDir);
         } catch (Exception e) {
             log.debug("[REPLY] file snapshot failed (best-effort): {}", e.getMessage());
             return Collections.emptyList();
@@ -194,7 +194,7 @@ public class ReplyController {
     private Mono<DataBuffer> buildOutputFilesEvent(Path workingDir, String sessionId,
                                                     List<Map<String, Object>> beforeFiles) {
         try {
-            List<Map<String, Object>> afterFiles = fileService.listFiles(workingDir);
+            List<Map<String, Object>> afterFiles = fileService.listTopLevelFiles(workingDir);
             List<Map<String, String>> changed = fileService.diffFiles(beforeFiles, afterFiles);
             if (changed.isEmpty()) {
                 return Mono.empty();

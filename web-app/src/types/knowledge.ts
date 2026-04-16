@@ -103,6 +103,8 @@ export interface KnowledgeDefaults {
         semanticTopK: number
         finalTopK: number
         rrfK: number
+        semanticThreshold: number
+        lexicalThreshold: number
     }
     features: KnowledgeFeatureFlags
 }
@@ -118,9 +120,19 @@ export interface KnowledgeProfileSummary {
 export interface KnowledgeProfileDetail {
     id: string
     name: string
+    scope?: string
+    readonly?: boolean
+    ownerSourceId?: string | null
+    derivedFromProfileId?: string | null
     config: Record<string, unknown>
     createdAt: string
     updatedAt: string
+}
+
+export interface KnowledgeSourceProfileConfig extends KnowledgeProfileDetail {
+    sourceId: string
+    rebuildRequired: boolean
+    createdFromDefault: boolean
 }
 
 export interface KnowledgeDocumentSummary {

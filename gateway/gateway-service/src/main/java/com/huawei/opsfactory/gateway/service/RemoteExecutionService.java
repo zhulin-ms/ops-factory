@@ -4,8 +4,8 @@ import com.huawei.opsfactory.gateway.config.GatewayProperties;
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -18,7 +18,7 @@ import java.util.Map;
 @Service
 public class RemoteExecutionService {
 
-    private static final Logger log = LogManager.getLogger(RemoteExecutionService.class);
+    private static final Logger log = LoggerFactory.getLogger(RemoteExecutionService.class);
 
     private final HostService hostService;
     private final CommandWhitelistService commandWhitelistService;
@@ -38,7 +38,7 @@ public class RemoteExecutionService {
      * @param hostId         the host ID to connect to
      * @param command        the shell command to execute
      * @param timeoutSeconds maximum execution time in seconds
-     * @return result map with hostId, hostName, exitCode, output, error, duration
+     * @return result map with hostIp, username, hostName, exitCode, output, error, duration
      */
     public Map<String, Object> execute(String hostId, String command, int timeoutSeconds) {
         // Step 1: Get host with decrypted credential
@@ -47,7 +47,8 @@ public class RemoteExecutionService {
             host = hostService.getHostWithCredential(hostId);
         } catch (IllegalArgumentException e) {
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("hostId", hostId);
+            result.put("hostIp", "");
+            result.put("username", "");
             result.put("hostName", "");
             result.put("exitCode", -1);
             result.put("output", "");
@@ -67,7 +68,8 @@ public class RemoteExecutionService {
         List<String> rejected = commandWhitelistService.validateCommand(command);
         if (!rejected.isEmpty()) {
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("hostId", hostId);
+            result.put("hostIp", hostname);
+            result.put("username", username);
             result.put("hostName", hostName);
             result.put("exitCode", -1);
             result.put("output", "");
@@ -158,7 +160,8 @@ public class RemoteExecutionService {
             String errorOutput = errorBuffer.toString(StandardCharsets.UTF_8);
 
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("hostId", hostId);
+            result.put("hostIp", hostname);
+            result.put("username", username);
             result.put("hostName", hostName);
             result.put("exitCode", exitCode);
             result.put("output", output);
@@ -171,7 +174,8 @@ public class RemoteExecutionService {
             log.error("SSH execution failed for host {}: {}", hostId, e.getMessage());
 
             Map<String, Object> result = new LinkedHashMap<>();
-            result.put("hostId", hostId);
+            result.put("hostIp", hostname);
+            result.put("username", username);
             result.put("hostName", hostName);
             result.put("exitCode", -1);
             result.put("output", "");

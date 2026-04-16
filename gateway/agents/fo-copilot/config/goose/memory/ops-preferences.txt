@@ -1,0 +1,24 @@
+# change-management #crm
+变更窗口：工作日 10:00-12:00 或 14:00-16:00，禁止周五下午和节假日前一天变更
+所有生产变更必须有回滚方案，回滚时间不超过 5 分钟
+数据库 DDL 变更必须使用 pt-online-schema-change 或 gh-ost，禁止直接 ALTER TABLE
+
+# incident-response #mobilemoney
+P0 故障 5 分钟内拉群，15 分钟内出初步定位，1 小时内恢复服务
+故障优先恢复服务（重启/切流/降级），事后再查根因
+每次 P0/P1 故障 48 小时内完成复盘，产出改进 Action 并录入 Jira
+
+# deployment
+生产发布一律灰度：先 1% → 10% → 50% → 100%，每阶段观察 10 分钟
+容器资源配置 requests 必须等于 limits（保证 QoS = Guaranteed）
+禁止使用 latest 标签，镜像必须固定版本号（语义化版本 + git short hash）
+
+# troubleshooting
+排查问题先看监控大盘，再看日志，最后抓包，避免盲目重启
+日志查询优先用结构化字段过滤，不要全文搜索
+怀疑网络问题时先用 curl/telnet 确认四层连通性，再用 tcpdump 抓包
+
+# communication
+技术方案和故障报告用中文撰写
+告警消息模板包含：服务名、集群、影响范围、当前值、阈值、Grafana 链接
+给上级汇报时先说结论和影响，再说原因和措施

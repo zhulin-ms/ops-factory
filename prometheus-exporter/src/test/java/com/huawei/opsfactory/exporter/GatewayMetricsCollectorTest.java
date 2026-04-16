@@ -18,14 +18,15 @@ class GatewayMetricsCollectorTest {
         props.setCollectTimeoutMs(2000);
 
         GatewayMetricsCollector collector = new GatewayMetricsCollector(props, path -> {
-            if ("/monitoring/system".equals(path)) {
+            if ("/runtime-source/system".equals(path)) {
                 return Map.of(
                     "gateway", Map.of("uptimeMs", 123456, "host", "127.0.0.1", "port", 3000),
                     "agents", Map.of("configured", 3),
-                    "idle", Map.of("timeoutMs", 900000)
+                    "idle", Map.of("timeoutMs", 900000),
+                    "langfuse", Map.of("configured", true, "host", "http://langfuse:3000")
                 );
             }
-            if ("/monitoring/instances".equals(path)) {
+            if ("/runtime-source/instances".equals(path)) {
                 return Map.of(
                     "totalInstances", 3,
                     "runningInstances", 2,
@@ -45,9 +46,6 @@ class GatewayMetricsCollectorTest {
                         )
                     )
                 );
-            }
-            if ("/monitoring/status".equals(path)) {
-                return Map.of("enabled", true);
             }
             return Map.of();
         });
@@ -78,18 +76,16 @@ class GatewayMetricsCollectorTest {
         props.setCollectTimeoutMs(2000);
 
         GatewayMetricsCollector collector = new GatewayMetricsCollector(props, path -> {
-            if ("/monitoring/system".equals(path)) {
+            if ("/runtime-source/system".equals(path)) {
                 return Map.of(
                     "gateway", Map.of("uptimeMs", 1000),
                     "agents", Map.of("configured", 0),
-                    "idle", Map.of("timeoutMs", 900000)
+                    "idle", Map.of("timeoutMs", 900000),
+                    "langfuse", Map.of("configured", false)
                 );
             }
-            if ("/monitoring/instances".equals(path)) {
+            if ("/runtime-source/instances".equals(path)) {
                 return Map.of("byAgent", List.of());
-            }
-            if ("/monitoring/status".equals(path)) {
-                return Map.of("enabled", false);
             }
             return Map.of();
         });
@@ -125,14 +121,15 @@ class GatewayMetricsCollectorTest {
         props.setCollectTimeoutMs(500);
 
         GatewayMetricsCollector collector = new GatewayMetricsCollector(props, path -> {
-            if ("/monitoring/system".equals(path)) {
+            if ("/runtime-source/system".equals(path)) {
                 return Map.of(
                     "gateway", Map.of("uptimeMs", 1000),
                     "agents", Map.of("configured", 1),
-                    "idle", Map.of("timeoutMs", 900000)
+                    "idle", Map.of("timeoutMs", 900000),
+                    "langfuse", Map.of("configured", false)
                 );
             }
-            // /monitoring/instances fails
+            // /runtime-source/instances fails
             throw new IOException("instances endpoint down");
         });
 
@@ -149,18 +146,16 @@ class GatewayMetricsCollectorTest {
         props.setCollectTimeoutMs(2000);
 
         GatewayMetricsCollector collector = new GatewayMetricsCollector(props, path -> {
-            if ("/monitoring/system".equals(path)) {
+            if ("/runtime-source/system".equals(path)) {
                 return Map.of(
                     "gateway", Map.of("uptimeMs", 5000),
                     "agents", Map.of("configured", 2),
-                    "idle", Map.of("timeoutMs", 900000)
+                    "idle", Map.of("timeoutMs", 900000),
+                    "langfuse", Map.of("configured", false)
                 );
             }
-            if ("/monitoring/instances".equals(path)) {
+            if ("/runtime-source/instances".equals(path)) {
                 return Map.of("byAgent", List.of());
-            }
-            if ("/monitoring/status".equals(path)) {
-                return Map.of("enabled", false);
             }
             return Map.of();
         });
@@ -184,14 +179,15 @@ class GatewayMetricsCollectorTest {
 
         // First collect: 2 instances
         GatewayMetricsCollector collector = new GatewayMetricsCollector(props, path -> {
-            if ("/monitoring/system".equals(path)) {
+            if ("/runtime-source/system".equals(path)) {
                 return Map.of(
                     "gateway", Map.of("uptimeMs", 1000),
                     "agents", Map.of("configured", 1),
-                    "idle", Map.of("timeoutMs", 900000)
+                    "idle", Map.of("timeoutMs", 900000),
+                    "langfuse", Map.of("configured", false)
                 );
             }
-            if ("/monitoring/instances".equals(path)) {
+            if ("/runtime-source/instances".equals(path)) {
                 return Map.of("byAgent", List.of(
                     Map.of("agentId", "a1", "instances", List.of(
                         Map.<String, Object>of("userId", "alice", "port", 50001, "pid", 1001,
@@ -200,9 +196,6 @@ class GatewayMetricsCollectorTest {
                             "status", "running", "lastActivity", NOW - 2000)
                     ))
                 ));
-            }
-            if ("/monitoring/status".equals(path)) {
-                return Map.of("enabled", false);
             }
             return Map.of();
         });
@@ -214,23 +207,21 @@ class GatewayMetricsCollectorTest {
         // Second collect: only 1 instance (bob gone), using a new mock via another collector
         // Since we can't swap the GatewayApi, we create a new collector to verify clean state
         GatewayMetricsCollector collector2 = new GatewayMetricsCollector(props, path -> {
-            if ("/monitoring/system".equals(path)) {
+            if ("/runtime-source/system".equals(path)) {
                 return Map.of(
                     "gateway", Map.of("uptimeMs", 2000),
                     "agents", Map.of("configured", 1),
-                    "idle", Map.of("timeoutMs", 900000)
+                    "idle", Map.of("timeoutMs", 900000),
+                    "langfuse", Map.of("configured", false)
                 );
             }
-            if ("/monitoring/instances".equals(path)) {
+            if ("/runtime-source/instances".equals(path)) {
                 return Map.of("byAgent", List.of(
                     Map.of("agentId", "a1", "instances", List.of(
                         Map.<String, Object>of("userId", "alice", "port", 50001, "pid", 1001,
                             "status", "running", "lastActivity", NOW - 1000)
                     ))
                 ));
-            }
-            if ("/monitoring/status".equals(path)) {
-                return Map.of("enabled", false);
             }
             return Map.of();
         });
@@ -253,23 +244,21 @@ class GatewayMetricsCollectorTest {
         props.setCollectTimeoutMs(2000);
 
         GatewayMetricsCollector collector = new GatewayMetricsCollector(props, path -> {
-            if ("/monitoring/system".equals(path)) {
+            if ("/runtime-source/system".equals(path)) {
                 return Map.of(
                     "gateway", Map.of("uptimeMs", 1000),
                     "agents", Map.of("configured", 1),
-                    "idle", Map.of("timeoutMs", 900000)
+                    "idle", Map.of("timeoutMs", 900000),
+                    "langfuse", Map.of("configured", false)
                 );
             }
-            if ("/monitoring/instances".equals(path)) {
+            if ("/runtime-source/instances".equals(path)) {
                 return Map.of("byAgent", List.of(
                     Map.of("agentId", "a1", "instances", List.of(
                         Map.<String, Object>of("userId", "alice", "port", 50001, "pid", 1001,
                             "status", "unknown_status", "lastActivity", NOW - 1000)
                     ))
                 ));
-            }
-            if ("/monitoring/status".equals(path)) {
-                return Map.of("enabled", false);
             }
             return Map.of();
         });

@@ -1,0 +1,29 @@
+server:
+  port: 39001
+  address: 127.0.0.1
+
+gateway:
+  secret-key: imported-test-key
+  cors-origin: https://example.test
+  goosed-bin: goosed
+  goose-tls: false
+
+  paths:
+    project-root: ../..
+    agents-dir: agents
+    users-dir: users
+
+  idle:
+    timeout-minutes: 21
+    check-interval-ms: 61000
+
+  logging:
+    access-log-enabled: false
+    include-upstream-error-body: true
+    include-sse-chunk-preview: true
+    sse-chunk-preview-max-chars: 42
+
+logging:
+  level:
+    root: WARN
+    com.huawei.opsfactory.gateway: DEBUG

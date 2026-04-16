@@ -58,6 +58,19 @@ public class FileServiceTest {
     }
 
     @Test
+    public void testListTopLevelFiles_nonRecursive() throws IOException {
+        File subDir = tempFolder.newFolder("subdir");
+        try (FileWriter w = new FileWriter(new File(subDir, "nested.txt"))) {
+            w.write("nested content");
+        }
+        createFile("top.txt", "top");
+
+        List<Map<String, Object>> files = fileService.listTopLevelFiles(tempFolder.getRoot().toPath());
+        assertEquals(1, files.size());
+        assertEquals("top.txt", files.get(0).get("name"));
+    }
+
+    @Test
     public void testListFiles_nonExistentDir() throws IOException {
         List<Map<String, Object>> files = fileService.listFiles(
                 tempFolder.getRoot().toPath().resolve("nonexistent"));

@@ -29,6 +29,10 @@ export interface McpEntry {
   available_tools?: string[];
 }
 
+export interface McpSettings {
+  sourceId?: string | null;
+}
+
 export interface McpResponse {
   extensions: McpEntry[];
   warnings: string[];

@@ -8,12 +8,14 @@ const validIcons = new Set<IconKey>([
     'history',
     'inbox',
     'files',
+    'channels',
     'diagnosis',
     'businessIntelligence',
     'agents',
     'knowledge',
     'scheduler',
     'monitoring',
+    'hostResource',
 ])
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -60,4 +62,3 @@ export function validateModules(modules: AppModule[]) {
         }
     }
 }
-

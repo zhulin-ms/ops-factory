@@ -8,10 +8,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huawei.opsfactory.knowledge.config.KnowledgeProperties;
 import com.huawei.opsfactory.knowledge.repository.EmbeddingRepository;
+import com.huawei.opsfactory.knowledge.support.TestLogAppender;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -199,6 +201,24 @@ class EmbeddingServiceTest {
 
         org.assertj.core.api.Assertions.assertThat(service.expectedEmbeddingDimension()).isEqualTo(1024);
         org.assertj.core.api.Assertions.assertThat(service.embedQuery("ITSM deployment")).hasSize(1024);
+    }
+
+    @Test
+    void shouldLogWarningWhenRemoteEmbeddingFallsBackToLocal() {
+        KnowledgeProperties properties = new KnowledgeProperties();
+        properties.getEmbedding().setApiKey("test-key");
+        properties.getEmbedding().setBaseUrl("http://127.0.0.1:1");
+        properties.getEmbedding().setTimeoutMs(200);
+        EmbeddingRepository repository = mock(EmbeddingRepository.class);
+        when(repository.findByContentHashes(eq(properties.getEmbedding().getModel()), eq(1024), anyCollection())).thenReturn(Map.of());
+
+        EmbeddingService service = new EmbeddingService(properties, repository, new ObjectMapper());
+
+        try (TestLogAppender appender = TestLogAppender.attachTo(EmbeddingService.class)) {
+            assertThat(service.embedQuery("fallback test")).hasSize(1024);
+            assertThat(appender.formattedMessages())
+                .anySatisfy(message -> assertThat(message).contains("Remote embedding failed, falling back to local embeddings"));
+        }
     }
 
     private List<Double> createVector(int size, double value) {

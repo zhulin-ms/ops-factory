@@ -1,7 +1,7 @@
 package com.huawei.opsfactory.gateway.hook;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -10,7 +10,7 @@ import java.util.List;
 @Component
 public class HookPipeline {
 
-    private static final Logger log = LogManager.getLogger(HookPipeline.class);
+    private static final Logger log = LoggerFactory.getLogger(HookPipeline.class);
 
     private final List<RequestHook> hooks;
 

@@ -5,13 +5,18 @@ import './Message.css'
 import './ToolCallDisplay.css'
 import ToolCallDisplay from './ToolCallDisplay'
 import CitationMark from '../renderers/CitationMark'
+import FileCitationMark from '../renderers/FileCitationMark'
+import FileReferenceList from '../renderers/FileReferenceList'
 import ReferenceList from '../renderers/ReferenceList'
 import { createCleanMermaidHtml } from '../renderers/UIResourceRenderer'
 import { usePreview } from '../providers/PreviewContext'
 import { mergeCitationMetadata, parseCitations, replaceCitationsWithPlaceholders, type Citation } from '../../../utils/citationParser'
+import { parseFileCitations, replaceFileCitationsWithPlaceholders, type FileCitation } from '../../../utils/fileCitationParser'
 import { getDisplayTextContent, getFullTextContent, getReasoningContent, getThinkingContent } from '../../../utils/messageContent'
 import { GATEWAY_URL, GATEWAY_SECRET_KEY } from '../../../config/runtime'
 import type { ChatMessage, DetectedFile, ToolResponseMap } from '../../../types/message'
+import GooseAvatarIcon from './GooseAvatarIcon'
+import UserAvatarIcon from './UserAvatarIcon'
 
 interface MessageProps {
     message: ChatMessage
@@ -465,21 +470,25 @@ function MessageInner({
 
     const rawDisplayText = !isUser ? (displayTextFromContent || fullText) : fullText
     const parsedCitations: Citation[] = !isUser && rawDisplayText ? parseCitations(rawDisplayText) : []
+    const parsedFileCitations: FileCitation[] = !isUser && rawDisplayText ? parseFileCitations(rawDisplayText) : []
     const citations = mergeCitationMetadata(parsedCitations, sourceDocuments || [])
     const citationMap = new Map(citations.map(c => [c.index, c]))
+    const fileCitationMap = new Map(parsedFileCitations.map(c => [c.index, c]))
     const retrievedDocuments = sourceDocuments?.length ? sourceDocuments : (fetchedDocuments || [])
 
-    const displayText = citations.length > 0
-        ? replaceCitationsWithPlaceholders(rawDisplayText)
+    const displayText = citations.length > 0 || parsedFileCitations.length > 0
+        ? replaceFileCitationsWithPlaceholders(replaceCitationsWithPlaceholders(rawDisplayText))
             .replace(/```[ \t]*\[CITE_/g, '```\n\n[CITE_')
+            .replace(/```[ \t]*\[FILECITE_/g, '```\n\n[FILECITE_')
         : rawDisplayText
     const shouldShowCitedReferences = !isUser && !isStreaming && citations.length > 0
+    const shouldShowCitedFileReferences = !isUser && !isStreaming && parsedFileCitations.length > 0
     const shouldShowRetrievedReferences = !isUser && !isStreaming && retrievedDocuments.length > 0
 
     return (
         <div className={`message ${isUser ? 'user' : 'assistant'} animate-slide-in`}>
             <div className="message-avatar">
-                {isUser ? 'U' : 'G'}
+                {isUser ? <UserAvatarIcon className="message-avatar-icon" /> : <GooseAvatarIcon className="message-avatar-icon" />}
             </div>
             <div className="message-body">
                 <div className="message-content">
@@ -583,6 +592,12 @@ function MessageInner({
                                             if (citation) return <CitationMark citation={citation} />
                                             return <>{children}</>
                                         }
+                                        if (href?.startsWith('#filecite-')) {
+                                            const index = parseInt(href.replace('#filecite-', ''), 10)
+                                            const citation = fileCitationMap.get(index)
+                                            if (citation) return <FileCitationMark citation={citation} />
+                                            return <>{children}</>
+                                        }
                                         if (href && !href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:') && agentId) {
                                             return (
                                                 <span className="file-link-group">
@@ -631,6 +646,10 @@ function MessageInner({
 
                     {shouldShowCitedReferences && displayText && (
                         <ReferenceList citations={citations} label="回答中引用的资料" variant="cited" />
+                    )}
+
+                    {shouldShowCitedFileReferences && displayText && (
+                        <FileReferenceList citations={parsedFileCitations} agentId={agentId} />
                     )}
 
                     {shouldShowRetrievedReferences && displayText && (

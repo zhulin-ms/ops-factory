@@ -3,8 +3,8 @@ package com.huawei.opsfactory.gateway.process;
 import com.huawei.opsfactory.gateway.common.model.ManagedInstance;
 import com.huawei.opsfactory.gateway.config.GatewayProperties;
 import com.huawei.opsfactory.gateway.service.AgentConfigService;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +18,7 @@ import java.util.Set;
 @Component
 public class InstanceWatchdog {
 
-    private static final Logger log = LogManager.getLogger(InstanceWatchdog.class);
+    private static final Logger log = LoggerFactory.getLogger(InstanceWatchdog.class);
 
     private final InstanceManager instanceManager;
     private final GatewayProperties properties;

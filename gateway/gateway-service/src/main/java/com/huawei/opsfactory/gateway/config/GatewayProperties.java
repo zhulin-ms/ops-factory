@@ -1,17 +1,20 @@
 package com.huawei.opsfactory.gateway.config;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 @Component
 @ConfigurationProperties(prefix = "gateway")
 public class GatewayProperties {
 
-    private static final Logger log = LogManager.getLogger(GatewayProperties.class);
+    private static final Logger log = LoggerFactory.getLogger(GatewayProperties.class);
+    private static final String CONFIG_PATH_KEY = "GATEWAY_CONFIG_PATH";
 
     private String secretKey = "test";
     private String corsOrigin = "http://127.0.0.1:5173";
@@ -26,6 +29,7 @@ public class GatewayProperties {
     private Sse sse = new Sse();
     private Langfuse langfuse = new Langfuse();
     private OfficePreview officePreview = new OfficePreview();
+    private Logging logging = new Logging();
     private String credentialEncryptionKey = "changeit-changeit-changeit-32";
     private RemoteExecution remoteExecution = new RemoteExecution();
 
@@ -131,6 +135,14 @@ public class GatewayProperties {
         this.officePreview = officePreview;
     }
 
+    public Logging getLogging() {
+        return logging;
+    }
+
+    public void setLogging(Logging logging) {
+        this.logging = logging;
+    }
+
     public String getCredentialEncryptionKey() {
         return credentialEncryptionKey;
     }
@@ -145,6 +157,59 @@ public class GatewayProperties {
 
     public void setRemoteExecution(RemoteExecution remoteExecution) {
         this.remoteExecution = remoteExecution;
+    }
+
+    public Path getConfigPath() {
+        String configuredPath = configuredConfigPath();
+        if (configuredPath == null || configuredPath.isBlank()) {
+            return Path.of("config.yaml").toAbsolutePath().normalize();
+        }
+
+        Path configPath = Path.of(configuredPath);
+        if (configPath.isAbsolute()) {
+            return configPath.normalize();
+        }
+        return Path.of("").toAbsolutePath().resolve(configPath).normalize();
+    }
+
+    public Path getConfigDirectory() {
+        Path configPath = getConfigPath();
+        Path parent = configPath.getParent();
+        if (parent != null) {
+            return parent;
+        }
+        return Path.of("").toAbsolutePath().normalize();
+    }
+
+    public Path getProjectRootPath() {
+        Path configuredRoot = Path.of(paths.getProjectRoot());
+        if (configuredRoot.isAbsolute()) {
+            return configuredRoot.normalize();
+        }
+        if (configuredConfigPath() != null) {
+            return getConfigDirectory().resolve(configuredRoot).normalize();
+        }
+        return configuredRoot.toAbsolutePath().normalize();
+    }
+
+    public Path getGatewayRootPath() {
+        if (configuredConfigPath() == null) {
+            return getProjectRootPath().resolve("gateway").normalize();
+        }
+        Path configPath = getConfigPath();
+        Path configDir = getConfigDirectory();
+        if ("config.yaml".equals(configPath.getFileName() != null ? configPath.getFileName().toString() : "")) {
+            return configDir;
+        }
+        return getProjectRootPath().resolve("gateway").normalize();
+    }
+
+    private String configuredConfigPath() {
+        String configuredPath = System.getProperty(CONFIG_PATH_KEY);
+        if (configuredPath == null || configuredPath.isBlank()) {
+            configuredPath = System.getenv(CONFIG_PATH_KEY);
+        }
+        return (configuredPath == null || configuredPath.isBlank()) ? null : configuredPath;
     }
 
     // ---- Nested config classes ----
@@ -247,6 +312,22 @@ public class GatewayProperties {
         public void setFileBaseUrl(String fileBaseUrl) { this.fileBaseUrl = fileBaseUrl; }
     }
 
+    public static class Logging {
+        private boolean accessLogEnabled = true;
+        private boolean includeUpstreamErrorBody = false;
+        private boolean includeSseChunkPreview = false;
+        private int sseChunkPreviewMaxChars = 160;
+
+        public boolean isAccessLogEnabled() { return accessLogEnabled; }
+        public void setAccessLogEnabled(boolean accessLogEnabled) { this.accessLogEnabled = accessLogEnabled; }
+        public boolean isIncludeUpstreamErrorBody() { return includeUpstreamErrorBody; }
+        public void setIncludeUpstreamErrorBody(boolean includeUpstreamErrorBody) { this.includeUpstreamErrorBody = includeUpstreamErrorBody; }
+        public boolean isIncludeSseChunkPreview() { return includeSseChunkPreview; }
+        public void setIncludeSseChunkPreview(boolean includeSseChunkPreview) { this.includeSseChunkPreview = includeSseChunkPreview; }
+        public int getSseChunkPreviewMaxChars() { return sseChunkPreviewMaxChars; }
+        public void setSseChunkPreviewMaxChars(int sseChunkPreviewMaxChars) { this.sseChunkPreviewMaxChars = sseChunkPreviewMaxChars; }
+    }
+
     public static class RemoteExecution {
         private int defaultTimeout = 30;
         private int maxTimeout = 120;
@@ -261,7 +342,22 @@ public class GatewayProperties {
 
     @PostConstruct
     public void logConfiguration() {
+        normalizeGoosedBin();
         log.info("GatewayProperties loaded: gooseTls={}, gooseScheme={}, goosedBin={}",
                 gooseTls, gooseScheme(), goosedBin);
+    }
+
+    private void normalizeGoosedBin() {
+        if (goosedBin == null || goosedBin.isBlank()) {
+            return;
+        }
+        Path rawPath = Path.of(goosedBin);
+        if (rawPath.isAbsolute()) {
+            return;
+        }
+        Path candidate = getGatewayRootPath().resolve(goosedBin).normalize();
+        if (Files.exists(candidate)) {
+            goosedBin = candidate.toString();
+        }
     }
 }

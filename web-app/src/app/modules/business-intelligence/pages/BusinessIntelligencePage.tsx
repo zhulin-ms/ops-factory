@@ -1568,7 +1568,7 @@ export default function BusinessIntelligence() {
     }, [activeTabId, overview])
 
     return (
-        <div className="page-container sidebar-top-page resource-page business-intelligence-page">
+        <div className="page-container sidebar-top-page page-shell-wide business-intelligence-page">
             <div className="page-header">
                 <div className="business-intelligence-toolbar">
                     <div>

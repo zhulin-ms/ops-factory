@@ -238,6 +238,7 @@ public class CorsFilterTest {
         assertEquals("GET, POST, PUT, DELETE, OPTIONS", headers.getFirst("Access-Control-Allow-Methods"));
         assertTrue(headers.getFirst("Access-Control-Allow-Headers").contains("x-secret-key"));
         assertTrue(headers.getFirst("Access-Control-Allow-Headers").contains("x-user-id"));
+        assertTrue(headers.getFirst("Access-Control-Allow-Headers").contains("x-request-id"));
         assertEquals("3600", headers.getFirst("Access-Control-Max-Age"));
     }
 

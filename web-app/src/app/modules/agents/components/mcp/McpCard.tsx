@@ -7,11 +7,12 @@ interface McpCardProps {
   entry: McpEntry
   onToggle: (name: string, enabled: boolean) => void
   onEdit?: (entry: McpEntry) => void
+  onConfigKnowledge?: (entry: McpEntry) => void
   onDelete?: (name: string) => void
   isCustom?: boolean
 }
 
-export default function McpCard({ entry, onToggle, onEdit, onDelete, isCustom }: McpCardProps) {
+export default function McpCard({ entry, onToggle, onEdit, onConfigKnowledge, onDelete, isCustom }: McpCardProps) {
   const { t } = useTranslation()
   const displayName = getMcpDisplayName(entry)
 
@@ -40,13 +41,23 @@ export default function McpCard({ entry, onToggle, onEdit, onDelete, isCustom }:
         {entry.description || t('mcp.noDescription')}
       </p>
 
-      {isCustom && (onEdit || onDelete) && (
+      {(isCustom || onConfigKnowledge) && (onEdit || onConfigKnowledge || onDelete) && (
         <div className="mcp-card-actions">
+          {onConfigKnowledge && (
+            <Button
+              variant="secondary"
+              tone="subtle"
+              size="sm"
+              onClick={() => onConfigKnowledge(entry)}
+            >
+              {t('mcp.configKnowledge')}
+            </Button>
+          )}
           {onEdit && (
             <Button
               variant="secondary"
+              tone="subtle"
               size="sm"
-              block
               onClick={() => onEdit(entry)}
             >
               {t('common.edit')}
@@ -57,7 +68,6 @@ export default function McpCard({ entry, onToggle, onEdit, onDelete, isCustom }:
               variant="danger"
               tone="quiet"
               size="sm"
-              block
               onClick={() => onDelete(entry.name)}
             >
               {t('common.delete')}

@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { Navigate } from 'react-router-dom'
 import { GATEWAY_URL, GATEWAY_SECRET_KEY, isAdminUser } from '../../../config/runtime'
 import { getUrlParam } from '../../../utils/urlParams'
+import { updateLoggingContext } from '../logging/context'
+import { trackedFetch } from '../logging/requestClient'
 
 const STORAGE_KEY = 'opsfactory:userId'
 
@@ -64,7 +66,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     const fetchRole = useCallback(async (uid: string) => {
         try {
-            const res = await fetch(`${GATEWAY_URL}/me`, {
+            const res = await trackedFetch(`${GATEWAY_URL}/me`, {
+                category: 'request',
+                name: 'request.send',
                 headers: {
                     'x-secret-key': GATEWAY_SECRET_KEY,
                     'x-user-id': uid,
@@ -84,8 +88,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         if (userId) {
+            updateLoggingContext({ userId })
             fetchRole(userId)
         } else {
+            updateLoggingContext({ userId: undefined })
             setRole(null)
         }
     }, [userId, fetchRole])

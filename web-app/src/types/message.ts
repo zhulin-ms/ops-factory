@@ -26,6 +26,7 @@ export interface ToolResponseContent {
     id?: string
     toolResult?: {
         status?: string
+        isError?: boolean
         value?: unknown
     }
 }
@@ -69,6 +70,7 @@ export interface GenericContent {
     }
     toolResult?: {
         status?: string
+        isError?: boolean
         value?: unknown
     }
     notificationType?: string

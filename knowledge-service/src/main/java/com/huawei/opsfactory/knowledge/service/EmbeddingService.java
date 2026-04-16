@@ -20,11 +20,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class EmbeddingService {
+
+    private static final Logger log = LoggerFactory.getLogger(EmbeddingService.class);
 
     private static final Pattern WORD_PATTERN = Pattern.compile("[\\p{L}\\p{N}]+");
     private static final Pattern HAN_PATTERN = Pattern.compile("\\p{IsHan}+");
@@ -83,6 +87,17 @@ public class EmbeddingService {
             }
         });
 
+        if (log.isDebugEnabled()) {
+            log.debug(
+                "Resolving chunk embeddings model={} dimension={} chunkCount={} cacheHits={} cacheMisses={}",
+                model,
+                expectedDimension,
+                chunkMap.size(),
+                resolved.size(),
+                missing.size()
+            );
+        }
+
         if (!missing.isEmpty()) {
             List<String> inputs = missing.stream().map(this::buildChunkEmbeddingText).toList();
             List<List<Double>> vectors = embed(inputs);
@@ -125,12 +140,23 @@ public class EmbeddingService {
 
     private List<List<Double>> embed(List<String> inputs) {
         if (!isRemoteEmbeddingEnabled()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Using local embeddings because remote embedding is not enabled batchSize={}", inputs.size());
+            }
             return inputs.stream().map(this::localEmbedding).toList();
         }
 
         try {
             return remoteEmbeddings(inputs);
         } catch (Exception ex) {
+            log.warn(
+                "Remote embedding failed, falling back to local embeddings model={} endpoint={} batchSize={} reason={}",
+                properties.getEmbedding().getModel(),
+                resolveEmbeddingsEndpoint(properties.getEmbedding().getBaseUrl()),
+                inputs.size(),
+                ex.getMessage()
+            );
+            log.debug("Remote embedding failure details", ex);
             return inputs.stream().map(this::localEmbedding).toList();
         }
     }

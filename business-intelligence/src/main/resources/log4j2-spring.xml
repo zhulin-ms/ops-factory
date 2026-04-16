@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+    <Properties>
+        <Property name="APP_NAME">business-intelligence</Property>
+        <Property name="LOG_DIR">${sys:user.dir}/logs</Property>
+        <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [service=${APP_NAME} requestId=%X{requestId}] [%t] %logger{36} - %msg%n%throwable</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${LOG_PATTERN}" />
+        </Console>
+
+        <RollingFile name="File"
+                     fileName="${LOG_DIR}/business-intelligence.log"
+                     filePattern="${LOG_DIR}/business-intelligence-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="${LOG_PATTERN}" />
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" />
+                <SizeBasedTriggeringPolicy size="100MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="30" />
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <Logger name="com.huawei.opsfactory.businessintelligence" level="${spring:logging.level.com.huawei.opsfactory.businessintelligence:-INFO}" />
+        <Logger name="org.springframework" level="${spring:logging.level.org.springframework:-WARN}" />
+
+        <Root level="${spring:logging.level.root:-INFO}">
+            <AppenderRef ref="Console" />
+            <AppenderRef ref="File" />
+        </Root>
+    </Loggers>
+</Configuration>

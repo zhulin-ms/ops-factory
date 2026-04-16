@@ -8,6 +8,7 @@ import { useUser } from '../providers/UserContext'
 import { useSidebar } from '../providers/SidebarContext'
 import { getAvatarForUser } from '../settings/SettingsModal'
 import { buildNavigation } from '../NavigationBuilder'
+import { buildNewChatState } from '../chat/chatRouteState'
 import { renderIcon } from '../icons'
 import type { SidebarItemModel } from '../module-types'
 import { SidebarShell } from '../SidebarShell'
@@ -15,7 +16,7 @@ import { useEnabledModules, useModuleContext } from '../useEnabledModules'
 
 export default function Sidebar() {
     const { t } = useTranslation()
-    const { getClient, agents } = useGoosed()
+    const { agents } = useGoosed()
     const { showToast } = useToast()
     const { unreadCount } = useInbox()
     const { userId } = useUser()
@@ -35,8 +36,9 @@ export default function Sidebar() {
 
         setIsCreatingSession(true)
         try {
-            const session = await getClient(defaultAgent).startSession()
-            navigate(`/chat?sessionId=${session.id}&agent=${defaultAgent}`)
+            navigate('/chat', {
+                state: buildNewChatState(defaultAgent),
+            })
         } catch (err) {
             console.error('Failed to create session:', err)
             showToast('error', t('home.failedToCreateSession', { error: err instanceof Error ? err.message : 'Unknown error' }))

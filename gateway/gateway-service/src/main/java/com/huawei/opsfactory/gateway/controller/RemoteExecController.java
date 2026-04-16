@@ -1,9 +1,10 @@
 package com.huawei.opsfactory.gateway.controller;
 
 import com.huawei.opsfactory.gateway.filter.UserContextFilter;
+import com.huawei.opsfactory.gateway.service.CommandWhitelistService;
 import com.huawei.opsfactory.gateway.service.RemoteExecutionService;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,12 +19,15 @@ import java.util.Map;
 @RequestMapping("/gateway/remote")
 public class RemoteExecController {
 
-    private static final Logger log = LogManager.getLogger(RemoteExecController.class);
+    private static final Logger log = LoggerFactory.getLogger(RemoteExecController.class);
 
     private final RemoteExecutionService remoteExecutionService;
+    private final CommandWhitelistService commandWhitelistService;
 
-    public RemoteExecController(RemoteExecutionService remoteExecutionService) {
+    public RemoteExecController(RemoteExecutionService remoteExecutionService,
+                                CommandWhitelistService commandWhitelistService) {
         this.remoteExecutionService = remoteExecutionService;
+        this.commandWhitelistService = commandWhitelistService;
     }
 
     @PostMapping("/execute")
@@ -67,7 +71,8 @@ public class RemoteExecController {
                 }
 
                 Map<String, Object> body = new LinkedHashMap<>();
-                body.put("hostId", result.get("hostId"));
+                body.put("hostIp", result.get("hostIp"));
+                body.put("username", result.get("username"));
                 body.put("hostName", result.get("hostName"));
                 body.put("exitCode", result.get("exitCode"));
                 body.put("output", result.get("output"));
@@ -82,5 +87,26 @@ public class RemoteExecController {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
             }
         }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @PostMapping("/check-risk")
+    public Mono<ResponseEntity<Map<String, Object>>> checkRisk(
+            @RequestBody Map<String, Object> request,
+            ServerWebExchange exchange) {
+        UserContextFilter.requireAdmin(exchange);
+
+        String command = (String) request.get("command");
+        if (command == null || command.isBlank()) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("success", false);
+            body.put("error", "command is required");
+            return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body));
+        }
+
+        String riskLevel = commandWhitelistService.getRiskLevel(command);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("command", command);
+        body.put("riskLevel", riskLevel);
+        return Mono.just(ResponseEntity.ok(body));
     }
 }

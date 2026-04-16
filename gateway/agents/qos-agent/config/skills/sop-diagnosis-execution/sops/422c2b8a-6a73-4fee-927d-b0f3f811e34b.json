@@ -1,0 +1,53 @@
+{
+  "id" : "422c2b8a-6a73-4fee-927d-b0f3f811e34b",
+  "name" : "检查gateway服务",
+  "description" : "用户要求检查gateway服务情况下启用这个SOP",
+  "version" : "1.0",
+  "triggerCondition" : "检查gateway服务",
+  "nodes" : [ {
+    "id" : "node-1775023876989-0",
+    "name" : "gateway",
+    "type" : "start",
+    "tags" : [ "OpsFactory" ],
+    "command" : "ps -ef --forest | grep -E \"java\" | grep -v grep",
+    "commandVariables" : { },
+    "variables" : [ ],
+    "outputFormat" : "进程列表",
+    "analysisInstruction" : "分析是否存在gateway-service jar进程",
+    "transitions" : [ {
+      "condition" : "gateway-service进程存在",
+      "description" : "",
+      "nextNodes" : [ "gateway-suc" ]
+    }, {
+      "condition" : "gateway-service进程不存在",
+      "description" : "",
+      "nextNodes" : [ "gateway-fail" ]
+    } ]
+  }, {
+    "id" : "node-1775025900633-1",
+    "name" : "gateway-fail",
+    "type" : "analysis",
+    "tags" : [ "OpsFactory" ],
+    "command" : "cd  /opt/ms/ops-factory/gateway & echo \"gateway-service 不存在\"  &  tail -n 30 gateway.log",
+    "commandVariables" : { },
+    "variables" : [ ],
+    "outputFormat" : "gateway日志",
+    "analysisInstruction" : "分析日志是否存在异常",
+    "transitions" : [ ]
+  }, {
+    "id" : "node-1775026237584-2",
+    "name" : "gateway-suc",
+    "type" : "analysis",
+    "tags" : [ "OpsFactory" ],
+    "command" : "cd  /opt/ms/ops-factory/gateway & echo \"gateway-service 存在\" ",
+    "commandVariables" : { },
+    "variables" : [ ],
+    "outputFormat" : "字符串",
+    "analysisInstruction" : "",
+    "transitions" : [ ]
+  } ],
+  "enabled" : false,
+  "mode" : "structured",
+  "stepsDescription" : "",
+  "tags" : [ ],
+}

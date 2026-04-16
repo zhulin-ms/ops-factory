@@ -1,0 +1,22 @@
+{
+  "name": "custom_glm",
+  "engine": "anthropic",
+  "display_name": "GLM",
+  "description": "Custom GLM provider",
+  "api_key_env": "CUSTOM_GLM_API_KEY",
+  "base_url": "https://open.bigmodel.cn/api/anthropic",
+  "models": [
+    {
+      "name": "GLM-4.7",
+      "context_limit": 128000,
+      "input_token_cost": null,
+      "output_token_cost": null,
+      "currency": null,
+      "supports_cache_control": null
+    }
+  ],
+  "headers": null,
+  "timeout_seconds": null,
+  "supports_streaming": true,
+  "requires_auth": true
+}

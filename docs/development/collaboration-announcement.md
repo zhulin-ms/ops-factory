@@ -16,6 +16,12 @@
 - `docs/development/*`：开发规范、UI 约束、测试要求、评审清单。
 - `docs/operations/*`：运维、排障、故障复盘和最佳实践。
 
+当前建议优先关注的文档包括：
+
+- `docs/development/logging-guidelines.md`
+- `docs/operations/gateway-troubleshooting-guide.md`
+- `docs/operations/knowledge-service-troubleshooting-guide.md`
+
 ## 团队实践要求
 
 1. 开始开发前，至少阅读 `AGENTS.md`、`docs/architecture/overview.md`，以及与本次改动相关的 development 文档。
@@ -26,6 +32,11 @@
 6. 测试要和改动范围匹配：前端逻辑补 Vitest，Java 行为补 JUnit，跨服务行为补 integration test，主用户流程改动补 Playwright。
 7. 提交和评审 PR 时，统一参考 `docs/development/review-checklist.md`，不要只检查代码是否“能跑”。
 8. 当某个规则已经成为团队共识时，应先写入 `AGENTS.md` 或 `docs/`，再要求其他团队或 AI 遵守，不再依赖口头传达。
+
+补充说明：
+
+- `gateway` 与 `knowledge-service` 的日志配置入口、日志文件职责、`requestId`、access log 和敏感日志输出开关，已经形成仓库级规则
+- 后续相关改动应继续以这些显式规则为准，而不是回到脚本拼装或口头约定
 
 ## 建议执行方式
 

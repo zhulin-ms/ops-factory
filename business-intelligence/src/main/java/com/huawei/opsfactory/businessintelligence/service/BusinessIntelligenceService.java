@@ -37,14 +37,18 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class BusinessIntelligenceService {
 
+    private static final Logger log = LoggerFactory.getLogger(BusinessIntelligenceService.class);
+
     private static final List<TabMeta> TABS = List.of(
         new TabMeta("executive-summary", "执行摘要"),
-        new TabMeta("sla-analysis", "Incident SLA"),
+        new TabMeta("sla-analysis", "SLA分析"),
         new TabMeta("incident-analysis", "事件分析"),
         new TabMeta("change-analysis", "变更分析"),
         new TabMeta("request-analysis", "请求分析"),
@@ -112,21 +116,58 @@ public class BusinessIntelligenceService {
         }
         Snapshot snapshot = cache.get();
         if (snapshot != null && runtimeProperties.isCacheEnabled()) {
+            log.debug(
+                "Returning cached business intelligence snapshot refreshedAt={} tabCount={}",
+                snapshot.refreshedAt(),
+                snapshot.tabs().size()
+            );
             return snapshot;
         }
         return refresh(null, null);
     }
 
+    public Snapshot getOverview() {
+        return getOverview(null, null);
+    }
+
     public synchronized Snapshot refresh(String startDate, String endDate) {
-        BiRawData rawData = dataProvider.load();
-        // Filter data by date range if specified
-        BiRawData filteredData = filterByDateRange(rawData, startDate, endDate);
-        Snapshot snapshot = buildSnapshot(filteredData);
-        // Only cache if no date filter is applied
-        if (startDate == null && endDate == null) {
-            cache.set(snapshot);
+        long startedAt = System.currentTimeMillis();
+        try {
+            BiRawData rawData = dataProvider.load();
+            // Filter data by date range if specified
+            BiRawData filteredData = filterByDateRange(rawData, startDate, endDate);
+            Snapshot snapshot = buildSnapshot(filteredData);
+            // Only cache if no date filter is applied
+            if (startDate == null && endDate == null) {
+                cache.set(snapshot);
+            }
+            log.info(
+                "Refreshed business intelligence snapshot incidents={} incidentSlaCriteria={} changes={} requests={} problems={} tabCount={} startDate={} endDate={} durationMs={}",
+                filteredData.incidents().size(),
+                filteredData.incidentSlaCriteria().size(),
+                filteredData.changes().size(),
+                filteredData.requests().size(),
+                filteredData.problems().size(),
+                snapshot.tabs().size(),
+                startDate,
+                endDate,
+                System.currentTimeMillis() - startedAt
+            );
+            return snapshot;
+        } catch (RuntimeException ex) {
+            log.error(
+                "Failed to refresh business intelligence snapshot startDate={} endDate={} durationMs={}",
+                startDate,
+                endDate,
+                System.currentTimeMillis() - startedAt,
+                ex
+            );
+            throw ex;
         }
-        return snapshot;
+    }
+
+    public synchronized Snapshot refresh() {
+        return refresh(null, null);
     }
 
     private BiRawData filterByDateRange(BiRawData rawData, String startDate, String endDate) {
@@ -193,11 +234,17 @@ public class BusinessIntelligenceService {
         if (content == null) {
             throw new IllegalArgumentException("Unknown tab: " + tabId);
         }
+        log.debug("Resolved business intelligence tab tabId={} label={} granularity={}", tabId, content.label(), granularity);
         return content;
+    }
+
+    public TabContent getTab(String tabId) {
+        return getTab(tabId, null);
     }
 
     public byte[] exportCurrentWorkbook() {
         Snapshot snapshot = getOverview(null, null);
+        long startedAt = System.currentTimeMillis();
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             for (TabMeta tab : snapshot.tabs()) {
@@ -216,8 +263,23 @@ public class BusinessIntelligenceService {
                 }
             }
             workbook.write(outputStream);
-            return outputStream.toByteArray();
+            byte[] bytes = outputStream.toByteArray();
+            log.info(
+                "Exported business intelligence workbook refreshedAt={} tabCount={} byteSize={} durationMs={}",
+                snapshot.refreshedAt(),
+                snapshot.tabs().size(),
+                bytes.length,
+                System.currentTimeMillis() - startedAt
+            );
+            return bytes;
         } catch (IOException exception) {
+            log.error(
+                "Failed to export business intelligence workbook refreshedAt={} tabCount={} durationMs={}",
+                snapshot.refreshedAt(),
+                snapshot.tabs().size(),
+                System.currentTimeMillis() - startedAt,
+                exception
+            );
             throw new IllegalStateException("Failed to export business intelligence workbook", exception);
         }
     }
@@ -272,7 +334,7 @@ public class BusinessIntelligenceService {
         BiModels.SlaAnalysisSummary summary = buildSlaAnalysisSummary(incidents);
         return new TabContent(
             "sla-analysis",
-            "事件SLA分析",
+            "SLA分析",
             "多维度观察事件SLA履约情况，并进行违约情况分析。",
             null,
             summary,

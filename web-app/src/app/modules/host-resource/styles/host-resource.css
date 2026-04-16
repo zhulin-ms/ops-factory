@@ -1,0 +1,756 @@
+/* Host Resource Module Styles — Three-Zone Layout */
+
+/* Full-width host resource workbench */
+.page-container.host-resource-page {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.page-container.host-resource-page .page-header {
+    padding: var(--spacing-4, 16px) var(--spacing-4, 16px);
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    flex-shrink: 0;
+}
+
+/* ── Three-Zone Layout (vertical: tree+cards on top, topology on bottom) ── */
+
+/* Upper half: tree (left) + cards (right), fixed 40% height */
+.hr-layout-main {
+    display: flex;
+    flex: 0 0 40%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Resource Tree: left sidebar, full height of upper half */
+.hr-tree-sidebar {
+    width: 260px;
+    min-width: 240px;
+    border-right: 1px solid var(--border-color, #e2e8f0);
+    overflow-y: auto;
+    padding: var(--spacing-2) 0;
+}
+
+/* Host Cards: right area, scrollable */
+.hr-cards-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--spacing-2, 8px);
+    display: flex;
+    flex-direction: column;
+}
+
+/* Topology: bottom 60% height */
+.hr-topology-area {
+    flex: 0 0 60%;
+    min-height: 0;
+    border-top: 1px solid var(--border-color, #e2e8f0);
+    position: relative;
+}
+
+/* ── Type Selector ──────────────────────────────────────── */
+
+.hr-type-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-3);
+    padding: var(--spacing-2) 0;
+}
+
+.hr-type-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-5) var(--spacing-4);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--surface-background, #f8fafc);
+}
+
+.hr-type-card:hover {
+    border-color: var(--color-primary, #3b82f6);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.hr-type-card-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 1.25rem;
+}
+
+.hr-type-card-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary, #1e293b);
+}
+
+/* ── Tree nodes ─────────────────────────────────────────── */
+
+.hr-tree-empty {
+    padding: var(--spacing-4);
+    color: var(--text-secondary, #64748b);
+    text-align: center;
+    font-size: 0.875rem;
+}
+
+.hr-tree-node-wrapper {
+    user-select: none;
+}
+
+.hr-tree-node {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 0.8125rem;
+    color: var(--text-primary, #1e293b);
+    border-radius: 4px;
+    margin: 1px 4px;
+    transition: background 0.1s;
+}
+
+.hr-tree-node:hover {
+    background: var(--hover-background, #f1f5f9);
+}
+
+.hr-tree-node-selected {
+    background: var(--color-primary-soft, #eff6ff);
+    color: var(--color-primary, #3b82f6);
+    font-weight: 500;
+}
+
+.hr-tree-chevron {
+    font-size: 0.5rem;
+    transition: transform 0.15s;
+    color: var(--text-secondary, #94a3b8);
+    width: 12px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.hr-tree-chevron-open {
+    transform: rotate(90deg);
+}
+
+.hr-tree-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.hr-tree-icon-folder {
+    background: var(--color-warning, #f59e0b);
+}
+
+.hr-tree-icon-cluster {
+    background: var(--color-success, #10b981);
+}
+
+.hr-tree-icon-business-service {
+    background: #6366f1;
+}
+
+.hr-tree-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.hr-tree-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #94a3b8);
+    margin-left: auto;
+    padding-left: var(--spacing-2);
+    white-space: nowrap;
+}
+
+/* ── Tree Node Actions (hover) ──────────────────────────── */
+
+.hr-tree-node-actions {
+    display: none;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.hr-tree-node:hover .hr-tree-node-actions {
+    display: flex;
+}
+
+.hr-tree-node-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    padding: 0;
+    line-height: 1;
+}
+
+.hr-tree-node-action:hover {
+    background: var(--surface-background, #f1f5f9);
+    color: var(--text-primary, #1e293b);
+}
+
+.hr-tree-node-action-danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--color-danger, #ef4444);
+}
+
+/* ── Host Cards (compact) ─────────────────────────────── */
+
+.hr-host-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-1, 4px);
+}
+
+.hr-empty {
+    text-align: center;
+    padding: var(--spacing-8) var(--spacing-4);
+    color: var(--text-secondary, #64748b);
+}
+
+.hr-host-card {
+    background: var(--color-bg-secondary, var(--surface-background, #fff));
+    border: 1px solid var(--color-border, var(--border-color, #e2e8f0));
+    border-radius: 6px;
+    padding: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.hr-host-card:hover {
+    border-color: var(--color-primary, #3b82f6);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.hr-host-card-selected {
+    border-color: var(--color-primary, #3b82f6);
+    box-shadow: 0 0 0 1px var(--color-primary, #3b82f6), 0 1px 4px rgba(59, 130, 246, 0.15);
+}
+
+.hr-host-card-header {
+    margin-bottom: 4px;
+}
+
+.hr-host-card-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-1, 4px);
+}
+
+.hr-host-card-name {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-primary, #1e293b);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hr-host-card-desc {
+    font-size: 0.6875rem;
+    color: var(--text-secondary, #64748b);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 2-column meta grid */
+.hr-host-card-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 6px;
+    margin-bottom: 4px;
+}
+
+.hr-host-card-meta-field {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.hr-host-card-meta-label {
+    font-size: 0.625rem;
+    color: var(--text-secondary, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.hr-host-card-meta-value {
+    font-size: 0.75rem;
+    color: var(--text-primary, #1e293b);
+    word-break: break-all;
+    line-height: 1.3;
+}
+
+.hr-host-card-mono {
+    font-family: var(--font-mono, 'SF Mono', 'Cascadia Code', monospace);
+    font-size: 0.75rem;
+}
+
+.hr-host-card-footer {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1, 4px);
+    padding-top: 3px;
+    border-top: 1px solid var(--border-color, #e2e8f0);
+}
+
+/* Trash icon button for host card — matches SOP workflow pattern */
+.hr-host-card-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    border-radius: 4px;
+    margin-left: auto;
+    transition: color 0.15s, background 0.15s;
+}
+
+.hr-host-card-delete-btn:hover {
+    color: var(--color-error, #ef4444);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+/* ── Topology ───────────────────────────────────────────── */
+
+.hr-graph-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary, #64748b);
+}
+
+/* ── Topology Fullscreen ──────────────────────────────── */
+
+.hr-topology-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--surface-background, #fff);
+    padding: 12px;
+}
+
+.hr-topology-fullscreen-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 4px;
+    background: var(--surface-background, #fff);
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.hr-topology-fullscreen-btn:hover {
+    color: var(--text-primary, #1e293b);
+    border-color: var(--color-primary, #3b82f6);
+}
+
+/* ── Detail Panel (overlay) ─────────────────────────────── */
+
+.hr-detail-panel-overlay {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 380px;
+    height: 100vh;
+    background: var(--surface-background, #fff);
+    border-left: 1px solid var(--border-color, #e2e8f0);
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+    overflow-y: auto;
+    padding: var(--spacing-4);
+    z-index: 100;
+    animation: hr-slide-in 0.2s ease-out;
+}
+
+@keyframes hr-slide-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+.hr-detail-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.15);
+    z-index: 99;
+    animation: hr-fade-in 0.15s;
+}
+
+@keyframes hr-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.hr-detail-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-4);
+}
+
+.hr-detail-panel-header h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.hr-detail-panel-actions {
+    display: flex;
+    gap: var(--spacing-1);
+}
+
+/* ── Attribute Group ────────────────────────────────────── */
+
+.hr-attr-group {
+    margin-bottom: var(--spacing-4);
+}
+
+.hr-attr-group-title {
+    font-size: 0.8125rem;
+    color: var(--text-secondary, #64748b);
+    margin: 0 0 var(--spacing-2) 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.hr-attr-group-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+}
+
+.hr-attr-field {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8125rem;
+    padding: 2px 0;
+}
+
+.hr-attr-label {
+    color: var(--text-secondary, #64748b);
+    min-width: 80px;
+}
+
+.hr-attr-value {
+    color: var(--text-primary, #1e293b);
+    text-align: right;
+    word-break: break-all;
+}
+
+/* ── Custom Attribute Editor ────────────────────────────── */
+
+.hr-custom-attrs {
+    margin-top: var(--spacing-3);
+}
+
+.hr-custom-attrs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-2);
+}
+
+.hr-custom-attr-row {
+    display: flex;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-1);
+    align-items: center;
+}
+
+.hr-attr-key {
+    flex: 1;
+}
+
+.hr-attr-remove {
+    flex-shrink: 0;
+}
+
+/* ── Host Form Modal ────────────────────────────────────── */
+
+.hr-host-modal .modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.hr-section-label {
+    font-size: 0.8125rem;
+    color: var(--text-secondary, #64748b);
+    margin: var(--spacing-3) 0 var(--spacing-2) 0;
+    padding-bottom: var(--spacing-1);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.hr-form-row {
+    display: flex;
+    gap: var(--spacing-3);
+}
+
+.hr-form-row .form-group {
+    flex: 1;
+}
+
+.host-resource-create-btn {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+}
+
+/* ── Pagination ────────────────────────────────────────── */
+
+.hr-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-2, 8px) 0 0;
+    margin-top: auto;
+    border-top: 1px solid var(--border-color, #e2e8f0);
+    flex-shrink: 0;
+}
+
+.hr-pagination-info {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #64748b);
+}
+
+.hr-pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2, 8px);
+}
+
+.hr-pagination-btn {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 4px;
+    background: var(--surface-background, #fff);
+    color: var(--text-primary, #1e293b);
+    cursor: pointer;
+    line-height: 1.5;
+}
+
+.hr-pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.hr-pagination-btn:not(:disabled):hover {
+    background: var(--hover-background, #f1f5f9);
+}
+
+.hr-pagination-page {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #64748b);
+    min-width: 50px;
+    text-align: center;
+}
+
+/* ── Topology edge flow animation ─────────────────────── */
+
+.hr-graph-focused svg path[stroke-dasharray] {
+    animation: hr-edge-flow 0.8s linear infinite;
+}
+
+@keyframes hr-edge-flow {
+    to {
+        stroke-dashoffset: -16;
+    }
+}
+
+/* ── Tabs ────────────────────────────────────────────────── */
+
+.hr-tabs {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    padding: 0 var(--spacing-4, 16px);
+    flex-shrink: 0;
+    background: var(--surface-background, #fff);
+}
+
+.hr-tabs-left {
+    display: flex;
+    gap: 0;
+}
+
+.hr-tabs-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2, 8px);
+}
+
+.hr-tab {
+    padding: 10px 20px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.hr-tab:hover {
+    color: var(--text-primary, #1e293b);
+}
+
+.hr-tab-active {
+    color: var(--color-primary, #3b82f6);
+    border-bottom-color: var(--color-primary, #3b82f6);
+}
+
+/* ── Type Definition Cards ──────────────────────────────── */
+
+.hr-type-def-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-4, 16px);
+    padding: var(--spacing-4, 16px);
+}
+
+.hr-type-def-card {
+    background: var(--surface-background, #fff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: var(--spacing-4, 16px);
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.hr-type-def-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border-color: var(--color-primary-soft, #93c5fd);
+}
+
+.hr-type-def-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2, 8px);
+    margin-bottom: var(--spacing-2, 8px);
+}
+
+.hr-type-def-card-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.hr-type-def-card-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary, #1e293b);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hr-type-def-card-desc {
+    font-size: 0.8125rem;
+    color: var(--text-secondary, #64748b);
+    line-height: 1.4;
+    margin-bottom: var(--spacing-2, 8px);
+}
+
+.hr-type-def-card-knowledge-label {
+    font-size: 0.6875rem;
+    color: var(--text-secondary, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-top: 1px solid var(--border-color, #e2e8f0);
+    padding-top: var(--spacing-2, 8px);
+    margin-bottom: var(--spacing-1, 4px);
+}
+
+.hr-type-def-card-knowledge {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #64748b);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex: 1;
+}
+
+.hr-type-def-card-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-1, 4px);
+    margin-top: var(--spacing-3, 12px);
+    padding-top: var(--spacing-2, 8px);
+    border-top: 1px solid var(--border-color, #e2e8f0);
+}
+
+/* ── Type Tab Content ─────────────────────────────────── */
+
+.hr-type-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.hr-type-tab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-4, 16px);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.hr-type-tab-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-8, 32px) var(--spacing-4, 16px);
+    color: var(--text-secondary, #64748b);
+    gap: var(--spacing-3, 12px);
+}
+
+.hr-type-tab-empty-text {
+    font-size: 0.875rem;
+}

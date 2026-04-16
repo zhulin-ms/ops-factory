@@ -9,6 +9,7 @@ import org.springframework.core.io.Resource;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -214,6 +215,54 @@ public class FileServiceExtendedTest {
         Resource resource = fileService.resolveFile(tempFolder.getRoot().toPath(), "docs/readme.txt");
         assertNotNull(resource);
         assertTrue(resource.exists());
+    }
+
+    // ====================== output file diff filtering ======================
+
+    @Test
+    public void testDiffFiles_ignoresInternalMcpLogs() {
+        List<Map<String, Object>> before = List.of(
+                snapshot("logs/mcp/control_center.log", "control_center.log", "log", 100L, "2026-04-08T06:58:57Z"));
+        List<Map<String, Object>> after = List.of(
+                snapshot("logs/mcp/control_center.log", "control_center.log", "log", 120L, "2026-04-08T07:00:27Z"));
+
+        List<Map<String, String>> changed = fileService.diffFiles(before, after);
+
+        assertTrue(changed.isEmpty());
+    }
+
+    @Test
+    public void testDiffFiles_keepsUserGeneratedFiles() {
+        List<Map<String, Object>> before = new ArrayList<>();
+        List<Map<String, Object>> after = List.of(
+                snapshot("reports/platform-status.md", "platform-status.md", "md", 256L, "2026-04-08T07:00:27Z"));
+
+        List<Map<String, String>> changed = fileService.diffFiles(before, after);
+
+        assertEquals(1, changed.size());
+        assertEquals("reports/platform-status.md", changed.get(0).get("path"));
+        assertEquals("platform-status.md", changed.get(0).get("name"));
+        assertEquals("md", changed.get(0).get("ext"));
+    }
+
+    @Test
+    public void testListTopLevelFiles_skipsFilesInSubdirectories() throws IOException {
+        createFile(new File(tempFolder.getRoot(), "summary.md"), "# Summary");
+        createFile(new File(tempFolder.newFolder("reports"), "platform-status.md"), "# Report");
+
+        List<Map<String, Object>> files = fileService.listTopLevelFiles(tempFolder.getRoot().toPath());
+
+        assertEquals(1, files.size());
+        assertEquals("summary.md", files.get(0).get("name"));
+    }
+
+    private Map<String, Object> snapshot(String path, String name, String type, long size, String modifiedAt) {
+        return Map.of(
+                "path", path,
+                "name", name,
+                "type", type,
+                "size", size,
+                "modifiedAt", modifiedAt);
     }
 
     private void createFile(File file, String content) throws IOException {

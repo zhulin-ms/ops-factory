@@ -2,11 +2,41 @@ import { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import Message from './Message'
 import { ChatState, type OutputFilesEvent } from './useChat'
+import GooseAvatarIcon from './GooseAvatarIcon'
 import { extractFetchedDocuments, extractSourceDocuments, type Citation } from '../../../utils/citationParser'
 import { getReasoningContent, getThinkingContent, hasDisplayTextContent, hasTextContent, hasToolContent } from '../../../utils/messageContent'
 import { useUser } from '../providers/UserContext'
 import { GATEWAY_URL, GATEWAY_SECRET_KEY } from '../../../config/runtime'
 import type { ChatMessage, DetectedFile, ToolResponseMap } from '../../../types/message'
+
+const BOTTOM_THRESHOLD_PX = 24
+
+type ScrollContainerRef = {
+    current: HTMLDivElement | null
+}
+
+type ActiveScrollElement = HTMLElement
+
+function resolveActiveScrollElement(containerRef?: ScrollContainerRef): ActiveScrollElement | null {
+    const container = containerRef?.current
+    if (container) {
+        const canContainerScroll = container.scrollHeight - container.clientHeight > BOTTOM_THRESHOLD_PX
+        if (canContainerScroll) {
+        return container
+        }
+    }
+
+    return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : document.documentElement
+}
+
+function setScrollTop(element: ActiveScrollElement, top: number, behavior: ScrollBehavior) {
+    if (typeof element.scrollTo === 'function') {
+        element.scrollTo({ top, behavior })
+        return
+    }
+
+    element.scrollTop = top
+}
 
 function hasOnlyToolResponse(message: ChatMessage): boolean {
     return message.role === 'user' &&
@@ -99,22 +129,28 @@ interface MessageListProps {
     sessionId?: string | null
     outputFilesEvent?: OutputFilesEvent | null
     onRetry?: () => void
+    scrollContainerRef?: ScrollContainerRef
+    showAnchorSpacer?: boolean
 }
 
-export default function MessageList({ messages, isLoading = false, chatState = ChatState.Idle, agentId, sessionId, outputFilesEvent, onRetry }: MessageListProps) {
+export default function MessageList({
+    messages,
+    isLoading = false,
+    chatState = ChatState.Idle,
+    agentId,
+    sessionId,
+    outputFilesEvent,
+    onRetry,
+    scrollContainerRef,
+    showAnchorSpacer = false,
+}: MessageListProps) {
     const { t } = useTranslation()
     const { userId } = useUser()
     const containerRef = useRef<HTMLDivElement>(null)
     const bottomRef = useRef<HTMLDivElement>(null)
     const [messageOutputFiles, setMessageOutputFiles] = useState<Map<string, DetectedFile[]>>(new Map())
     const processedOutputFilesRef = useRef<Set<string>>(new Set())
-
-    // Auto-scroll to bottom when new messages arrive
-    useEffect(() => {
-        if (bottomRef.current) {
-            bottomRef.current.scrollIntoView({ behavior: 'smooth' })
-        }
-    }, [messages])
+    const hasInitializedScrollRef = useRef(false)
 
     const visibleMessages = useMemo(() => {
         const userVisibleMessages = messages.filter(msg => !msg.metadata || msg.metadata.userVisible !== false)
@@ -157,9 +193,13 @@ export default function MessageList({ messages, isLoading = false, chatState = C
             for (const content of msg.content) {
                 if (content.type === 'toolResponse' && content.id) {
                     const toolResult = content.toolResult
+                    const toolResultIsError = Boolean(
+                        toolResult?.status === 'error' ||
+                        (toolResult && typeof toolResult === 'object' && 'isError' in toolResult && toolResult.isError === true)
+                    )
                     map.set(content.id, {
                         result: toolResult?.status === 'success' ? toolResult.value : toolResult,
-                        isError: toolResult?.status === 'error'
+                        isError: toolResultIsError
                     })
                 }
             }
@@ -181,6 +221,15 @@ export default function MessageList({ messages, isLoading = false, chatState = C
         if (userId) h['x-user-id'] = userId
         return h
     }, [userId])
+
+    const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+        const scrollContainer = resolveActiveScrollElement(scrollContainerRef)
+        if (scrollContainer) {
+            setScrollTop(scrollContainer, scrollContainer.scrollHeight, behavior)
+        } else if (bottomRef.current) {
+            bottomRef.current.scrollIntoView({ behavior, block: 'end' })
+        }
+    }, [scrollContainerRef])
 
     // ── Real-time: handle OutputFiles SSE event ─────────────────────
     // When the gateway sends an OutputFiles event after a /reply completes,
@@ -257,7 +306,19 @@ export default function MessageList({ messages, isLoading = false, chatState = C
     useEffect(() => {
         setMessageOutputFiles(new Map())
         processedOutputFilesRef.current = new Set()
+        hasInitializedScrollRef.current = false
     }, [agentId, sessionId])
+
+    useEffect(() => {
+        if (hasInitializedScrollRef.current || displayMessages.length === 0) return
+
+        hasInitializedScrollRef.current = true
+        const frame = window.requestAnimationFrame(() => {
+            scrollToBottom('auto')
+        })
+
+        return () => window.cancelAnimationFrame(frame)
+    }, [agentId, sessionId, displayMessages.length, scrollToBottom])
 
     if (displayMessages.length === 0 && !isLoading) {
         return (
@@ -292,42 +353,52 @@ export default function MessageList({ messages, isLoading = false, chatState = C
                     message.id === finalAssistantTextMessageId
                 const hasOutputFiles = !!message.id && messageOutputFiles.has(message.id)
                 return (
-                    <Message
+                    <div
                         key={message.id || index}
-                        message={message}
-                        toolResponses={toolResponses}
-                        agentId={agentId}
-                        userId={userId}
-                        isStreaming={isLastAssistant}
-                        onRetry={message.role === 'assistant' && index === visibleMessages.length - 1 ? onRetry : undefined}
-                        sourceDocuments={isFinalAssistantResponse ? sourceDocuments : undefined}
-                        fetchedDocuments={isFinalAssistantResponse ? fetchedDocuments : undefined}
-                        outputFiles={message.id ? messageOutputFiles.get(message.id) : undefined}
-                        showFileCapsules={hasOutputFiles}
-                    />
+                        data-message-id={message.id || index}
+                    >
+                        <Message
+                            message={message}
+                            toolResponses={toolResponses}
+                            agentId={agentId}
+                            userId={userId}
+                            isStreaming={isLastAssistant}
+                            onRetry={message.role === 'assistant' && index === visibleMessages.length - 1 ? onRetry : undefined}
+                            sourceDocuments={isFinalAssistantResponse ? sourceDocuments : undefined}
+                            fetchedDocuments={isFinalAssistantResponse ? fetchedDocuments : undefined}
+                            outputFiles={message.id ? messageOutputFiles.get(message.id) : undefined}
+                            showFileCapsules={hasOutputFiles}
+                        />
+                    </div>
                 )
             })}
 
             {isLoading && displayMessages[displayMessages.length - 1]?.role !== 'assistant' && (
-                <div className="message assistant animate-fade-in">
-                    <div className="message-avatar">G</div>
-                    <div className="message-body">
-                        <div className="message-content">
-                            <div className="loading-dots">
-                                <span></span>
-                                <span></span>
-                                <span></span>
+                <div data-message-id="loading-placeholder">
+                    <div className="message assistant animate-fade-in">
+                        <div className="message-avatar">
+                            <GooseAvatarIcon className="message-avatar-icon" />
+                        </div>
+                        <div className="message-body">
+                            <div className="message-content">
+                                <div className="loading-dots">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                                {chatState === ChatState.Thinking && (
+                                    <div className="loading-status-text">{t('chat.thinking')}</div>
+                                )}
+                                {chatState === ChatState.Compacting && (
+                                    <div className="loading-status-text">{t('chat.compactingContext')}</div>
+                                )}
                             </div>
-                            {chatState === ChatState.Thinking && (
-                                <div className="loading-status-text">{t('chat.thinking')}</div>
-                            )}
-                            {chatState === ChatState.Compacting && (
-                                <div className="loading-status-text">{t('chat.compactingContext')}</div>
-                            )}
                         </div>
                     </div>
                 </div>
             )}
+
+            {showAnchorSpacer && <div className="chat-anchor-spacer" aria-hidden="true" />}
 
             <div ref={bottomRef} />
         </div>

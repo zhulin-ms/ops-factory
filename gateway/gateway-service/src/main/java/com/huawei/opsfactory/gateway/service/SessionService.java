@@ -3,8 +3,8 @@ package com.huawei.opsfactory.gateway.service;
 import com.huawei.opsfactory.gateway.common.constants.GatewayConstants;
 import com.huawei.opsfactory.gateway.common.model.ManagedInstance;
 import com.huawei.opsfactory.gateway.process.InstanceManager;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -15,7 +15,7 @@ import java.time.Duration;
 @Service
 public class SessionService {
 
-    private static final Logger log = LogManager.getLogger(SessionService.class);
+    private static final Logger log = LoggerFactory.getLogger(SessionService.class);
 
     private final InstanceManager instanceManager;
     private final com.huawei.opsfactory.gateway.proxy.GoosedProxy goosedProxy;
@@ -39,7 +39,8 @@ public class SessionService {
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(10))
+                .doOnError(e -> log.warn("Failed to fetch sessions from {}:{} port={}: {}",
+                        instance.getAgentId(), instance.getUserId(), instance.getPort(), e.getMessage()))
                 .onErrorReturn("[]");
     }
 }
-

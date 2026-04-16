@@ -30,17 +30,6 @@
     font-weight: 500;
     color: var(--color-text-secondary);
     margin: 0 0 var(--spacing-3) 0;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-}
-
-.mcp-category-title::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-accent);
 }
 
 .mcp-grid {
@@ -135,10 +124,15 @@
 
 .mcp-card-actions {
     display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: var(--spacing-2);
     margin-top: var(--spacing-2);
     padding-top: var(--spacing-2);
-    border-top: 1px solid var(--color-border);
+}
+
+.mcp-card-actions .ui-button {
+    min-width: 88px;
 }
 
 .mcp-toggle {
@@ -237,8 +231,24 @@
     color: #b45309;
 }
 
-.mcp-modal {
-    max-width: 520px;
+.mcp-modal.modal-wide {
+    max-width: min(860px, calc(100vw - 48px));
+}
+
+.mcp-modal form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+}
+
+.mcp-modal .modal-body {
+    flex: 1;
+    min-height: 0;
+}
+
+.mcp-modal .modal-footer {
+    flex-shrink: 0;
 }
 
 .form-required {
@@ -287,18 +297,56 @@
     text-decoration: underline;
 }
 
-.mcp-form-env-row {
+.mcp-form-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin: var(--spacing-1) 0 0;
+}
+
+.mcp-form-env-list {
     display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.mcp-form-env-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
     gap: var(--spacing-2);
     align-items: center;
 }
 
 .mcp-form-env-key {
-    flex: 0 0 120px;
+    min-width: 0;
 }
 
 .mcp-form-env-value {
-    flex: 1;
+    min-width: 0;
+}
+
+.mcp-form-timeout {
+    width: 120px;
+}
+
+.mcp-settings-card {
+    padding: var(--spacing-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-secondary);
+}
+
+.mcp-settings-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-4);
+}
+
+.mcp-settings-body {
+    margin-top: var(--spacing-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
 }
 
 .mcp-form-remove-btn {
@@ -320,4 +368,21 @@
 .mcp-form-remove-btn:hover {
     background: #fef2f2;
     color: #dc2626;
+}
+
+@media (max-width: 720px) {
+    .mcp-form-env-row {
+        grid-template-columns: 1fr auto;
+    }
+
+    .mcp-form-env-key,
+    .mcp-form-env-value {
+        grid-column: 1;
+    }
+
+    .mcp-form-remove-btn {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: center;
+    }
 }

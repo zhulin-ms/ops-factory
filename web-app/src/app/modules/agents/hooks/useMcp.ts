@@ -129,7 +129,6 @@ export function useMcp(agentId: string | null): UseMcpResult {
 
       // Refresh to get updated list
       await fetchMcp()
-      showToast('success', t('mcp.configUpdatedRestarting'))
     } catch (err) {
       setError(getErrorMessage(err))
       throw err

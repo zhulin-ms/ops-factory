@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-@ConfigurationProperties(prefix = "ops-knowledge")
+@ConfigurationProperties(prefix = "knowledge")
 public class KnowledgeProperties {
 
     private Ingest ingest = new Ingest();
@@ -49,6 +49,9 @@ public class KnowledgeProperties {
         private int maxFileSizeMb = 100;
         private List<String> allowedContentTypes = new ArrayList<>(List.of(
             "application/pdf",
+            "application/vnd.ms-htmlhelp",
+            "application/chm",
+            "application/x-chm",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -211,6 +214,8 @@ public class KnowledgeProperties {
         private int finalTopK = 8;
         private int maxTopK = 64;
         private int rrfK = 60;
+        private double semanticThreshold = 0.42;
+        private double lexicalThreshold = 0.52;
         private int snippetLength = 180;
         public String getMode() { return mode; }
         public void setMode(String mode) { this.mode = mode; }
@@ -224,6 +229,10 @@ public class KnowledgeProperties {
         public void setMaxTopK(int maxTopK) { this.maxTopK = maxTopK; }
         public int getRrfK() { return rrfK; }
         public void setRrfK(int rrfK) { this.rrfK = rrfK; }
+        public double getSemanticThreshold() { return semanticThreshold; }
+        public void setSemanticThreshold(double semanticThreshold) { this.semanticThreshold = semanticThreshold; }
+        public double getLexicalThreshold() { return lexicalThreshold; }
+        public void setLexicalThreshold(double lexicalThreshold) { this.lexicalThreshold = lexicalThreshold; }
         public int getSnippetLength() { return snippetLength; }
         public void setSnippetLength(int snippetLength) { this.snippetLength = snippetLength; }
     }

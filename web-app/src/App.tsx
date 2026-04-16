@@ -9,6 +9,7 @@ import { buildRoutes } from './app/platform/RouteBuilder'
 import { AppShell } from './app/platform/AppShell'
 import { RightPanelHost } from './app/platform/RightPanelHost'
 import { useEnabledModules } from './app/platform/useEnabledModules'
+import { useRouteDiagnostics } from './app/platform/logging/useRouteDiagnostics'
 
 const IS_EMBED = getUrlParam('embed') === 'true'
 
@@ -22,6 +23,8 @@ function AppContent() {
     const isEmbed = IS_EMBED
     const enabledModules = useEnabledModules()
     const routes = buildRoutes(enabledModules)
+
+    useRouteDiagnostics(enabledModules)
 
     return (
         <AppShell

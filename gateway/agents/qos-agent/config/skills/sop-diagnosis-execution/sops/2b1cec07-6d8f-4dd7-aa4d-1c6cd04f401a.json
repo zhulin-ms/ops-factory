@@ -1,0 +1,66 @@
+{
+  "id" : "2b1cec07-6d8f-4dd7-aa4d-1c6cd04f401a",
+  "name" : "KAFKA环境诊断",
+  "description" : "第三层-数据层节点环境诊断：Kafka进程检查、下游连通性检查、磁盘检查",
+  "version" : "2.0",
+  "triggerCondition" : "KAFKA相关告警",
+  "nodes" : [ {
+    "id" : "node-kafka-0",
+    "name" : "本进程检查",
+    "type" : "start",
+    "tags" : [ "KAFKA" ],
+    "command" : "ps -eo pid,lstart,cmd | grep kafka | grep -v grep; echo '===CPU==='; top -bn1 | head -5; ps -eo pid,%cpu,comm | grep kafka | grep -v grep; echo '===MEM==='; free -m; ps -eo pid,%mem,rss,comm | grep kafka | grep -v grep",
+    "variables" : [ ],
+    "outputFormat" : "进程PID/启动时间 | 系统负载+进程CPU% | 系统内存+进程MEM%",
+    "analysisInstruction" : "综合分析Kafka进程状态：1)进程是否存在，启动时间是否表明近期重启（Kafka重启可能导致消息积压） 2)进程CPU使用率是否超过80% 3)Kafka依赖JVM堆内存和页缓存，内存使用率超过85%视为异常",
+    "transitions" : [ {
+      "condition" : "进程状态正常",
+      "nextNodes" : [ "下游配置检查" ]
+    } ]
+  }, {
+    "id" : "node-kafka-1",
+    "name" : "下游配置检查",
+    "type" : "analysis",
+    "tags" : [ "KAFKA" ],
+    "command" : "cat /opt/kafka/config/server.properties 2>/dev/null || cat /etc/kafka/server.properties 2>/dev/null || echo 'Kafka config not found in default paths'",
+    "variables" : [ ],
+    "outputFormat" : "Kafka配置内容（broker.id、zookeeper.connect、num.partitions等）",
+    "analysisInstruction" : "检查Kafka关键配置：broker.id、zookeeper.connect、num.partitions、log.retention.hours等是否合理",
+    "transitions" : [ {
+      "condition" : "配置正常",
+      "nextNodes" : [ "下游网络检查" ]
+    } ]
+  }, {
+    "id" : "node-kafka-2",
+    "name" : "下游网络检查",
+    "type" : "analysis",
+    "tags" : [ "KAFKA" ],
+    "command" : "ping -c 3 {{downstream_ip}}",
+    "variables" : [ {
+      "name" : "downstream_ip",
+      "defaultValue" : "127.0.0.1",
+      "description" : "下游服务IP（如ZooKeeper），从配置文件或告警上下文中获取",
+      "required" : false
+    } ],
+    "outputFormat" : "ping结果：丢包率、延迟(ms)",
+    "analysisInstruction" : "检查到下游服务（如ZooKeeper）的网络连通性。丢包率>0%或延迟>100ms视为异常",
+    "transitions" : [ {
+      "condition" : "网络正常",
+      "nextNodes" : [ "磁盘检查" ]
+    } ]
+  }, {
+    "id" : "node-kafka-3",
+    "name" : "磁盘检查",
+    "type" : "analysis",
+    "tags" : [ "KAFKA" ],
+    "command" : "df -h; echo '===IOPS==='; iostat -x 1 1 2>/dev/null || cat /proc/diskstats",
+    "variables" : [ ],
+    "outputFormat" : "磁盘使用率(%) | IOPS统计",
+    "analysisInstruction" : "检查磁盘空间使用率和I/O性能。Kafka对磁盘I/O高度敏感，磁盘使用率超过85%或IOPS异常高视为异常",
+    "transitions" : [ ]
+  } ],
+  "enabled" : false,
+  "mode" : "structured",
+  "stepsDescription" : "",
+  "tags" : [ ],
+}

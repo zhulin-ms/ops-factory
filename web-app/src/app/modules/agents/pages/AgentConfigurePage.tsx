@@ -8,6 +8,7 @@ import { SkillSection } from '../components/skill'
 import { PromptsSection } from '../components/prompt'
 import { MemorySection } from '../components/memory'
 import Button from '../../../platform/ui/primitives/Button'
+import PageBackLink from '../../../platform/ui/primitives/PageBackLink'
 import { useRightPanel } from '../../../platform/providers/RightPanelContext'
 import '../styles/agents.css'
 
@@ -101,13 +102,9 @@ export default function AgentConfigure() {
         >
             <div className="page-container sidebar-top-page agent-configure-page">
                 <div className="agent-configure-header">
-                <button
-                    type="button"
-                    className="agent-configure-back"
-                    onClick={() => navigate('/agents')}
-                >
+                <PageBackLink onClick={() => navigate('/agents')}>
                     {t('agentConfigure.backToAgents')}
-                </button>
+                </PageBackLink>
                 <div className="agent-configure-title-section">
                     <h1 className="agent-configure-title">{config.name}</h1>
                     <span className="agent-configure-id">{config.id}</span>
@@ -132,10 +129,24 @@ export default function AgentConfigure() {
             <div className="agent-configure-content">
                 {activeTab === 'overview' && (
                     <section className="agent-configure-section">
-                        <h2 className="agent-configure-section-title">{t('agentConfigure.agentPromptTitle')}</h2>
-                        <p className="agent-configure-section-desc">
-                            {t('agentConfigure.agentPromptDesc')}
-                        </p>
+                        <div className="agent-configure-section-header">
+                            <div className="agent-configure-section-copy">
+                                <h2 className="agent-configure-section-title">{t('agentConfigure.agentPromptTitle')}</h2>
+                                <p className="agent-configure-section-desc">
+                                    {t('agentConfigure.agentPromptDesc')}
+                                </p>
+                            </div>
+                            <div className="agent-configure-actions agent-configure-actions-top">
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={handleSavePrompt}
+                                    disabled={isSavingPrompt}
+                                >
+                                    {isSavingPrompt ? t('agentConfigure.saving') : t('agentConfigure.savePrompt')}
+                                </Button>
+                            </div>
+                        </div>
                         <div className="agent-prompt-editor">
                             <textarea
                                 value={agentsMd}
@@ -143,15 +154,6 @@ export default function AgentConfigure() {
                                 placeholder={t('agentConfigure.promptPlaceholder')}
                                 rows={15}
                             />
-                        </div>
-                        <div className="agent-configure-actions">
-                            <Button
-                                variant="primary"
-                                onClick={handleSavePrompt}
-                                disabled={isSavingPrompt}
-                            >
-                                {isSavingPrompt ? t('agentConfigure.saving') : t('agentConfigure.savePrompt')}
-                            </Button>
                         </div>
                     </section>
                 )}

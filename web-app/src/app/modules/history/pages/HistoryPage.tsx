@@ -12,6 +12,7 @@ import ListResultsMeta from '../../../platform/ui/list/ListResultsMeta'
 import ListSearchInput from '../../../platform/ui/list/ListSearchInput'
 import ListToolbar from '../../../platform/ui/list/ListToolbar'
 import ListWorkbench from '../../../platform/ui/list/ListWorkbench'
+import { buildChatSessionState } from '../../../platform/chat/chatRouteState'
 import { isScheduledSession } from '../../../../config/runtime'
 import SessionList, { type SessionWithAgent } from '../components/SessionList'
 import '../styles/history.css'
@@ -139,7 +140,9 @@ export default function HistoryPage() {
         if (resolvedAgentId && isScheduledSession(session)) {
             markSessionRead(resolvedAgentId, session.id)
         }
-        navigate(`/chat?sessionId=${session.id}&agent=${resolvedAgentId}`)
+        navigate('/chat', {
+            state: buildChatSessionState(session.id, resolvedAgentId),
+        })
     }
 
     const handleMarkUnread = (session: SessionWithAgent) => {
@@ -197,7 +200,7 @@ export default function HistoryPage() {
     }
 
     return (
-        <div className="page-container sidebar-top-page history-page">
+        <div className="page-container sidebar-top-page page-shell-wide history-page">
             <PageHeader title={t('history.title')} subtitle={t('history.subtitle')} />
 
             {(error || (!isConnected && connectionError)) && (

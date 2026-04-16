@@ -1,0 +1,31 @@
+.page-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    width: fit-content;
+    padding: 6px 14px;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: var(--radius-2xl);
+    transition: all var(--transition-base);
+    cursor: pointer;
+}
+
+.page-back-link:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+}
+
+.page-back-link:focus-visible {
+    outline: none;
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+}
+
+.page-back-link-icon {
+    font-size: 1.125rem;
+    line-height: 1;
+}

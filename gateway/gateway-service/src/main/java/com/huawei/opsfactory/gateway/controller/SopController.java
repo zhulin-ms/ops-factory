@@ -2,8 +2,8 @@ package com.huawei.opsfactory.gateway.controller;
 
 import com.huawei.opsfactory.gateway.service.SopService;
 import com.huawei.opsfactory.gateway.filter.UserContextFilter;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,7 +19,7 @@ import java.util.Map;
 @RequestMapping("/gateway/sops")
 public class SopController {
 
-    private static final Logger log = LogManager.getLogger(SopController.class);
+    private static final Logger log = LoggerFactory.getLogger(SopController.class);
 
     private final SopService sopService;
 

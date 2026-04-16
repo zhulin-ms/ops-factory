@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_DIR="$(dirname "${SCRIPT_DIR}")"
+ROOT_DIR="$(dirname "${SERVICE_DIR}")"
 
 yaml_val() {
     local key="$1" file="${SERVICE_DIR}/config.yaml"
@@ -31,15 +32,18 @@ log_ok()    { echo -e "${GREEN}[OK]${NC}    $1"; }
 log_fail()  { echo -e "${RED}[FAIL]${NC}  $1"; }
 
 LOG_DIR="${SERVICE_DIR}/logs"
+PID_FILE="${LOG_DIR}/business-intelligence.pid"
+DAEMON_HELPER="${ROOT_DIR}/scripts/lib/service-daemon.sh"
 
-check_port() { lsof -ti:"$1" >/dev/null 2>&1; }
+# shellcheck source=/dev/null
+source "${DAEMON_HELPER}"
+
+check_port() { daemon_port_has_listener "$1"; }
 
 stop_port() {
     local port=$1 name=$2
-    if lsof -ti:"${port}" >/dev/null 2>&1; then
-        log_info "Stopping ${name} on port ${port}..."
-        kill $(lsof -ti:"${port}") 2>/dev/null || true
-        sleep 1
+    if check_port "${port}"; then
+        daemon_stop_listener_port "${port}" "${name}" || true
     fi
 }
 
@@ -51,19 +55,6 @@ wait_http_ok() {
     done
     log_error "${name} health check failed: ${url}"
     return 1
-}
-
-start_detached() {
-    local log_file="$1"
-    shift
-
-    mkdir -p "${LOG_DIR}"
-    if command -v setsid >/dev/null 2>&1; then
-        nohup setsid "$@" </dev/null >>"${log_file}" 2>&1 &
-    else
-        nohup "$@" </dev/null >>"${log_file}" 2>&1 &
-    fi
-    echo $!
 }
 
 build_service() {
@@ -89,7 +80,22 @@ SERVICE_PID=""
 
 do_startup() {
     local mode="${1:-foreground}"
-    stop_port "${BI_PORT}" "business-intelligence"
+
+    if [ "${mode}" = "background" ] && daemon_is_running "${PID_FILE}"; then
+        local existing_pid
+        existing_pid="$(daemon_read_pid "${PID_FILE}")"
+        if curl -fsS "http://127.0.0.1:${BI_PORT}/actuator/health" >/dev/null 2>&1; then
+            log_info "business-intelligence already running (PID: ${existing_pid})"
+            return 0
+        fi
+        log_warn "Managed business-intelligence process exists but health check failed; restarting"
+        daemon_stop "${PID_FILE}" "business-intelligence" 5 || true
+    fi
+
+    if check_port "${BI_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "business-intelligence port ${BI_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${BI_PORT}" "business-intelligence"
+    fi
 
     build_service
     local jar="${SERVICE_DIR}/target/business-intelligence.jar"
@@ -100,12 +106,15 @@ do_startup() {
 
     if [ "${mode}" = "background" ]; then
         local log_file="${LOG_DIR}/business-intelligence.log"
-        SERVICE_PID="$(start_detached "${log_file}" env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java -Dserver.port="${BI_PORT}" -jar "${jar}")"
+        SERVICE_PID="$(daemon_start "${PID_FILE}" "${log_file}" env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java -Dserver.port="${BI_PORT}" -jar "${jar}")"
         if ! kill -0 "${SERVICE_PID}" 2>/dev/null; then
             log_error "Failed to start business-intelligence"
             return 1
         fi
-        wait_http_ok "business-intelligence" "http://127.0.0.1:${BI_PORT}/actuator/health" 40 1
+        if ! wait_http_ok "business-intelligence" "http://127.0.0.1:${BI_PORT}/actuator/health" 40 1; then
+            daemon_stop "${PID_FILE}" "business-intelligence" 5 || true
+            return 1
+        fi
         log_info "business-intelligence started (PID: ${SERVICE_PID}, log: ${log_file})"
     else
         exec env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java -Dserver.port="${BI_PORT}" -jar "${jar}"
@@ -113,17 +122,27 @@ do_startup() {
 }
 
 do_shutdown() {
-    stop_port "${BI_PORT}" "business-intelligence"
+    daemon_stop "${PID_FILE}" "business-intelligence" 20 || true
+    if ! daemon_wait_for_port_release "${BI_PORT}" 20 0.1 && check_port "${BI_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "business-intelligence port ${BI_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${BI_PORT}" "business-intelligence"
+    fi
+    rm -f "${PID_FILE}" 2>/dev/null || true
 }
 
 do_status() {
-    if check_port "${BI_PORT}"; then
+    if daemon_is_running "${PID_FILE}"; then
+        local pid
+        pid="$(daemon_read_pid "${PID_FILE}")"
         if curl -fsS "http://127.0.0.1:${BI_PORT}/actuator/health" >/dev/null 2>&1; then
-            log_ok "business-intelligence running (http://localhost:${BI_PORT})"
+            log_ok "business-intelligence running (http://localhost:${BI_PORT}, PID: ${pid})"
         else
-            log_warn "business-intelligence port open but health check failed"
+            log_warn "business-intelligence process running (PID: ${pid}) but health check failed"
             return 1
         fi
+    elif check_port "${BI_PORT}"; then
+        log_warn "business-intelligence port open on ${BI_PORT} but service is unmanaged (missing/stale pidfile)"
+        return 1
     else
         log_fail "business-intelligence not running on port ${BI_PORT}"
         return 1

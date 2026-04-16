@@ -223,6 +223,8 @@ export function WhitelistTab() {
     } = useCommandWhitelist()
     const { showToast } = useToast()
 
+    const PAGE_SIZE = 15
+    const [currentPage, setCurrentPage] = useState(1)
     const [editingCommand, setEditingCommand] = useState<WhitelistCommand | null>(null)
     const [showAddModal, setShowAddModal] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -400,6 +402,11 @@ export function WhitelistTab() {
                         </div>
                     </div>
                 ) : (
+                    (() => {
+                        const totalPages = Math.max(1, Math.ceil(commands.length / PAGE_SIZE))
+                        const safePage = Math.min(currentPage, totalPages)
+                        const paginatedCommands = commands.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+                        return <>
                     <div className="sop-workflow-list-shell">
                         <div className="sop-workflow-table-wrap">
                             <table className="sop-workflow-table">
@@ -414,7 +421,7 @@ export function WhitelistTab() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {commands.map(cmd => (
+                                    {paginatedCommands.map(cmd => (
                                         <tr key={cmd.pattern} className="sop-workflow-table-row">
                                             <td>
                                                 <code className="sop-workflow-code-pill">
@@ -458,6 +465,32 @@ export function WhitelistTab() {
                             </table>
                         </div>
                     </div>
+                    {totalPages > 1 && (
+                        <div className="sop-workflow-pagination">
+                            <span className="sop-workflow-pagination-info">
+                                {t('common.showing', {
+                                    start: (safePage - 1) * PAGE_SIZE + 1,
+                                    end: Math.min(safePage * PAGE_SIZE, commands.length),
+                                    total: commands.length,
+                                })}
+                            </span>
+                            <div className="sop-workflow-pagination-controls">
+                                <button className="sop-workflow-pagination-btn"
+                                    disabled={safePage <= 1}
+                                    onClick={() => setCurrentPage(safePage - 1)}>
+                                    {t('common.previousPage')}
+                                </button>
+                                <span className="sop-workflow-pagination-page">{safePage} / {totalPages}</span>
+                                <button className="sop-workflow-pagination-btn"
+                                    disabled={safePage >= totalPages}
+                                    onClick={() => setCurrentPage(safePage + 1)}>
+                                    {t('common.nextPage')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </>
+                    })()
                 )}
             </section>
 

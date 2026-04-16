@@ -27,11 +27,21 @@
     color: var(--color-text-primary);
 }
 
+.home-title-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.18em;
+}
+
 .home-title-icon {
-    width: 3rem;
-    height: 3rem;
-    display: inline-block;
-    margin-left: 1em;
+    position: static;
+    width: 0.92em;
+    height: 0.92em;
+    color: inherit;
+    opacity: 1;
+    transform: translateY(0.02em);
+    flex: 0 0 auto;
 }
 
 .home-description {

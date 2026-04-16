@@ -1,6 +1,7 @@
 package com.huawei.opsfactory.gateway.common.util;
 
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.error.YAMLException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +27,8 @@ public final class YamlLoader {
             Yaml yaml = new Yaml();
             Map<String, Object> result = yaml.load(is);
             return result != null ? result : Collections.emptyMap();
+        } catch (YAMLException e) {
+            throw new RuntimeException("Invalid YAML: " + path + ": " + e.getMessage(), e);
         } catch (IOException e) {
             throw new RuntimeException("Failed to load YAML: " + path, e);
         }

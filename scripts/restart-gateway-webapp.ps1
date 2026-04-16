@@ -1,14 +1,23 @@
 # ==============================================================================
 # ops-factory Windows service restart script
 #
-# Usage: restart-gateway-webapp.ps1 [gateway|webapp|all]
-#   gateway  - restart gateway only (default)
-#   webapp   - restart webapp only
-#   all      - restart both gateway and webapp
+# Usage: restart-gateway-webapp.ps1 [gateway|webapp|knowledge|bi|control|all] [nobuild]
+#   gateway   - restart gateway (includes sop-executor build) only (default)
+#   webapp    - restart webapp only
+#   knowledge - restart knowledge-service only
+#   bi        - restart business-intelligence only
+#   control   - restart control-center only
+#   all       - restart all services (gateway, knowledge, bi, control, webapp)
+#   nobuild   - (optional) skip build steps, restart only
 # ==============================================================================
 
 param(
-    [string]$Component = "all"
+    [Parameter(Position = 0)]
+    [ValidateSet("gateway", "webapp", "knowledge", "bi", "control", "all")]
+    [string]$Component = "all",
+
+    [Parameter(Position = 1)]
+    [switch]$NoBuild
 )
 
 $ErrorActionPreference = "Continue"
@@ -19,6 +28,9 @@ $ROOT_DIR = Split-Path -Parent $PSScriptRoot
 # === Configuration ===
 $GATEWAY_PORT = 3000
 $WEBAPP_PORT = 5173
+$KNOWLEDGE_PORT = 8092
+$BI_PORT = 8093
+$CONTROL_PORT = 8094
 $GATEWAY_SECRET_KEY = "test"
 $GATEWAY_SCHEME = "http"
 
@@ -175,6 +187,390 @@ function Start-GatewayService {
 }
 
 # ==============================================================================
+# Build functions
+# ==============================================================================
+
+function Build-Gateway {
+    Write-Status "INFO" "Building gateway (Maven)..."
+
+    $JAVA_HOME = Split-Path -Parent (Split-Path -Parent $JAVA_CMD)
+
+    Push-Location "$ROOT_DIR\gateway"
+    $env:JAVA_HOME = $JAVA_HOME
+    $mvnArgs = "clean package -pl gateway-service -am -Dmaven.test.skip=true -q"
+    & cmd.exe /c "mvn $mvnArgs" 2>&1 | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Status "FAIL" "Gateway build failed (exit code $exitCode)"
+        Write-Status "INFO"  "Try manually: cd gateway && set JAVA_HOME=$JAVA_HOME && mvn package -Dmaven.test.skip=true"
+        exit 1
+    }
+
+    $JAR = "$ROOT_DIR\gateway\gateway-service\target\gateway-service.jar"
+    if (-not (Test-Path $JAR)) {
+        Write-Status "FAIL" "Build succeeded but JAR not found: $JAR"
+        exit 1
+    }
+
+    Write-Status "OK" "Gateway build complete"
+}
+
+function Build-SopExecutor {
+    Write-Status "INFO" "Building sop-executor (TypeScript)..."
+
+    $SOP_DIR = "$ROOT_DIR\gateway\agents\qos-agent\config\mcp\sop-executor"
+    if (-not (Test-Path "$SOP_DIR\node_modules")) {
+        Write-Status "INFO" "Installing sop-executor npm dependencies..."
+        Push-Location $SOP_DIR
+        & npm.cmd install 2>&1 | ForEach-Object { Write-Host $_ }
+        $exitCode = $LASTEXITCODE
+        Pop-Location
+        if ($exitCode -ne 0) {
+            Write-Status "FAIL" "sop-executor npm install failed"
+            exit 1
+        }
+    }
+
+    Push-Location $SOP_DIR
+    & npm.cmd run build 2>&1 | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Status "FAIL" "sop-executor build failed"
+        exit 1
+    }
+
+    Write-Status "OK" "sop-executor build complete"
+}
+
+function Build-Webapp {
+    Write-Status "INFO" "Building webapp (Vite)..."
+
+    $WEBAPP_DIR = "$ROOT_DIR\web-app"
+    if (-not (Test-Path "$WEBAPP_DIR\node_modules")) {
+        Write-Status "INFO" "Installing npm dependencies..."
+        Push-Location $WEBAPP_DIR
+        & npm.cmd install 2>&1 | ForEach-Object { Write-Host $_ }
+        $exitCode = $LASTEXITCODE
+        Pop-Location
+        if ($exitCode -ne 0) {
+            Write-Status "FAIL" "npm install failed"
+            exit 1
+        }
+    }
+
+    Push-Location $WEBAPP_DIR
+    & npm.cmd run build 2>&1 | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Status "FAIL" "Webapp build failed"
+        exit 1
+    }
+
+    Write-Status "OK" "Webapp build complete"
+}
+
+# ==============================================================================
+# Knowledge-service functions
+# ==============================================================================
+
+function Stop-KnowledgeService {
+    Write-Status "INFO" "Stopping knowledge-service on port $KNOWLEDGE_PORT..."
+
+    $conns = netstat -ano | Select-String ":$KNOWLEDGE_PORT " | Select-String "LISTENING"
+    foreach ($conn in $conns) {
+        $procId = ($conn -split '\s+')[-1]
+        Write-Status "INFO" "Killing PID $procId on port $KNOWLEDGE_PORT..."
+        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+    }
+
+    Start-Sleep -Seconds 3
+    Write-Status "OK" "Knowledge-service stopped"
+}
+
+function Build-KnowledgeService {
+    Write-Status "INFO" "Building knowledge-service (Maven)..."
+
+    $JAVA_HOME = Split-Path -Parent (Split-Path -Parent $JAVA_CMD)
+    $KS_DIR = "$ROOT_DIR\knowledge-service"
+
+    Push-Location $KS_DIR
+    $env:JAVA_HOME = $JAVA_HOME
+    & cmd.exe /c "mvn clean package -DskipTests -q" 2>&1 | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Status "FAIL" "Knowledge-service build failed (exit code $exitCode)"
+        Write-Status "INFO"  "Try manually: cd knowledge-service && set JAVA_HOME=$JAVA_HOME && mvn package -DskipTests"
+        exit 1
+    }
+
+    $JAR = "$KS_DIR\target\knowledge-service.jar"
+    if (-not (Test-Path $JAR)) {
+        Write-Status "FAIL" "Build succeeded but JAR not found: $JAR"
+        exit 1
+    }
+
+    Write-Status "OK" "Knowledge-service build complete"
+}
+
+function Start-KnowledgeService {
+    param([string]$JavaCmd)
+
+    Write-Status "INFO" "Starting knowledge-service at http://127.0.0.1:${KNOWLEDGE_PORT}..."
+
+    $JAR = "$ROOT_DIR\knowledge-service\target\knowledge-service.jar"
+
+    if (-not (Test-Path $JAR)) {
+        Write-Status "ERROR" "JAR not found: $JAR"
+        Write-Status "ERROR" "Run 'mvn package -DskipTests' in knowledge-service/ first"
+        exit 1
+    }
+
+    $LOG_DIR = "$ROOT_DIR\knowledge-service\logs"
+    if (-not (Test-Path $LOG_DIR)) { New-Item -ItemType Directory -Path $LOG_DIR | Out-Null }
+
+    $javaOpts = @(
+        "-Dserver.port=$KNOWLEDGE_PORT",
+        "-jar `"$JAR`""
+    )
+
+    $javaArgs = $javaOpts -join " "
+    $ksLog = "$LOG_DIR\knowledge-service.log"
+    $ksErrLog = "$LOG_DIR\knowledge-service-err.log"
+
+    $env:CONFIG_PATH = "$ROOT_DIR\knowledge-service\config.yaml"
+
+    Start-Process -FilePath $JavaCmd -ArgumentList $javaArgs `
+        -WorkingDirectory "$ROOT_DIR\knowledge-service" `
+        -WindowStyle Minimized `
+        -RedirectStandardOutput $ksLog `
+        -RedirectStandardError $ksErrLog
+
+    # Wait for health check - needs longer timeout due to Lucene index rebuild
+    Write-Status "INFO" "Waiting for knowledge-service to become healthy (up to 60s)..."
+    $healthy = $false
+    for ($i = 0; $i -lt 60; $i++) {
+        try {
+            $null = Invoke-WebRequest -Uri "http://127.0.0.1:${KNOWLEDGE_PORT}/actuator/health" `
+                -TimeoutSec 2 -UseBasicParsing
+            $healthy = $true
+            Write-Status "OK" "Knowledge-service is healthy"
+            break
+        } catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    if (-not $healthy) {
+        Write-Status "WARN" "Knowledge-service health check failed after 60s"
+        Write-Status "WARN" "Check log: $LOG_DIR\knowledge-service.log"
+    }
+}
+
+# ==============================================================================
+# Business-intelligence functions
+# ==============================================================================
+
+function Stop-BIService {
+    Write-Status "INFO" "Stopping business-intelligence on port $BI_PORT..."
+
+    $conns = netstat -ano | Select-String ":$BI_PORT " | Select-String "LISTENING"
+    foreach ($conn in $conns) {
+        $procId = ($conn -split '\s+')[-1]
+        Write-Status "INFO" "Killing PID $procId on port $BI_PORT..."
+        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+    }
+
+    Start-Sleep -Seconds 3
+    Write-Status "OK" "Business-intelligence stopped"
+}
+
+function Build-BIService {
+    Write-Status "INFO" "Building business-intelligence (Maven)..."
+
+    $JAVA_HOME = Split-Path -Parent (Split-Path -Parent $JAVA_CMD)
+    $BI_DIR = "$ROOT_DIR\business-intelligence"
+
+    Push-Location $BI_DIR
+    $env:JAVA_HOME = $JAVA_HOME
+    & cmd.exe /c "mvn clean package -DskipTests -q" 2>&1 | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Status "FAIL" "Business-intelligence build failed (exit code $exitCode)"
+        Write-Status "INFO"  "Try manually: cd business-intelligence && set JAVA_HOME=$JAVA_HOME && mvn package -DskipTests"
+        exit 1
+    }
+
+    $JAR = "$BI_DIR\target\business-intelligence.jar"
+    if (-not (Test-Path $JAR)) {
+        Write-Status "FAIL" "Build succeeded but JAR not found: $JAR"
+        exit 1
+    }
+
+    Write-Status "OK" "Business-intelligence build complete"
+}
+
+function Start-BIService {
+    param([string]$JavaCmd)
+
+    Write-Status "INFO" "Starting business-intelligence at http://127.0.0.1:${BI_PORT}..."
+
+    $JAR = "$ROOT_DIR\business-intelligence\target\business-intelligence.jar"
+
+    if (-not (Test-Path $JAR)) {
+        Write-Status "ERROR" "JAR not found: $JAR"
+        Write-Status "ERROR" "Run 'mvn package -DskipTests' in business-intelligence/ first"
+        exit 1
+    }
+
+    $LOG_DIR = "$ROOT_DIR\business-intelligence\logs"
+    if (-not (Test-Path $LOG_DIR)) { New-Item -ItemType Directory -Path $LOG_DIR | Out-Null }
+
+    $javaOpts = @(
+        "-Dserver.port=$BI_PORT",
+        "-jar `"$JAR`""
+    )
+
+    $javaArgs = $javaOpts -join " "
+    $biLog = "$LOG_DIR\business-intelligence.log"
+    $biErrLog = "$LOG_DIR\business-intelligence-err.log"
+
+    $env:CONFIG_PATH = "$ROOT_DIR\business-intelligence\config.yaml"
+
+    Start-Process -FilePath $JavaCmd -ArgumentList $javaArgs `
+        -WorkingDirectory "$ROOT_DIR\business-intelligence" `
+        -WindowStyle Minimized `
+        -RedirectStandardOutput $biLog `
+        -RedirectStandardError $biErrLog
+
+    Write-Status "INFO" "Waiting for business-intelligence to become healthy (up to 30s)..."
+    $healthy = $false
+    for ($i = 0; $i -lt 30; $i++) {
+        try {
+            $null = Invoke-WebRequest -Uri "http://127.0.0.1:${BI_PORT}/actuator/health" `
+                -TimeoutSec 2 -UseBasicParsing
+            $healthy = $true
+            Write-Status "OK" "Business-intelligence is healthy"
+            break
+        } catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    if (-not $healthy) {
+        Write-Status "WARN" "Business-intelligence health check failed after 30s"
+        Write-Status "WARN" "Check log: $LOG_DIR\business-intelligence.log"
+    }
+}
+
+# ==============================================================================
+# Control-center functions
+# ==============================================================================
+
+function Stop-ControlCenter {
+    Write-Status "INFO" "Stopping control-center on port $CONTROL_PORT..."
+
+    $conns = netstat -ano | Select-String ":$CONTROL_PORT " | Select-String "LISTENING"
+    foreach ($conn in $conns) {
+        $procId = ($conn -split '\s+')[-1]
+        Write-Status "INFO" "Killing PID $procId on port $CONTROL_PORT..."
+        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+    }
+
+    Start-Sleep -Seconds 3
+    Write-Status "OK" "Control-center stopped"
+}
+
+function Build-ControlCenter {
+    Write-Status "INFO" "Building control-center (Maven)..."
+
+    $JAVA_HOME = Split-Path -Parent (Split-Path -Parent $JAVA_CMD)
+    $CC_DIR = "$ROOT_DIR\control-center"
+
+    Push-Location $CC_DIR
+    $env:JAVA_HOME = $JAVA_HOME
+    & cmd.exe /c "mvn clean package -DskipTests -q" 2>&1 | ForEach-Object { Write-Host $_ }
+    $exitCode = $LASTEXITCODE
+    Pop-Location
+
+    if ($exitCode -ne 0) {
+        Write-Status "FAIL" "Control-center build failed (exit code $exitCode)"
+        Write-Status "INFO"  "Try manually: cd control-center && set JAVA_HOME=$JAVA_HOME && mvn package -DskipTests"
+        exit 1
+    }
+
+    $JAR = "$CC_DIR\target\control-center.jar"
+    if (-not (Test-Path $JAR)) {
+        Write-Status "FAIL" "Build succeeded but JAR not found: $JAR"
+        exit 1
+    }
+
+    Write-Status "OK" "Control-center build complete"
+}
+
+function Start-ControlCenter {
+    param([string]$JavaCmd)
+
+    Write-Status "INFO" "Starting control-center at http://127.0.0.1:${CONTROL_PORT}..."
+
+    $JAR = "$ROOT_DIR\control-center\target\control-center.jar"
+
+    if (-not (Test-Path $JAR)) {
+        Write-Status "ERROR" "JAR not found: $JAR"
+        Write-Status "ERROR" "Run 'mvn package -DskipTests' in control-center/ first"
+        exit 1
+    }
+
+    $LOG_DIR = "$ROOT_DIR\control-center\logs"
+    if (-not (Test-Path $LOG_DIR)) { New-Item -ItemType Directory -Path $LOG_DIR | Out-Null }
+
+    $javaOpts = @(
+        "-Dserver.port=$CONTROL_PORT",
+        "-jar `"$JAR`""
+    )
+
+    $javaArgs = $javaOpts -join " "
+    $ccLog = "$LOG_DIR\control-center.log"
+    $ccErrLog = "$LOG_DIR\control-center-err.log"
+
+    $env:CONFIG_PATH = "$ROOT_DIR\control-center\config.yaml"
+
+    Start-Process -FilePath $JavaCmd -ArgumentList $javaArgs `
+        -WorkingDirectory "$ROOT_DIR\control-center" `
+        -WindowStyle Minimized `
+        -RedirectStandardOutput $ccLog `
+        -RedirectStandardError $ccErrLog
+
+    Write-Status "INFO" "Waiting for control-center to become healthy (up to 30s)..."
+    $healthy = $false
+    for ($i = 0; $i -lt 30; $i++) {
+        try {
+            $null = Invoke-WebRequest -Uri "http://127.0.0.1:${CONTROL_PORT}/actuator/health" `
+                -TimeoutSec 2 -UseBasicParsing
+            $healthy = $true
+            Write-Status "OK" "Control-center is healthy"
+            break
+        } catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    if (-not $healthy) {
+        Write-Status "WARN" "Control-center health check failed after 30s"
+        Write-Status "WARN" "Check log: $LOG_DIR\control-center.log"
+    }
+}
+
+# ==============================================================================
 # Webapp functions
 # ==============================================================================
 
@@ -225,22 +621,52 @@ Write-Status "INFO" "Using Java: $JAVA_CMD"
 
 switch ($Component.ToLower()) {
     "gateway" {
+        if (-not $NoBuild) { Build-Gateway }
+        if (-not $NoBuild) { Build-SopExecutor }
         Stop-Gateway
         Start-GatewayService -JavaCmd $JAVA_CMD
     }
     "webapp" {
+        if (-not $NoBuild) { Build-Webapp }
         Stop-Webapp
         Start-WebappService
     }
+    "knowledge" {
+        if (-not $NoBuild) { Build-KnowledgeService }
+        Stop-KnowledgeService
+        Start-KnowledgeService -JavaCmd $JAVA_CMD
+    }
+    "bi" {
+        if (-not $NoBuild) { Build-BIService }
+        Stop-BIService
+        Start-BIService -JavaCmd $JAVA_CMD
+    }
+    "control" {
+        if (-not $NoBuild) { Build-ControlCenter }
+        Stop-ControlCenter
+        Start-ControlCenter -JavaCmd $JAVA_CMD
+    }
     "all" {
+        if (-not $NoBuild) { Build-Gateway }
+        if (-not $NoBuild) { Build-SopExecutor }
+        #if (-not $NoBuild) { Build-KnowledgeService }
+        #if (-not $NoBuild) { Build-BIService }
+        #if (-not $NoBuild) { Build-ControlCenter }
+        if (-not $NoBuild) { Build-Webapp }
         Stop-Webapp
+        #Stop-ControlCenter
+        #Stop-BIService
+        #Stop-KnowledgeService
         Stop-Gateway
         Start-GatewayService -JavaCmd $JAVA_CMD
+        #Start-KnowledgeService -JavaCmd $JAVA_CMD
+        #Start-BIService -JavaCmd $JAVA_CMD
+        #Start-ControlCenter -JavaCmd $JAVA_CMD
         Start-WebappService
     }
     default {
         Write-Status "ERROR" "Unknown component: $Component"
-        Write-Host "Usage: $([System.IO.Path]::GetFileName($PSCommandPath)) [gateway|webapp|all]"
+        Write-Host "Usage: $([System.IO.Path]::GetFileName($PSCommandPath)) [gateway|webapp|knowledge|bi|control|all] [-NoBuild]"
         exit 1
     }
 }

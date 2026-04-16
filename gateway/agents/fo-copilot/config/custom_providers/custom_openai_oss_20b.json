@@ -1,0 +1,16 @@
+{
+  "name": "custom_openai_oss_20b",
+  "engine": "openai",
+  "display_name": "gpt-oss-20b",
+  "description": "Custom OpsAgentLLM provider",
+  "api_key_env": "CUSTOM_OPSAGENTLLM_API_KEY",
+  "base_url": "https://openrouter.ai/api/v1/chat/completions",
+  "models": [
+    {
+      "name": "openai/gpt-oss-20b",
+      "context_limit": 128000
+    }
+  ],
+  "supports_streaming": true,
+  "requires_auth": true
+}

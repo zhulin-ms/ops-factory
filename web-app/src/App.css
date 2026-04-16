@@ -27,7 +27,7 @@
     --color-error: #ef4444;
 
     /* Chart palette - harmonized with charcoal-neutral design */
-    --chart-1: #5b8db8;     /* Steel blue — primary data series */
+    --chart-1: #5b8db8;     /* Steel blue - primary data series */
     --chart-2: #10b981;     /* = --color-success */
     --chart-3: #f59e0b;     /* = --color-warning */
     --chart-4: #ef4444;     /* = --color-error */
@@ -284,17 +284,34 @@ textarea {
    Page Container
    ======================================== */
 .page-container {
+    --page-shell-max-width: 880px;
+    --page-shell-padding: var(--spacing-10);
+    --page-shell-margin: 0 auto;
     flex: 1;
     display: flex;
     flex-direction: column;
-    max-width: 880px;
-    margin: 0 auto;
+    max-width: var(--page-shell-max-width);
+    margin: var(--page-shell-margin);
     width: 100%;
-    padding: var(--spacing-10);
+    padding: var(--page-shell-padding);
+}
+
+.page-shell-default {
+    --page-shell-max-width: 880px;
+}
+
+.page-shell-wide {
+    --page-shell-max-width: 1100px;
+}
+
+.page-shell-fluid {
+    --page-shell-max-width: none;
+    --page-shell-padding: 0;
+    --page-shell-margin: 0;
 }
 
 .sidebar-top-page {
-    max-width: 1100px;
+    --page-shell-max-width: 1100px;
 }
 
 .page-header {

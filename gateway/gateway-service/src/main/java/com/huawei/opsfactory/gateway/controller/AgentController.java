@@ -40,15 +40,36 @@ public class AgentController {
         return Mono.fromCallable(() -> {
             List<Map<String, Object>> agents = agentConfigService.getRegistry().stream()
                     .map(entry -> {
-                        Map<String, Object> config = agentConfigService.loadAgentConfigYaml(entry.id());
-                        List<Map<String, String>> skills = agentConfigService.listSkills(entry.id());
+                        Map<String, Object> config = Map.of();
+                        String status = "configured";
+                        String error = null;
+                        try {
+                            config = agentConfigService.loadAgentConfigYaml(entry.id());
+                        } catch (RuntimeException e) {
+                            status = "invalid_config";
+                            error = e.getMessage();
+                        }
+
+                        List<Map<String, String>> skills;
+                        try {
+                            skills = agentConfigService.listSkills(entry.id());
+                        } catch (RuntimeException e) {
+                            skills = List.of();
+                            if (error == null) {
+                                status = "invalid_config";
+                                error = e.getMessage();
+                            }
+                        }
                         Map<String, Object> agentMap = new LinkedHashMap<>();
                         agentMap.put("id", entry.id());
                         agentMap.put("name", entry.name());
-                        agentMap.put("status", "configured");
+                        agentMap.put("status", status);
                         agentMap.put("provider", config.getOrDefault("GOOSE_PROVIDER", ""));
                         agentMap.put("model", config.getOrDefault("GOOSE_MODEL", ""));
                         agentMap.put("skills", skills);
+                        if (error != null && !error.isBlank()) {
+                            agentMap.put("error", error);
+                        }
                         return (Map<String, Object>) agentMap;
                     })
                     .toList();

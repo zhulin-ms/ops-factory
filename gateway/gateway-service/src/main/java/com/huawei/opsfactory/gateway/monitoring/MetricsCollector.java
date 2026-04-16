@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huawei.opsfactory.gateway.common.model.ManagedInstance;
 import com.huawei.opsfactory.gateway.process.InstanceManager;
 import com.huawei.opsfactory.gateway.proxy.GoosedProxy;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 @Component
 public class MetricsCollector {
 
-    private static final Logger log = LogManager.getLogger(MetricsCollector.class);
+    private static final Logger log = LoggerFactory.getLogger(MetricsCollector.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final InstanceManager instanceManager;

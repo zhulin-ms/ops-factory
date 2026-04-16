@@ -1345,8 +1345,8 @@ describe('Role-based access control', () => {
     expect(res.status).toBe(200)
   })
 
-  it('admin can GET /monitoring/status', async () => {
-    const res = await gw.fetchAs(USER_SYS, '/monitoring/status')
+  it('admin can GET /runtime-source/system', async () => {
+    const res = await gw.fetchAs(USER_SYS, '/runtime-source/system')
     expect(res.status).toBe(200)
   })
 
@@ -1392,23 +1392,13 @@ describe('Role-based access control', () => {
     expect(res.status).toBe(403)
   })
 
-  it('regular user cannot GET /monitoring/status', async () => {
-    const res = await gw.fetchAs(USER_ALICE, '/monitoring/status')
+  it('regular user cannot GET /runtime-source/system', async () => {
+    const res = await gw.fetchAs(USER_ALICE, '/runtime-source/system')
     expect(res.status).toBe(403)
   })
 
-  it('regular user cannot GET /monitoring/system', async () => {
-    const res = await gw.fetchAs(USER_ALICE, '/monitoring/system')
-    expect(res.status).toBe(403)
-  })
-
-  it('regular user cannot GET /monitoring/traces', async () => {
-    const res = await gw.fetchAs(USER_ALICE, '/monitoring/traces')
-    expect(res.status).toBe(403)
-  })
-
-  it('regular user cannot GET /monitoring/observations', async () => {
-    const res = await gw.fetchAs(USER_ALICE, '/monitoring/observations')
+  it('regular user cannot GET /runtime-source/metrics', async () => {
+    const res = await gw.fetchAs(USER_ALICE, '/runtime-source/metrics')
     expect(res.status).toBe(403)
   })
 

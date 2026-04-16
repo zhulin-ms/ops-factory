@@ -18,18 +18,16 @@ class ExporterControllerTest {
 
         // Use a mock that returns minimal valid data
         GatewayMetricsCollector collector = new GatewayMetricsCollector(props, path -> {
-            if ("/monitoring/system".equals(path)) {
+            if ("/runtime-source/system".equals(path)) {
                 return Map.of(
                     "gateway", Map.of("uptimeMs", 1000),
                     "agents", Map.of("configured", 0),
-                    "idle", Map.of("timeoutMs", 900000)
+                    "idle", Map.of("timeoutMs", 900000),
+                    "langfuse", Map.of("configured", false)
                 );
             }
-            if ("/monitoring/instances".equals(path)) {
+            if ("/runtime-source/instances".equals(path)) {
                 return Map.of("byAgent", java.util.List.of());
-            }
-            if ("/monitoring/status".equals(path)) {
-                return Map.of("enabled", false);
             }
             return Map.of();
         });

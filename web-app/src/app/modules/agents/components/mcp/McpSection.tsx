@@ -4,6 +4,7 @@ import { useMcp } from '../../hooks/useMcp'
 import Button from '../../../../platform/ui/primitives/Button'
 import McpCard from './McpCard'
 import AddMcpModal from './AddMcpModal'
+import ConfigKnowledgeModal from './ConfigKnowledgeModal'
 import type { McpEntry } from '../../../../../types/mcp'
 import './Mcp.css'
 
@@ -27,6 +28,7 @@ export default function McpSection({ agentId, onBrowseMarket }: McpSectionProps)
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<McpEntry | null>(null)
+  const [knowledgeEntry, setKnowledgeEntry] = useState<McpEntry | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   useEffect(() => {
@@ -105,6 +107,7 @@ export default function McpSection({ agentId, onBrowseMarket }: McpSectionProps)
                     key={entry.name}
                     entry={entry}
                     onToggle={toggleMcp}
+                    onConfigKnowledge={entry.name === 'knowledge-service' ? setKnowledgeEntry : undefined}
                   />
                 ))}
               </div>
@@ -120,6 +123,7 @@ export default function McpSection({ agentId, onBrowseMarket }: McpSectionProps)
                     key={entry.name}
                     entry={entry}
                     onToggle={toggleMcp}
+                    onConfigKnowledge={entry.name === 'knowledge-service' ? setKnowledgeEntry : undefined}
                   />
                 ))}
               </div>
@@ -135,6 +139,7 @@ export default function McpSection({ agentId, onBrowseMarket }: McpSectionProps)
                     key={entry.name}
                     entry={entry}
                     onToggle={toggleMcp}
+                    onConfigKnowledge={entry.name === 'knowledge-service' ? setKnowledgeEntry : undefined}
                     onEdit={handleOpenEditModal}
                     onDelete={(name) => handleDelete(name)}
                     isCustom
@@ -168,6 +173,15 @@ export default function McpSection({ agentId, onBrowseMarket }: McpSectionProps)
         mode={editingEntry ? 'edit' : 'add'}
         initialEntry={editingEntry}
       />
+
+      {knowledgeEntry && (
+        <ConfigKnowledgeModal
+          agentId={agentId}
+          mcpName={knowledgeEntry.name}
+          isOpen={Boolean(knowledgeEntry)}
+          onClose={() => setKnowledgeEntry(null)}
+        />
+      )}
     </div>
   )
 }

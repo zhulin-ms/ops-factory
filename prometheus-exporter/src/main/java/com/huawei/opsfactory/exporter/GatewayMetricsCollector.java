@@ -126,12 +126,11 @@ public class GatewayMetricsCollector {
 
     public synchronized void collect() {
         try {
-            Map<String, Object> system = gatewayApi.fetch("/monitoring/system");
-            Map<String, Object> instances = gatewayApi.fetch("/monitoring/instances");
-            Map<String, Object> status = gatewayApi.fetch("/monitoring/status");
+            Map<String, Object> system = gatewayApi.fetch("/runtime-source/system");
+            Map<String, Object> instances = gatewayApi.fetch("/runtime-source/instances");
 
             gatewayUp.set(1);
-            setSystemMetrics(system, status);
+            setSystemMetrics(system);
             setInstancesMetrics(instances);
         } catch (Exception ex) {
             log.warn("Failed to collect gateway metrics", ex);
@@ -173,7 +172,7 @@ public class GatewayMetricsCollector {
         Map<String, Object> fetch(String path) throws IOException, InterruptedException;
     }
 
-    private void setSystemMetrics(Map<String, Object> system, Map<String, Object> status) {
+    private void setSystemMetrics(Map<String, Object> system) {
         Map<String, Object> gateway = Jsons.asMapSafe(system.get("gateway"));
         Number uptimeMs = Jsons.asNumber(gateway.get("uptimeMs"));
         gatewayUptimeSeconds.set(uptimeMs.doubleValue() / 1000.0);
@@ -182,8 +181,9 @@ public class GatewayMetricsCollector {
         Number configured = Jsons.asNumber(agents.get("configured"));
         agentsConfigured.set(configured.doubleValue());
 
-        boolean enabledFlag = Jsons.asBoolean(status.get("enabled"));
-        langfuseConfigured.set(enabledFlag ? 1 : 0);
+        Map<String, Object> langfuse = Jsons.asMapSafe(system.get("langfuse"));
+        boolean configuredFlag = Jsons.asBoolean(langfuse.get("configured"));
+        langfuseConfigured.set(configuredFlag ? 1 : 0);
     }
 
     private void setInstancesMetrics(Map<String, Object> instances) {

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import './Button.css'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
@@ -15,7 +15,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     iconOnly?: boolean
 }
 
-export default function Button({
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
     variant = 'secondary',
     tone = 'default',
     size = 'md',
@@ -27,7 +27,7 @@ export default function Button({
     children,
     type = 'button',
     ...props
-}: ButtonProps) {
+}: ButtonProps, ref) {
     const classes = [
         'ui-button',
         `ui-button-${variant}`,
@@ -39,10 +39,12 @@ export default function Button({
     ].filter(Boolean).join(' ')
 
     return (
-        <button type={type} className={classes} {...props}>
+        <button ref={ref} type={type} className={classes} {...props}>
             {leadingIcon ? <span className="ui-button-icon" aria-hidden="true">{leadingIcon}</span> : null}
             {children}
             {trailingIcon ? <span className="ui-button-icon" aria-hidden="true">{trailingIcon}</span> : null}
         </button>
     )
-}
+})
+
+export default Button

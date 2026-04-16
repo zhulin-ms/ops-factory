@@ -6,10 +6,14 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ProfileBootstrapService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProfileBootstrapService.class);
 
     public static final String DEFAULT_INDEX_PROFILE_NAME = "system-default-index";
     public static final String DEFAULT_RETRIEVAL_PROFILE_NAME = "system-default-retrieval";
@@ -42,16 +46,35 @@ public class ProfileBootstrapService {
     private void ensureDefaults() {
         Instant now = Instant.now();
         Map<String, Object> defaultRetrievalConfig = defaultRetrievalConfig();
-        profileRepository.findIndexByName(DEFAULT_INDEX_PROFILE_NAME).orElseGet(() -> {
+        profileRepository.findIndexByName(DEFAULT_INDEX_PROFILE_NAME).map(existing -> {
+            ProfileRepository.ProfileRecord updated = new ProfileRepository.ProfileRecord(
+                existing.id(),
+                existing.name(),
+                existing.config(),
+                existing.type(),
+                null,
+                true,
+                null,
+                existing.createdAt(),
+                now
+            );
+            profileRepository.updateIndex(updated);
+            log.debug("Refreshed default index profile name={} id={}", updated.name(), updated.id());
+            return updated;
+        }).orElseGet(() -> {
             ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(
                 com.huawei.opsfactory.knowledge.common.util.Ids.newId("ip"),
                 DEFAULT_INDEX_PROFILE_NAME,
                 defaultIndexConfig(),
                 "index",
+                null,
+                true,
+                null,
                 now,
                 now
             );
             profileRepository.insertIndex(record);
+            log.info("Created default index profile name={} id={}", record.name(), record.id());
             return record;
         });
         profileRepository.findRetrievalByName(DEFAULT_RETRIEVAL_PROFILE_NAME).map(existing -> {
@@ -60,10 +83,14 @@ public class ProfileBootstrapService {
                 existing.name(),
                 defaultRetrievalConfig,
                 existing.type(),
+                null,
+                true,
+                null,
                 existing.createdAt(),
                 now
             );
             profileRepository.updateRetrieval(updated);
+            log.debug("Refreshed default retrieval profile name={} id={}", updated.name(), updated.id());
             return updated;
         }).orElseGet(() -> {
             ProfileRepository.ProfileRecord record = new ProfileRepository.ProfileRecord(
@@ -71,10 +98,14 @@ public class ProfileBootstrapService {
                 DEFAULT_RETRIEVAL_PROFILE_NAME,
                 defaultRetrievalConfig,
                 "retrieval",
+                null,
+                true,
+                null,
                 now,
                 now
             );
             profileRepository.insertRetrieval(record);
+            log.info("Created default retrieval profile name={} id={}", record.name(), record.id());
             return record;
         });
     }
@@ -120,6 +151,8 @@ public class ProfileBootstrapService {
                 "lexicalTopK", properties.getRetrieval().getLexicalTopK(),
                 "semanticTopK", properties.getRetrieval().getSemanticTopK(),
                 "rrfK", properties.getRetrieval().getRrfK(),
+                "semanticThreshold", properties.getRetrieval().getSemanticThreshold(),
+                "lexicalThreshold", properties.getRetrieval().getLexicalThreshold(),
                 "strategy", "rrf"
             ),
             "result", Map.of(

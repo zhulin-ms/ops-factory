@@ -1,7 +1,16 @@
 {
     "gatewayUrl": "http://127.0.0.1:3000",
     "gatewaySecretKey": "test",
+    "controlCenterUrl": "http://127.0.0.1:8094",
+    "controlCenterSecretKey": "change-me",
     "knowledgeServiceUrl": "http://127.0.0.1:8092",
     "businessIntelligenceServiceUrl": "http://127.0.0.1:8093",
+    "logging": {
+        "level": "info",
+        "consoleEnabled": true,
+        "bufferSize": 200,
+        "sink": "console",
+        "logDirectory": null
+    },
     "port": 5173
 }

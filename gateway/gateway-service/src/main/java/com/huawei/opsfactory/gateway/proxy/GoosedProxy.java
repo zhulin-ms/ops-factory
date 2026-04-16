@@ -6,8 +6,8 @@ import io.netty.channel.ChannelOption;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -30,7 +30,7 @@ import java.util.concurrent.TimeoutException;
 @Component
 public class GoosedProxy {
 
-    private static final Logger log = LogManager.getLogger(GoosedProxy.class);
+    private static final Logger log = LoggerFactory.getLogger(GoosedProxy.class);
 
     private final WebClient webClient;
     private final GatewayProperties properties;

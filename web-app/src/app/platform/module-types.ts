@@ -10,12 +10,14 @@ export type IconKey =
     | 'history'
     | 'inbox'
     | 'files'
+    | 'channels'
     | 'diagnosis'
     | 'businessIntelligence'
     | 'agents'
     | 'knowledge'
     | 'scheduler'
     | 'monitoring'
+    | 'hostResource'
 
 export type BadgeSource = 'none' | 'inboxUnread'
 
@@ -82,4 +84,3 @@ export type SidebarGroupModel = {
     key: NavGroupKey
     items: SidebarItemModel[]
 }
-

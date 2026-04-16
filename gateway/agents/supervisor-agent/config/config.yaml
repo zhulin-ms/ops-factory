@@ -11,7 +11,7 @@ GOOSE_AUTO_COMPACT_THRESHOLD: '0.8'
 GOOSE_MAX_TURNS: '50'
 extensions:
   extensionmanager:
-    enabled: true
+    enabled: false
     type: platform
     name: Extension Manager
     description: Enable extension management tools for discovering, enabling, and disabling extensions
@@ -36,7 +36,7 @@ extensions:
     bundled: true
     available_tools: []
   computercontroller:
-    enabled: true
+    enabled: false
     type: builtin
     name: computercontroller
     description: General computer control tools that don't require you to be a developer or engineer.
@@ -54,7 +54,7 @@ extensions:
     bundled: true
     available_tools: []
   memory:
-    enabled: false
+    enabled: true
     type: builtin
     name: memory
     description: Teach goose your preferences as you go.
@@ -87,7 +87,7 @@ extensions:
     bundled: true
     available_tools: []
   summon:
-    enabled: true
+    enabled: false
     type: platform
     name: summon
     description: Load knowledge and delegate tasks to subagents
@@ -102,19 +102,19 @@ extensions:
     display_name: Top Of Mind
     bundled: true
     available_tools: []
-  platform_monitor:
+  control_center:
     enabled: true
     type: stdio
-    name: platform_monitor
-    description: OpsFactory platform monitoring — provides health, agent, and observability data
+    name: control_center
+    description: OpsFactory control center — provides runtime, observability, service action, log, config, and event tools
     cmd: node
     args:
-    - config/mcp/platform-monitor/src/index.js
+    - config/mcp/control-center/src/index.js
     envs:
+      CONTROL_CENTER_URL: http://127.0.0.1:8094
+      CONTROL_CENTER_SECRET_KEY: change-me
       NODE_TLS_REJECT_UNAUTHORIZED: '0'
-    env_keys:
-    - GATEWAY_URL
-    - GATEWAY_SECRET_KEY
+    env_keys: []
     timeout: 60
     bundled: null
     available_tools: []
@@ -124,5 +124,21 @@ extensions:
     name: analyze
     description: 'Analyze code structure with tree-sitter: directory overviews, file details, symbol call graphs'
     display_name: Analyze
+    bundled: true
+    available_tools: []
+  summarize:
+    enabled: false
+    type: platform
+    name: summarize
+    description: Load files/directories and get an LLM summary in a single call
+    display_name: Summarize
+    bundled: true
+    available_tools: []
+  orchestrator:
+    enabled: false
+    type: platform
+    name: orchestrator
+    description: 'Manage agent sessions: list, view, start, send messages, interrupt, and stop agents'
+    display_name: Orchestrator
     bundled: true
     available_tools: []

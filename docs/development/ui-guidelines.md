@@ -35,6 +35,8 @@ Choose the closest existing pattern before designing a new one.
 - Keep section headers concise: title first, optional one-sentence description second, actions aligned with the section rather than embedded deep in content blocks.
 - Use tags/pills for compact metadata, banners for actionable warnings or errors, and key-value grids for dense inspection details.
 - Keep action density low. Prefer one primary action per section or workbench, with secondary actions visually subordinate.
+- Secondary menus should collect low-frequency actions behind a shared trigger, keep items compact and scan-friendly, and visually separate destructive actions from refresh or inspection actions.
+- Overflow menu items may include a one-line description when the action is operationally specific; do not use secondary menus as a replacement for primary task flow.
 - Do not create a new color story for a single feature. Any new accent, status, or surface treatment should be justified as a reusable shared pattern.
 
 ## Responsive Rules
@@ -57,6 +59,6 @@ Before considering a frontend task complete, confirm:
 Request design or frontend review when a change affects:
 - navigation structure
 - right-panel behavior
-- chat/file/monitoring core workflows
+- chat/file/control-center core workflows
 - shared visual patterns used across multiple pages
 - introduction of a new reusable layout or visual primitive

@@ -321,7 +321,7 @@ export default function Knowledge() {
     }, [searchTerm, sources, statusFilter])
 
     return (
-        <div className="page-container sidebar-top-page resource-page">
+        <div className="page-container sidebar-top-page page-shell-wide">
             <PageHeader
                 title={t('knowledge.title')}
                 subtitle={t('knowledge.subtitle')}

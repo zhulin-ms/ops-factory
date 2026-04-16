@@ -1,7 +1,13 @@
 business-intelligence:
-  # Comma-delimited origin patterns for browser access.
-  corsOrigin: "http://localhost:5173,*"
-  # Base directory for source Excel files.
-  baseDir: "./data"
-  # Cache aggregated snapshot data in memory between requests.
-  cacheEnabled: true
+  cors-origin: "*"
+  runtime:
+    base-dir: "./data"
+    cache-enabled: true
+  logging:
+    access-log-enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.huawei.opsfactory.businessintelligence: INFO
+    org.springframework: WARN

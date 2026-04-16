@@ -26,6 +26,12 @@
     font-size: 0.9rem;
 }
 
+.message-avatar-icon {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
 .message.user .message-avatar {
     background: #e7ebf0;
     color: #4b5563;

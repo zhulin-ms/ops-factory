@@ -53,6 +53,8 @@ public class InstanceManagerExtendedTest {
         agentConfigService = mock(AgentConfigService.class);
         when(agentConfigService.loadAgentConfigYaml(anyString())).thenReturn(Map.of());
         when(agentConfigService.loadAgentSecretsYaml(anyString())).thenReturn(Map.of());
+        when(agentConfigService.getAgentConfigDir(anyString()))
+                .thenAnswer(invocation -> tempFolder.getRoot().toPath().resolve(invocation.getArgument(0, String.class)));
 
         instanceManager = new InstanceManager(properties, portAllocator, runtimePreparer, agentConfigService,
                 3000, false, "");
@@ -63,8 +65,10 @@ public class InstanceManagerExtendedTest {
     @Test
     public void testBuildEnvironment_coreEnvVars() throws Exception {
         Path runtimeRoot = tempFolder.getRoot().toPath();
+        Path configRoot = tempFolder.getRoot().toPath().resolve("agent-config");
         when(agentConfigService.loadAgentConfigYaml("agent1")).thenReturn(Map.of());
         when(agentConfigService.loadAgentSecretsYaml("agent1")).thenReturn(Map.of());
+        when(agentConfigService.getAgentConfigDir("agent1")).thenReturn(configRoot);
 
         Method buildEnv = InstanceManager.class.getDeclaredMethod(
                 "buildEnvironment", String.class, String.class, int.class, Path.class);
@@ -80,11 +84,13 @@ public class InstanceManagerExtendedTest {
         assertTrue("Secret key should be a 64-char hex string", secretKey.matches("[0-9a-f]{64}"));
         assertEquals(runtimeRoot.toString(), env.get("GOOSE_PATH_ROOT"));
         assertEquals("1", env.get("GOOSE_DISABLE_KEYRING"));
+        assertEquals(configRoot.toAbsolutePath().normalize().toString(), env.get("XDG_CONFIG_HOME"));
     }
 
     @Test
     public void testBuildEnvironment_mergesAgentConfig() throws Exception {
         Path runtimeRoot = tempFolder.getRoot().toPath();
+        Path configRoot = tempFolder.getRoot().toPath().resolve("agent-config");
         when(agentConfigService.loadAgentConfigYaml("agent1")).thenReturn(Map.of(
                 "GOOSE_PROVIDER", "openai",
                 "GOOSE_MODEL", "gpt-4"
@@ -92,6 +98,7 @@ public class InstanceManagerExtendedTest {
         when(agentConfigService.loadAgentSecretsYaml("agent1")).thenReturn(Map.of(
                 "OPENAI_API_KEY", "sk-test"
         ));
+        when(agentConfigService.getAgentConfigDir("agent1")).thenReturn(configRoot);
 
         Method buildEnv = InstanceManager.class.getDeclaredMethod(
                 "buildEnvironment", String.class, String.class, int.class, Path.class);
@@ -110,12 +117,14 @@ public class InstanceManagerExtendedTest {
     @Test
     public void testBuildEnvironment_secretsOverrideConfig() throws Exception {
         Path runtimeRoot = tempFolder.getRoot().toPath();
+        Path configRoot = tempFolder.getRoot().toPath().resolve("agent-config");
         when(agentConfigService.loadAgentConfigYaml("agent1")).thenReturn(Map.of(
                 "API_KEY", "from-config"
         ));
         when(agentConfigService.loadAgentSecretsYaml("agent1")).thenReturn(Map.of(
                 "API_KEY", "from-secrets"
         ));
+        when(agentConfigService.getAgentConfigDir("agent1")).thenReturn(configRoot);
 
         Method buildEnv = InstanceManager.class.getDeclaredMethod(
                 "buildEnvironment", String.class, String.class, int.class, Path.class);

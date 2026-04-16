@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { buildChatSessionState } from '../../../platform/chat/chatRouteState'
 import { useInbox } from '../../../platform/providers/InboxContext'
 import { useGoosed } from '../../../platform/providers/GoosedContext'
 import PageHeader from '../../../platform/ui/primitives/PageHeader'
@@ -73,11 +74,13 @@ export default function InboxPage() {
 
     const openSession = (agentId: string, sessionId: string) => {
         markSessionRead(agentId, sessionId)
-        navigate(`/chat?sessionId=${sessionId}&agent=${agentId}`)
+        navigate('/chat', {
+            state: buildChatSessionState(sessionId, agentId),
+        })
     }
 
     return (
-        <div className="page-container sidebar-top-page inbox-page">
+        <div className="page-container sidebar-top-page page-shell-wide inbox-page">
             <PageHeader title={t('inbox.title')} subtitle={t('inbox.subtitle')} />
 
             {!isConnected && connectionError && (

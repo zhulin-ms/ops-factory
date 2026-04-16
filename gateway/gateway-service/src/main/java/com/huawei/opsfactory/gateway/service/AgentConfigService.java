@@ -6,10 +6,13 @@ import com.huawei.opsfactory.gateway.common.model.ResidentInstanceTarget;
 import com.huawei.opsfactory.gateway.common.util.FileUtil;
 import com.huawei.opsfactory.gateway.common.util.YamlLoader;
 import com.huawei.opsfactory.gateway.config.GatewayProperties;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.error.YAMLException;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -27,7 +30,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Service
 public class AgentConfigService {
 
-    private static final Logger log = LogManager.getLogger(AgentConfigService.class);
+    private static final Logger log = LoggerFactory.getLogger(AgentConfigService.class);
 
     private final GatewayProperties properties;
     private final CopyOnWriteArrayList<AgentRegistryEntry> registry = new CopyOnWriteArrayList<>();
@@ -47,8 +50,7 @@ public class AgentConfigService {
         residentInstances.clear();
         residentInstanceKeys.clear();
 
-        this.gatewayRoot = Path.of(properties.getPaths().getProjectRoot())
-                .toAbsolutePath().normalize().resolve("gateway");
+        this.gatewayRoot = properties.getGatewayRootPath();
         Path configYaml = gatewayRoot.resolve("config.yaml");
         Map<String, Object> data = YamlLoader.load(configYaml);
 
@@ -218,7 +220,7 @@ public class AgentConfigService {
                             if (frontmatter.containsKey("description")) {
                                 skill.put("description", frontmatter.get("description"));
                             }
-                        } catch (IOException e) {
+                        } catch (Exception e) {
                             log.warn("Failed to parse SKILL.md for skill {}/{}", agentId, dirName, e);
                         }
                     }
@@ -246,7 +248,13 @@ public class AgentConfigService {
         }
         String yamlBlock = content.substring(3, endIndex).trim();
         org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
-        Object parsed = yaml.load(yamlBlock);
+        Object parsed;
+        try {
+            parsed = yaml.load(yamlBlock);
+        } catch (YAMLException e) {
+            log.warn("Invalid YAML frontmatter in {}: {}", mdPath, e.getMessage());
+            return result;
+        }
         if (parsed instanceof Map<?, ?> map) {
             for (Map.Entry<?, ?> e : map.entrySet()) {
                 if (e.getKey() != null && e.getValue() != null) {
@@ -285,11 +293,15 @@ public class AgentConfigService {
 
     private static final int MAX_MEMORY_CONTENT_SIZE = 100 * 1024; // 100KB
 
+    private Path getGooseMemoryDir(String agentId) {
+        return getAgentConfigDir(agentId).resolve("goose").resolve("memory");
+    }
+
     /**
      * List all memory files (*.txt) for an agent, returning category name + content.
      */
     public List<Map<String, String>> listMemoryFiles(String agentId) {
-        Path memoryDir = getAgentConfigDir(agentId).resolve("memory");
+        Path memoryDir = getGooseMemoryDir(agentId);
         List<Map<String, String>> files = new ArrayList<>();
         if (!Files.isDirectory(memoryDir)) {
             return files;
@@ -320,7 +332,7 @@ public class AgentConfigService {
      * Read a single memory file content.
      */
     public String readMemoryFile(String agentId, String category) {
-        Path filePath = getAgentConfigDir(agentId).resolve("memory").resolve(category + ".txt");
+        Path filePath = getGooseMemoryDir(agentId).resolve(category + ".txt");
         try {
             return Files.readString(filePath);
         } catch (java.nio.file.NoSuchFileException e) {
@@ -338,7 +350,7 @@ public class AgentConfigService {
         if (content != null && content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_MEMORY_CONTENT_SIZE) {
             throw new IllegalArgumentException("Memory file content exceeds maximum size of 100KB");
         }
-        Path memoryDir = getAgentConfigDir(agentId).resolve("memory");
+        Path memoryDir = getGooseMemoryDir(agentId);
         Files.createDirectories(memoryDir);
         Files.writeString(memoryDir.resolve(category + ".txt"), content != null ? content : "");
     }
@@ -347,12 +359,122 @@ public class AgentConfigService {
      * Delete a memory file.
      */
     public void deleteMemoryFile(String agentId, String category) throws IOException {
-        Path filePath = getAgentConfigDir(agentId).resolve("memory").resolve(category + ".txt");
+        Path filePath = getGooseMemoryDir(agentId).resolve(category + ".txt");
         try {
             Files.delete(filePath);
         } catch (java.nio.file.NoSuchFileException e) {
             throw new IllegalArgumentException("Memory file '" + category + "' not found");
         }
+    }
+
+    public Map<String, Object> readMcpSettings(String agentId, String mcpName) throws IOException {
+        if ("knowledge-service".equals(mcpName)) {
+            return readKnowledgeServiceScopeFromConfig(agentId);
+        }
+        Path settingsPath = getAgentConfigDir(agentId).resolve("mcp").resolve(mcpName).resolve("settings.json");
+        if (!Files.exists(settingsPath)) {
+            return null;
+        }
+        try {
+            String content = Files.readString(settingsPath);
+            if (content == null || content.isBlank()) {
+                return null;
+            }
+            Yaml yaml = new Yaml();
+            Object parsed = yaml.load(content);
+            if (parsed instanceof Map<?, ?> rawMap) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> cast = (Map<String, Object>) rawMap;
+                return cast;
+            }
+            return null;
+        } catch (Exception e) {
+            log.warn("Failed to parse MCP settings for {}/{}: {}", agentId, mcpName, e.getMessage());
+            return null;
+        }
+    }
+
+    public void writeMcpSettings(String agentId, String mcpName, Map<String, Object> settings) throws IOException {
+        if ("knowledge-service".equals(mcpName)) {
+            writeKnowledgeServiceScopeToConfig(agentId, settings);
+            invalidateCache(agentId);
+            return;
+        }
+        Path mcpDir = getAgentConfigDir(agentId).resolve("mcp").resolve(mcpName);
+        if (!Files.isDirectory(mcpDir)) {
+            throw new IllegalArgumentException("MCP '" + mcpName + "' not found for agent '" + agentId + "'");
+        }
+        Path settingsPath = mcpDir.resolve("settings.json");
+        Files.createDirectories(mcpDir);
+        Yaml yaml = new Yaml();
+        Files.writeString(settingsPath, yaml.dump(settings));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readKnowledgeServiceScopeFromConfig(String agentId) {
+        Map<String, Object> config = loadAgentConfigYaml(agentId);
+        Object extensionsObj = config.get("extensions");
+        if (!(extensionsObj instanceof Map<?, ?> extensions)) {
+            return null;
+        }
+        Object extensionObj = extensions.get("knowledge-service");
+        if (!(extensionObj instanceof Map<?, ?> extension)) {
+            return null;
+        }
+        Object opsfactoryObj = extension.get("x-opsfactory");
+        if (!(opsfactoryObj instanceof Map<?, ?> opsfactory)) {
+            return null;
+        }
+        Object knowledgeScopeObj = opsfactory.get("knowledgeScope");
+        if (!(knowledgeScopeObj instanceof Map<?, ?> knowledgeScope)) {
+            return null;
+        }
+        Object sourceId = knowledgeScope.get("sourceId");
+        Map<String, Object> result = new HashMap<>();
+        result.put("sourceId", sourceId instanceof String source ? source : null);
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void writeKnowledgeServiceScopeToConfig(String agentId, Map<String, Object> settings) throws IOException {
+        Path configPath = getAgentConfigDir(agentId).resolve("config.yaml");
+        Map<String, Object> config = YamlLoader.load(configPath);
+
+        Object extensionsObj = config.get("extensions");
+        if (!(extensionsObj instanceof Map<?, ?> rawExtensions)) {
+            throw new IllegalArgumentException("Agent config for '" + agentId + "' does not contain extensions");
+        }
+        Map<String, Object> extensions = (Map<String, Object>) rawExtensions;
+        Object extensionObj = extensions.get("knowledge-service");
+        if (!(extensionObj instanceof Map<?, ?> rawExtension)) {
+            throw new IllegalArgumentException("MCP 'knowledge-service' not found for agent '" + agentId + "'");
+        }
+        Map<String, Object> extension = (Map<String, Object>) rawExtension;
+
+        Map<String, Object> opsfactory;
+        Object opsfactoryObj = extension.get("x-opsfactory");
+        if (opsfactoryObj instanceof Map<?, ?> rawOpsfactory) {
+            opsfactory = (Map<String, Object>) rawOpsfactory;
+        } else {
+            opsfactory = new HashMap<>();
+            extension.put("x-opsfactory", opsfactory);
+        }
+
+        Map<String, Object> knowledgeScope;
+        Object knowledgeScopeObj = opsfactory.get("knowledgeScope");
+        if (knowledgeScopeObj instanceof Map<?, ?> rawKnowledgeScope) {
+            knowledgeScope = (Map<String, Object>) rawKnowledgeScope;
+        } else {
+            knowledgeScope = new HashMap<>();
+            opsfactory.put("knowledgeScope", knowledgeScope);
+        }
+
+        Object sourceIdObj = settings != null ? settings.get("sourceId") : null;
+        String sourceId = sourceIdObj instanceof String s && !s.isBlank() ? s.trim() : null;
+        knowledgeScope.put("sourceId", sourceId);
+
+        Yaml yaml = new Yaml();
+        Files.writeString(configPath, yaml.dump(config));
     }
 
     /**
@@ -469,6 +591,37 @@ public class AgentConfigService {
         return gatewayRoot.resolve(properties.getPaths().getUsersDir());
     }
 
+    @SuppressWarnings("unchecked")
+    public Path getKnowledgeCliRootDir(String agentId) {
+        Map<String, Object> config = loadAgentConfigYaml(agentId);
+        Object extensionsObj = config.get("extensions");
+        if (!(extensionsObj instanceof Map<?, ?> extensions)) {
+            throw new IllegalArgumentException("Agent config for '" + agentId + "' does not contain extensions");
+        }
+
+        Object extensionObj = extensions.get("knowledge-cli");
+        if (!(extensionObj instanceof Map<?, ?> extension)) {
+            throw new IllegalArgumentException("MCP 'knowledge-cli' not found for agent '" + agentId + "'");
+        }
+
+        Object opsfactoryObj = extension.get("x-opsfactory");
+        if (!(opsfactoryObj instanceof Map<?, ?> opsfactory)) {
+            throw new IllegalArgumentException("MCP 'knowledge-cli' does not contain x-opsfactory scope");
+        }
+
+        Object scopeObj = opsfactory.get("scope");
+        if (!(scopeObj instanceof Map<?, ?> scope)) {
+            throw new IllegalArgumentException("MCP 'knowledge-cli' does not contain scope");
+        }
+
+        Object rootDirObj = scope.get("rootDir");
+        String configuredRoot = rootDirObj instanceof String s && !s.isBlank() ? s.trim() : "../data";
+        Path configDir = getAgentConfigDir(agentId);
+        return Path.of(configuredRoot).isAbsolute()
+                ? Path.of(configuredRoot).normalize()
+                : configDir.resolve(configuredRoot).normalize();
+    }
+
     public Path getUserAgentDir(String userId, String agentId) {
         return getUsersDir().resolve(userId).resolve("agents").resolve(agentId);
     }
@@ -479,5 +632,58 @@ public class AgentConfigService {
 
     public Path getGatewayRoot() {
         return gatewayRoot;
+    }
+
+    // ── LLM Config for Host Discovery ──────────────────────────────────
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    public record LlmConfig(String baseUrl, String apiKey, String model, String engine) {}
+
+    /**
+     * Read LLM connection info from an agent's config.yaml → custom_providers/*.json → secrets.yaml chain.
+     */
+    @SuppressWarnings("unchecked")
+    public LlmConfig getLlmConfig(String agentId) {
+        Map<String, Object> config = loadAgentConfigYaml(agentId);
+        String providerName = (String) config.get("GOOSE_PROVIDER");
+        String model = (String) config.get("GOOSE_MODEL");
+        if (providerName == null || providerName.isEmpty()) {
+            throw new IllegalArgumentException("Agent '" + agentId + "' has no GOOSE_PROVIDER configured");
+        }
+        if (model == null || model.isEmpty()) {
+            throw new IllegalArgumentException("Agent '" + agentId + "' has no GOOSE_MODEL configured");
+        }
+
+        Path providerJson = getAgentConfigDir(agentId)
+                .resolve("custom_providers").resolve(providerName + ".json");
+        if (!Files.exists(providerJson)) {
+            throw new IllegalArgumentException("Custom provider file not found: " + providerJson);
+        }
+
+        Map<String, Object> provider;
+        try {
+            provider = OBJECT_MAPPER.readValue(Files.readString(providerJson), Map.class);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Failed to parse provider JSON: " + providerJson, e);
+        }
+
+        String baseUrl = (String) provider.get("base_url");
+        String apiKeyEnv = (String) provider.get("api_key_env");
+        String engine = (String) provider.get("engine");
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            throw new IllegalArgumentException("Provider '" + providerName + "' has no base_url");
+        }
+
+        String apiKey = "";
+        if (apiKeyEnv != null && !apiKeyEnv.isEmpty()) {
+            Map<String, Object> secrets = loadAgentSecretsYaml(agentId);
+            Object keyObj = secrets.get(apiKeyEnv);
+            if (keyObj instanceof String s && !s.isEmpty()) {
+                apiKey = s;
+            }
+        }
+
+        return new LlmConfig(baseUrl, apiKey, model, engine);
     }
 }

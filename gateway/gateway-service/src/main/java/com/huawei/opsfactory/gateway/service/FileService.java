@@ -3,8 +3,8 @@ package com.huawei.opsfactory.gateway.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huawei.opsfactory.gateway.common.util.PathSanitizer;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -85,6 +85,24 @@ public class FileService {
         return files;
     }
 
+    /**
+     * List only top-level files under a directory, excluding subdirectories.
+     */
+    public List<Map<String, Object>> listTopLevelFiles(Path dir) throws IOException {
+        List<Map<String, Object>> files = new ArrayList<>();
+        if (!Files.isDirectory(dir)) {
+            return files;
+        }
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
+            for (Path entry : stream) {
+                if (Files.isRegularFile(entry) && !SKIP_FILES.contains(entry.getFileName().toString())) {
+                    addFileEntry(dir, entry, files);
+                }
+            }
+        }
+        return files;
+    }
+
     private void listFilesRecursive(Path base, Path current, List<Map<String, Object>> files) throws IOException {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(current)) {
             for (Path entry : stream) {
@@ -95,18 +113,23 @@ public class FileService {
                     }
                 } else {
                     if (!SKIP_FILES.contains(name)) {
-                        int dot = name.lastIndexOf('.');
-                        String ext = dot >= 0 ? name.substring(dot + 1).toLowerCase() : "";
-                        files.add(Map.of(
-                                "name", name,
-                                "path", base.relativize(entry).toString(),
-                                "size", Files.size(entry),
-                                "type", ext,
-                                "modifiedAt", Files.getLastModifiedTime(entry).toInstant().toString()));
+                        addFileEntry(base, entry, files);
                     }
                 }
             }
         }
+    }
+
+    private void addFileEntry(Path base, Path entry, List<Map<String, Object>> files) throws IOException {
+        String name = entry.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        String ext = dot >= 0 ? name.substring(dot + 1).toLowerCase() : "";
+        files.add(Map.of(
+                "name", name,
+                "path", base.relativize(entry).toString(),
+                "size", Files.size(entry),
+                "type", ext,
+                "modifiedAt", Files.getLastModifiedTime(entry).toInstant().toString()));
     }
 
     /**
@@ -208,7 +231,7 @@ public class FileService {
 
     // ── File capsule persistence ────────────────────────────────────────
 
-    private static final Logger log = LogManager.getLogger(FileService.class);
+    private static final Logger log = LoggerFactory.getLogger(FileService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String CAPSULE_FILE = "file-capsules.json";
 
@@ -226,6 +249,9 @@ public class FileService {
         List<Map<String, String>> changed = new ArrayList<>();
         for (Map<String, Object> f : after) {
             String path = (String) f.get("path");
+            if (isInternalRuntimeArtifact(path)) {
+                continue;
+            }
             Map<String, Object> prev = beforeMap.get(path);
             boolean isNew = prev == null;
             boolean isUpdated = prev != null && (
@@ -238,6 +264,10 @@ public class FileService {
             }
         }
         return changed;
+    }
+
+    private boolean isInternalRuntimeArtifact(String path) {
+        return path != null && path.replace('\\', '/').startsWith("logs/mcp/");
     }
 
     /**

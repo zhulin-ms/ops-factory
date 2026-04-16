@@ -18,7 +18,6 @@ describe('Hook HTTP error friendlification — getErrorMessage usage', () => {
         { file: 'app/modules/agents/hooks/useAgentConfig.ts', name: 'useAgentConfig' },
         { file: 'app/modules/agents/hooks/useMcp.ts', name: 'useMcp' },
         { file: 'app/modules/agents/hooks/useSkills.ts', name: 'useSkills' },
-        { file: 'app/modules/monitoring/hooks/useMonitoring.ts', name: 'useMonitoring' },
         { file: 'app/platform/providers/GoosedContext.tsx', name: 'GoosedContext' },
     ]
 

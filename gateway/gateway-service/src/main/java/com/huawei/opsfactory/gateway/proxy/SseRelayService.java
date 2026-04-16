@@ -8,8 +8,8 @@ import com.huawei.opsfactory.gateway.monitoring.MetricsBuffer;
 import com.huawei.opsfactory.gateway.monitoring.RequestTiming;
 import com.huawei.opsfactory.gateway.process.InstanceManager;
 import com.huawei.opsfactory.gateway.common.model.ManagedInstance;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpHeaders;
@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class SseRelayService {
 
-    private static final Logger log = LogManager.getLogger(SseRelayService.class);
+    private static final Logger log = LoggerFactory.getLogger(SseRelayService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     public static class ProviderNotSetException extends RuntimeException {
         public ProviderNotSetException() {
@@ -117,12 +117,13 @@ public class SseRelayService {
                     }
 
                     long contentIdleMs = now - lastContentTime.get();
+                    String previewForLog = previewForLog(preview);
                     if (seq <= 3 || seq % 10 == 0 || gap > 5000 || !isPing) {
                         log.info("[SSE-DIAG] chunk#{} {}B gap={}ms elapsed={}ms ping={} contentIdle={}ms preview={}",
-                                seq, readable, gap, now - startTime, isPing, contentIdleMs, preview);
+                                seq, readable, gap, now - startTime, isPing, contentIdleMs, previewForLog);
                     } else {
                         log.debug("[SSE-DIAG] chunk#{} {}B gap={}ms elapsed={}ms ping={} contentIdle={}ms preview={}",
-                                seq, readable, gap, now - startTime, isPing, contentIdleMs, preview);
+                                seq, readable, gap, now - startTime, isPing, contentIdleMs, previewForLog);
                     }
                 })
                 .doOnError(e -> {
@@ -353,5 +354,14 @@ public class SseRelayService {
         } catch (Exception e) {
             return "<peek-error>";
         }
+    }
+
+    private String previewForLog(String preview) {
+        GatewayProperties.Logging logging = properties.getLogging();
+        if (!logging.isIncludeSseChunkPreview()) {
+            return "<suppressed>";
+        }
+        int maxChars = Math.max(16, logging.getSseChunkPreviewMaxChars());
+        return preview.length() > maxChars ? preview.substring(0, maxChars) + "…" : preview;
     }
 }

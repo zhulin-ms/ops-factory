@@ -1,8 +1,8 @@
 package com.huawei.opsfactory.gateway.process;
 
 import com.huawei.opsfactory.gateway.config.GatewayProperties;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -12,7 +12,7 @@ import java.nio.file.Path;
 @Component
 public class RuntimePreparer {
 
-    private static final Logger log = LogManager.getLogger(RuntimePreparer.class);
+    private static final Logger log = LoggerFactory.getLogger(RuntimePreparer.class);
 
     private final GatewayProperties properties;
 
@@ -27,8 +27,7 @@ public class RuntimePreparer {
      * @return the runtime root path for this (agentId, userId)
      */
     public Path prepare(String agentId, String userId) throws IOException {
-        Path projectRoot = Path.of(properties.getPaths().getProjectRoot()).toAbsolutePath().normalize();
-        Path gatewayRoot = projectRoot.resolve("gateway");
+        Path gatewayRoot = properties.getGatewayRootPath();
         Path agentsDir = gatewayRoot.resolve(properties.getPaths().getAgentsDir());
         Path usersDir = gatewayRoot.resolve(properties.getPaths().getUsersDir());
 

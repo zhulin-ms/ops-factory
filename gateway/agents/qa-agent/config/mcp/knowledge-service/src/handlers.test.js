@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import YAML from 'yaml'
 
 let routes = {}
 let originalFetch
@@ -35,6 +37,12 @@ const {
   dispatch,
 } = await import('./handlers.js')
 
+async function readConfiguredSourceId() {
+  const content = await readFile(new URL('../../../config.yaml', import.meta.url), 'utf-8')
+  const parsed = YAML.parse(content)
+  return parsed?.extensions?.['knowledge-service']?.['x-opsfactory']?.knowledgeScope?.sourceId ?? null
+}
+
 describe('tool definitions', () => {
   it('defines search and fetch tools', () => {
     assert.equal(tools.length, 2)
@@ -43,7 +51,10 @@ describe('tool definitions', () => {
 })
 
 describe('handleSearch', () => {
-  it('uses the configured default source when sourceIds is omitted', async () => {
+  it('uses the configured knowledge scope when sourceIds are omitted', async () => {
+    const configuredSourceId = await readConfiguredSourceId()
+    assert.equal(typeof configuredSourceId, 'string')
+
     routes['POST /knowledge/search'] = {
       query: '故障定位',
       hits: [],
@@ -52,14 +63,16 @@ describe('handleSearch', () => {
 
     let capturedBody
     globalThis.fetch = ((input, init) => {
-      capturedBody = JSON.parse(String(init?.body))
+      if (init?.body) {
+        capturedBody = JSON.parse(String(init.body))
+      }
       return mockFetch(input, init)
     })
 
     const result = JSON.parse(await handleSearch({ query: '故障定位' }))
     assert.equal(result.query, '故障定位')
-    assert.deepStrictEqual(capturedBody?.sourceIds, ['src_ac8da09a7cfd'])
-    assert.equal(capturedBody?.topK, 8)
+    assert.equal(result.total, 0)
+    assert.deepStrictEqual(capturedBody?.sourceIds, [configuredSourceId])
   })
 
   it('passes explicit sourceIds through', async () => {

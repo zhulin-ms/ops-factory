@@ -12,6 +12,8 @@ class KnowledgePropertiesTest {
 
         assertThat(properties.getIngest().getMaxFileSizeMb()).isEqualTo(100);
         assertThat(properties.getIngest().getDeduplication()).isEqualTo("sha256");
+        assertThat(properties.getIngest().getAllowedContentTypes())
+            .contains("application/vnd.ms-htmlhelp", "application/chm", "application/x-chm");
 
         assertThat(properties.getConvert().getEngine()).isEqualTo("tika");
         assertThat(properties.getConvert().isEnablePdfboxFallback()).isTrue();

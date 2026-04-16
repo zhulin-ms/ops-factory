@@ -70,6 +70,17 @@ function FilesIcon() {
     )
 }
 
+function ChannelsIcon() {
+    return (
+        <IconFrame strokeWidth={1.85}>
+            <path d="M6.35 5.6h6.95a2.25 2.25 0 0 1 2.25 2.25v4.1a2.25 2.25 0 0 1-2.25 2.25H9.8l-3 2.2v-2.2h-.45a2.25 2.25 0 0 1-2.25-2.25v-4.1A2.25 2.25 0 0 1 6.35 5.6z" />
+            <path d="M10.7 9.8h6a2.2 2.2 0 0 1 2.2 2.2v3.65a2.2 2.2 0 0 1-2.2 2.2h-.35v1.65l-2.55-1.65H12.8a2.2 2.2 0 0 1-2.2-2.2" />
+            <path d="M7.45 9.95h4.65" />
+            <path d="M13 13.85h2.85" />
+        </IconFrame>
+    )
+}
+
 function BusinessIntelligenceIcon() {
     return (
         <IconFrame strokeWidth={1.85}>
@@ -143,18 +154,33 @@ function MonitoringIcon() {
     )
 }
 
+function HostResourceIcon() {
+    return (
+        <IconFrame strokeWidth={1.85}>
+            <rect x="4.1" y="4.7" width="15.8" height="5.6" rx="1.2" />
+            <rect x="4.1" y="13.1" width="15.8" height="5.6" rx="1.2" />
+            <path d="M7.2 7.5h.01" />
+            <path d="M7.2 15.9h.01" />
+            <path d="M9.8 7.5h7" />
+            <path d="M9.8 15.9h7" />
+        </IconFrame>
+    )
+}
+
 const ICONS: Record<IconKey, () => ReactNode> = {
     home: HomeIcon,
     plus: PlusIcon,
     history: HistoryIcon,
     inbox: InboxIcon,
     files: FilesIcon,
+    channels: ChannelsIcon,
     diagnosis: WorkflowIcon,
     businessIntelligence: BusinessIntelligenceIcon,
     agents: AgentsIcon,
     knowledge: KnowledgeIcon,
     scheduler: SchedulerIcon,
     monitoring: MonitoringIcon,
+    hostResource: HostResourceIcon,
 }
 
 export function renderIcon(icon: IconKey): ReactNode {

@@ -101,6 +101,10 @@ public class ProfileController {
     public record ProfileSummary(
         String id,
         String name,
+        String scope,
+        boolean readonly,
+        String ownerSourceId,
+        String derivedFromProfileId,
         Map<String, Object> summary,
         Instant createdAt,
         Instant updatedAt
@@ -113,7 +117,17 @@ public class ProfileController {
     public record UpdateProfileRequest(String name, Map<String, Object> config) {
     }
 
-    public record ProfileDetail(String id, String name, Map<String, Object> config, Instant createdAt, Instant updatedAt) {
+    public record ProfileDetail(
+        String id,
+        String name,
+        String scope,
+        boolean readonly,
+        String ownerSourceId,
+        String derivedFromProfileId,
+        Map<String, Object> config,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
     }
 
     public record ProfileUpdateResponse(String id, String name, Instant updatedAt) {

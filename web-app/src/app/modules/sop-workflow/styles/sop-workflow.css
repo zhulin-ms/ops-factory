@@ -228,6 +228,11 @@
     background: rgba(245, 158, 11, 0.14);
 }
 
+.sop-workflow-node-type-end {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.10);
+}
+
 .sop-workflow-node-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -315,6 +320,7 @@
     border-radius: 999px;
     background: rgba(203, 213, 225, 0.9);
     cursor: pointer;
+    font: inherit;
     transition: background var(--transition-fast);
 }
 
@@ -527,6 +533,38 @@
     cursor: pointer;
 }
 
+.sop-workflow-transition-confirm {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.sop-workflow-transition-confirm-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+.sop-workflow-node-type-nl {
+    color: #7c3aed;
+    background: rgba(139, 92, 246, 0.10);
+}
+
+.sop-workflow-steps-textarea {
+    min-height: 200px;
+    line-height: 1.6;
+}
+
+.sop-workflow-mode-select {
+    min-width: 160px;
+}
+
+.sop-workflow-enabled-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 @media (max-width: 900px) {
     .sop-workflow-modal-grid,
     .sop-workflow-node-grid,
@@ -564,4 +602,54 @@
     .sop-workflow-modal-wide {
         width: calc(100vw - 24px);
     }
+}
+
+/* ── Pagination ────────────────────────────────────────── */
+
+.sop-workflow-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-3, 12px) 0 0;
+    margin-top: var(--spacing-3, 12px);
+    border-top: 1px solid var(--color-border, #e2e8f0);
+    flex-shrink: 0;
+}
+
+.sop-workflow-pagination-info {
+    font-size: var(--font-size-xs, 0.75rem);
+    color: var(--color-text-secondary, #64748b);
+}
+
+.sop-workflow-pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2, 8px);
+}
+
+.sop-workflow-pagination-btn {
+    padding: 4px 12px;
+    font-size: var(--font-size-xs, 0.75rem);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: var(--radius-md, 4px);
+    background: var(--color-bg-primary, #fff);
+    color: var(--color-text-primary, #1e293b);
+    cursor: pointer;
+    line-height: 1.5;
+}
+
+.sop-workflow-pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.sop-workflow-pagination-btn:not(:disabled):hover {
+    background: var(--color-bg-hover, #f1f5f9);
+}
+
+.sop-workflow-pagination-page {
+    font-size: var(--font-size-xs, 0.75rem);
+    color: var(--color-text-secondary, #64748b);
+    min-width: 50px;
+    text-align: center;
 }

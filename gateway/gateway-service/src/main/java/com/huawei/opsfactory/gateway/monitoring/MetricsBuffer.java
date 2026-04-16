@@ -3,8 +3,8 @@ package com.huawei.opsfactory.gateway.monitoring;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.huawei.opsfactory.gateway.config.GatewayProperties;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class MetricsBuffer {
 
-    private static final Logger log = LogManager.getLogger(MetricsBuffer.class);
+    private static final Logger log = LoggerFactory.getLogger(MetricsBuffer.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int SNAPSHOT_CAPACITY = 120;
     private static final int TIMING_CAPACITY = 500;
@@ -64,8 +64,7 @@ public class MetricsBuffer {
     }
 
     public MetricsBuffer(GatewayProperties properties) {
-        Path gatewayRoot = Path.of(properties.getPaths().getProjectRoot())
-                .toAbsolutePath().normalize().resolve("gateway");
+        Path gatewayRoot = properties.getGatewayRootPath();
         this.persistPath = gatewayRoot.resolve("data").resolve("monitoring").resolve("metrics.json");
         loadFromDisk();
     }

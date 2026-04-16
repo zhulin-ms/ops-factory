@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { ScheduledJob, ScheduleSessionInfo } from '@goosed/sdk'
+import { buildChatSessionState } from '../../../platform/chat/chatRouteState'
 import { useGoosed } from '../../../platform/providers/GoosedContext'
 import { useToast } from '../../../platform/providers/ToastContext'
 import { useInbox } from '../../../platform/providers/InboxContext'
@@ -387,11 +388,13 @@ export default function ScheduledActions() {
 
     const handleOpenRunSession = (job: ScheduledJobRecord, sessionId: string) => {
         markSessionRead(job.agentId, sessionId)
-        navigate(`/chat?sessionId=${sessionId}&agent=${job.agentId}`)
+        navigate('/chat', {
+            state: buildChatSessionState(sessionId, job.agentId),
+        })
     }
 
     return (
-        <div className="page-container sidebar-top-page scheduled-page">
+        <div className="page-container sidebar-top-page page-shell-wide scheduled-page">
             <PageHeader
                 title={t('scheduler.title')}
                 subtitle={t('scheduler.subtitle')}
@@ -493,17 +496,62 @@ export default function ScheduledActions() {
                     className="scheduled-modal-wide"
                     bodyClassName="scheduled-modal-body"
                     footer={(
-                        <>
-                            <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={submitting}>
-                                {t('common.cancel')}
-                            </button>
-                            <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={submitting || (!editingJob && !createAgentId)}>
-                                {submitting ? t('scheduler.saving') : (editingJob ? t('common.save') : t('scheduler.create'))}
-                            </button>
-                        </>
+                        <div className="scheduled-modal-footer">
+                            <div className="scheduled-modal-footer-group scheduled-modal-footer-group-right">
+                                {editingJob && (
+                                    !editingJob.currently_running ? (
+                                        <>
+                                            {editingJob.paused ? (
+                                                <button type="button" className="btn btn-secondary" onClick={() => void handleUnpause(editingJob)}>
+                                                    {t('scheduler.resume')}
+                                                </button>
+                                            ) : (
+                                                <button type="button" className="btn btn-secondary" onClick={() => void handlePause(editingJob)}>
+                                                    {t('scheduler.pause')}
+                                                </button>
+                                            )}
+                                            <button type="button" className="btn btn-secondary" onClick={() => void handleRunNow(editingJob)}>
+                                                {t('scheduler.runNow')}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button type="button" className="btn btn-secondary" onClick={() => void handleKill(editingJob)}>
+                                            {t('scheduler.kill')}
+                                        </button>
+                                    )
+                                )}
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={submitting}>
+                                    {t('common.cancel')}
+                                </button>
+                                <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={submitting || (!editingJob && !createAgentId)}>
+                                    {submitting ? t('scheduler.saving') : (editingJob ? t('common.save') : t('scheduler.create'))}
+                                </button>
+                            </div>
+                        </div>
                     )}
                 >
-                    <section className="scheduled-modal-section scheduled-modal-form-section">
+                    <section className="scheduled-modal-block scheduled-modal-form">
+                        <div className="scheduled-modal-block-header">
+                            <div className="scheduled-section-heading">
+                                <h4 className="scheduled-modal-section-title">{t('scheduler.basicInfoTitle')}</h4>
+                                {editingJob && (
+                                    <p className="scheduled-modal-section-description">
+                                        {t('scheduler.currentScheduleId', { id: editingJob.id })}
+                                    </p>
+                                )}
+                            </div>
+                            {editingJob && (
+                                <div className="resource-card-tags">
+                                    <span className="resource-card-tag" title={editingJob.agentName}>
+                                        {editingJob.agentName}
+                                    </span>
+                                    <span className={`resource-status resource-status-${getScheduleStatusTone(editingJob)}`}>
+                                        {getScheduleStatusLabel(editingJob)}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
                         {!editingJob && (
                             <label className="scheduled-field-label">
                                 {t('scheduler.agent')}
@@ -520,15 +568,26 @@ export default function ScheduledActions() {
                                 </select>
                             </label>
                         )}
-                        <label className="scheduled-field-label">
-                            {t('scheduler.name')}
-                            <input
-                                className="scheduled-input"
-                                value={form.name}
-                                onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-                                placeholder="daily-summary-job"
-                            />
-                        </label>
+                        <div className="scheduled-form-grid">
+                            <label className="scheduled-field-label">
+                                {t('scheduler.name')}
+                                <input
+                                    className="scheduled-input"
+                                    value={form.name}
+                                    onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+                                    placeholder="daily-summary-job"
+                                />
+                            </label>
+                            <label className="scheduled-field-label">
+                                {t('scheduler.cron')}
+                                <input
+                                    className="scheduled-input"
+                                    value={form.cron}
+                                    onChange={(e) => setForm(prev => ({ ...prev, cron: e.target.value }))}
+                                    placeholder="0 0 9 * * *"
+                                />
+                            </label>
+                        </div>
                         <label className="scheduled-field-label">
                             {t('scheduler.instruction')}
                             <textarea
@@ -539,64 +598,24 @@ export default function ScheduledActions() {
                                 rows={5}
                             />
                         </label>
-
-                        {editingJob && <div className="scheduled-editing-id">{t('scheduler.currentScheduleId', { id: editingJob.id })}</div>}
-
-                        <label className="scheduled-field-label">
-                            {t('scheduler.cron')}
-                            <input
-                                className="scheduled-input"
-                                value={form.cron}
-                                onChange={(e) => setForm(prev => ({ ...prev, cron: e.target.value }))}
-                                placeholder="0 0 9 * * *"
-                            />
-                        </label>
                         <p className="scheduled-hint">{t('scheduler.cronHint')}</p>
+                        {editingJob && (
+                            <div className="scheduled-form-meta">
+                                <span className="scheduled-form-meta-label">{t('scheduler.lastRun')}</span>
+                                <span className="scheduled-form-meta-value">
+                                    {editingJob.last_run ? new Date(editingJob.last_run).toLocaleString() : t('scheduler.never')}
+                                </span>
+                            </div>
+                        )}
                     </section>
 
                     {editingJob && (
-                        <section className="scheduled-modal-section">
-                            <div className="scheduled-modal-section-header">
-                                <h4 className="scheduled-modal-section-title">{t('scheduler.manageTitle')}</h4>
-                                <div className="resource-card-tags">
-                                    <span className="resource-card-tag" title={editingJob.agentName}>
-                                        {editingJob.agentName}
-                                    </span>
-                                    <span className={`resource-status resource-status-${getScheduleStatusTone(editingJob)}`}>
-                                        {getScheduleStatusLabel(editingJob)}
-                                    </span>
+                        <section className="scheduled-modal-block scheduled-modal-block-separated">
+                            <div className="scheduled-modal-block-header">
+                                <div className="scheduled-section-heading">
+                                    <h4 className="scheduled-modal-section-title">{t('scheduler.recentRuns')}</h4>
+                                    <p className="scheduled-modal-section-description">{t('scheduler.runsSubtitle')}</p>
                                 </div>
-                            </div>
-
-                            <div className="scheduled-detail-actions">
-                                {!editingJob.currently_running ? (
-                                    <>
-                                        {editingJob.paused ? (
-                                            <button type="button" className="btn btn-secondary" onClick={() => void handleUnpause(editingJob)}>
-                                                {t('scheduler.resume')}
-                                            </button>
-                                        ) : (
-                                            <button type="button" className="btn btn-secondary" onClick={() => void handlePause(editingJob)}>
-                                                {t('scheduler.pause')}
-                                            </button>
-                                        )}
-                                        <button type="button" className="btn btn-primary" onClick={() => void handleRunNow(editingJob)}>
-                                            {t('scheduler.runNow')}
-                                        </button>
-                                    </>
-                                ) : (
-                                    <button type="button" className="btn btn-secondary" onClick={() => void handleKill(editingJob)}>
-                                        {t('scheduler.kill')}
-                                    </button>
-                                )}
-                            </div>
-                        </section>
-                    )}
-
-                    {editingJob && (
-                        <section className="scheduled-modal-section">
-                            <div className="scheduled-modal-section-header">
-                                <h4 className="scheduled-modal-section-title">{t('scheduler.recentRuns')}</h4>
                             </div>
                             {runsLoading ? (
                                 <div className="empty-state">
@@ -612,7 +631,14 @@ export default function ScheduledActions() {
                                     {runs.map(run => (
                                         <div key={run.id} className="scheduled-run-item">
                                             <div className="scheduled-run-main">
-                                                <div className="scheduled-run-name">{run.name || run.id}</div>
+                                                <div className="scheduled-run-topline">
+                                                    <div className="scheduled-run-name">{run.name || run.id}</div>
+                                                    {run.name && run.name !== run.id && (
+                                                        <span className="resource-card-tag scheduled-run-id" title={run.id}>
+                                                            {run.id}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="scheduled-run-meta">
                                                     <span>{new Date(run.createdAt).toLocaleString()}</span>
                                                     <span>{run.messageCount} {t('common.messages')}</span>
@@ -621,13 +647,15 @@ export default function ScheduledActions() {
                                                     )}
                                                 </div>
                                             </div>
-                                            <button
-                                                type="button"
-                                                className="btn btn-secondary"
-                                                onClick={() => handleOpenRunSession(editingJob, run.id)}
-                                            >
-                                                {t('scheduler.openSession')}
-                                            </button>
+                                            <div className="scheduled-run-actions">
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary"
+                                                    onClick={() => handleOpenRunSession(editingJob, run.id)}
+                                                >
+                                                    {t('scheduler.openSession')}
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

@@ -79,7 +79,7 @@ export interface UseChatReturn {
     error: string | null
     tokenState: TokenState | null
     outputFilesEvent: OutputFilesEvent | null
-    sendMessage: (text: string, images?: ImageData[], attachedFiles?: AttachedFile[]) => Promise<void>
+    sendMessage: (text: string, images?: ImageData[], attachedFiles?: AttachedFile[]) => string | null
     stopMessage: () => Promise<boolean>
     clearMessages: () => void
     setInitialMessages: (msgs: ChatMessage[]) => void
@@ -156,9 +156,9 @@ export function useChat({ sessionId, client }: UseChatOptions): UseChatReturn {
         dispatch({ type: 'SET_MESSAGES', payload: msgs })
     }, [])
 
-    const sendMessage = useCallback(async (text: string, images?: ImageData[], attachedFiles?: AttachedFile[]) => {
-        if (!sessionId || isStreamingRef.current) return
-        if (!text.trim() && (!images || images.length === 0) && (!attachedFiles || attachedFiles.length === 0)) return
+    const sendMessage = useCallback((text: string, images?: ImageData[], attachedFiles?: AttachedFile[]): string | null => {
+        if (!sessionId || isStreamingRef.current) return null
+        if (!text.trim() && (!images || images.length === 0) && (!attachedFiles || attachedFiles.length === 0)) return null
 
         // Clear stale OutputFiles event from previous reply
         setOutputFilesEvent(null)
@@ -207,90 +207,94 @@ export function useChat({ sessionId, client }: UseChatOptions): UseChatReturn {
         let currentMessages = [...messagesRef.current, userMessage]
         dispatch({ type: 'SET_MESSAGES', payload: currentMessages })
 
-        try {
-            for await (const event of client.sendMessage(sessionId, apiText, images)) {
-                if (!isMountedRef.current || controller.signal.aborted) break
+        void (async () => {
+            try {
+                for await (const event of client.sendMessage(sessionId, apiText, images)) {
+                    if (!isMountedRef.current || controller.signal.aborted) break
 
-                switch (event.type) {
-                    case 'Message': {
-                        if (!event.message) break
-                        const incomingMessage = convertBackendMessage(event.message as Record<string, unknown>)
-                        currentMessages = pushMessage(currentMessages, incomingMessage)
-                        dispatch({ type: 'SET_MESSAGES', payload: currentMessages })
-
-                        // Update token state
-                        if (event.token_state) {
-                            dispatch({ type: 'SET_TOKEN_STATE', payload: event.token_state })
-                        }
-
-                        // Determine chat sub-state from message content
-                        if (getCompactingMessage(incomingMessage)) {
-                            dispatch({ type: 'SET_CHAT_STATE', payload: ChatState.Compacting })
-                        } else if (getThinkingMessage(incomingMessage)) {
-                            dispatch({ type: 'SET_CHAT_STATE', payload: ChatState.Thinking })
-                        } else {
-                            dispatch({ type: 'SET_CHAT_STATE', payload: ChatState.Streaming })
-                        }
-                        break
-                    }
-
-                    case 'UpdateConversation': {
-                        // Context compaction: backend sends entire replacement conversation
-                        if (event.conversation && Array.isArray(event.conversation)) {
-                            currentMessages = event.conversation.map(msg =>
-                                convertBackendMessage(msg as Record<string, unknown>)
-                            )
+                    switch (event.type) {
+                        case 'Message': {
+                            if (!event.message) break
+                            const incomingMessage = convertBackendMessage(event.message as Record<string, unknown>)
+                            currentMessages = pushMessage(currentMessages, incomingMessage)
                             dispatch({ type: 'SET_MESSAGES', payload: currentMessages })
+
+                            // Update token state
+                            if (event.token_state) {
+                                dispatch({ type: 'SET_TOKEN_STATE', payload: event.token_state })
+                            }
+
+                            // Determine chat sub-state from message content
+                            if (getCompactingMessage(incomingMessage)) {
+                                dispatch({ type: 'SET_CHAT_STATE', payload: ChatState.Compacting })
+                            } else if (getThinkingMessage(incomingMessage)) {
+                                dispatch({ type: 'SET_CHAT_STATE', payload: ChatState.Thinking })
+                            } else {
+                                dispatch({ type: 'SET_CHAT_STATE', payload: ChatState.Streaming })
+                            }
+                            break
                         }
-                        break
-                    }
 
-                    case 'Finish': {
-                        // Stream completed. Capture final token state.
-                        if (event.token_state) {
-                            dispatch({ type: 'SET_TOKEN_STATE', payload: event.token_state })
+                        case 'UpdateConversation': {
+                            // Context compaction: backend sends entire replacement conversation
+                            if (event.conversation && Array.isArray(event.conversation)) {
+                                currentMessages = event.conversation.map(msg =>
+                                    convertBackendMessage(msg as Record<string, unknown>)
+                                )
+                                dispatch({ type: 'SET_MESSAGES', payload: currentMessages })
+                            }
+                            break
                         }
-                        break
-                    }
 
-                    case 'Error': {
-                        const errorMsg = normalizeChatStreamError(event.error || 'Unknown error occurred')
-                        streamErrorRef.current = errorMsg
-                        dispatch({ type: 'SET_ERROR', payload: errorMsg })
-                        break
-                    }
-
-                    case 'OutputFiles': {
-                        // Gateway detected new/modified files after this reply
-                        if (event.files && event.files.length > 0 && event.sessionId) {
-                            setOutputFilesEvent({
-                                sessionId: event.sessionId,
-                                files: event.files,
-                            })
+                        case 'Finish': {
+                            // Stream completed. Capture final token state.
+                            if (event.token_state) {
+                                dispatch({ type: 'SET_TOKEN_STATE', payload: event.token_state })
+                            }
+                            break
                         }
-                        break
-                    }
 
-                    case 'ModelChange':
-                    case 'Notification':
-                    case 'Ping':
-                        // Acknowledged but no action needed for now
-                        break
+                        case 'Error': {
+                            const errorMsg = normalizeChatStreamError(event.error || 'Unknown error occurred')
+                            streamErrorRef.current = errorMsg
+                            dispatch({ type: 'SET_ERROR', payload: errorMsg })
+                            break
+                        }
+
+                        case 'OutputFiles': {
+                            // Gateway detected new/modified files after this reply
+                            if (event.files && event.files.length > 0 && event.sessionId) {
+                                setOutputFilesEvent({
+                                    sessionId: event.sessionId,
+                                    files: event.files,
+                                })
+                            }
+                            break
+                        }
+
+                        case 'ModelChange':
+                        case 'Notification':
+                        case 'Ping':
+                            // Acknowledged but no action needed for now
+                            break
+                    }
+                }
+            } catch (err) {
+                if (isMountedRef.current && !(err instanceof DOMException && err.name === 'AbortError')) {
+                    const errorMsg = normalizeChatStreamError(err)
+                    streamErrorRef.current = errorMsg
+                    dispatch({ type: 'SET_ERROR', payload: errorMsg })
+                }
+            } finally {
+                if (isMountedRef.current) {
+                    dispatch({ type: 'STREAM_FINISH', error: streamErrorRef.current ?? undefined })
+                    isStreamingRef.current = false
+                    abortControllerRef.current = null
                 }
             }
-        } catch (err) {
-            if (isMountedRef.current && !(err instanceof DOMException && err.name === 'AbortError')) {
-                const errorMsg = normalizeChatStreamError(err)
-                streamErrorRef.current = errorMsg
-                dispatch({ type: 'SET_ERROR', payload: errorMsg })
-            }
-        } finally {
-            if (isMountedRef.current) {
-                dispatch({ type: 'STREAM_FINISH', error: streamErrorRef.current ?? undefined })
-                isStreamingRef.current = false
-                abortControllerRef.current = null
-            }
-        }
+        })()
+
+        return userMessage.id ?? null
     }, [client, sessionId])
 
     const stopMessage = useCallback(async (): Promise<boolean> => {

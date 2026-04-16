@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useHosts } from '../hooks/useHosts'
 import { useToast } from '../../../platform/providers/ToastContext'
+import { isValidIp } from '../../../../utils/ip-validation'
 import type { Host, HostCreateRequest } from '../../../../types/host'
 
 function TrashIcon() {
@@ -250,9 +251,7 @@ function HostFormModal({
             setError(t('remoteDiagnosis.hosts.ipRequired'))
             return
         }
-        // IPv4 regex: each octet 0-255
-        const ipv4Re = /^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/
-        if (!ipv4Re.test(ip.trim())) {
+        if (!isValidIp(ip)) {
             setError(t('remoteDiagnosis.hosts.ipInvalid'))
             return
         }
@@ -326,7 +325,7 @@ function HostFormModal({
                                 type="text"
                                 value={ip}
                                 onChange={e => setIp(e.target.value)}
-                                placeholder="192.168.1.100"
+                                placeholder="192.168.1.100 / 2409:808c:8a:109::20"
                             />
                         </div>
                         <div className="form-group" style={{ flex: 1 }}>
@@ -421,6 +420,8 @@ export function HostsTab() {
         useHosts()
     const { showToast } = useToast()
 
+    const PAGE_SIZE = 10
+    const [currentPage, setCurrentPage] = useState(1)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [selectedTags, setSelectedTags] = useState<string[]>([])
     const [editingHost, setEditingHost] = useState<Host | null>(null)
@@ -669,8 +670,13 @@ export function HostsTab() {
                         </div>
                     </div>
                 ) : (
+                    (() => {
+                        const totalPages = Math.max(1, Math.ceil(filteredHosts.length / PAGE_SIZE))
+                        const safePage = Math.min(currentPage, totalPages)
+                        const paginatedHosts = filteredHosts.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+                        return <>
                     <div className="sop-workflow-host-grid">
-                        {filteredHosts.map(host => (
+                        {paginatedHosts.map(host => (
                             <div
                                 key={host.id}
                                 className="knowledge-section-card sop-workflow-host-card"
@@ -775,6 +781,32 @@ export function HostsTab() {
                             </div>
                         ))}
                     </div>
+                    {totalPages > 1 && (
+                        <div className="sop-workflow-pagination">
+                            <span className="sop-workflow-pagination-info">
+                                {t('common.showing', {
+                                    start: (safePage - 1) * PAGE_SIZE + 1,
+                                    end: Math.min(safePage * PAGE_SIZE, filteredHosts.length),
+                                    total: filteredHosts.length,
+                                })}
+                            </span>
+                            <div className="sop-workflow-pagination-controls">
+                                <button className="sop-workflow-pagination-btn"
+                                    disabled={safePage <= 1}
+                                    onClick={() => setCurrentPage(safePage - 1)}>
+                                    {t('common.previousPage')}
+                                </button>
+                                <span className="sop-workflow-pagination-page">{safePage} / {totalPages}</span>
+                                <button className="sop-workflow-pagination-btn"
+                                    disabled={safePage >= totalPages}
+                                    onClick={() => setCurrentPage(safePage + 1)}>
+                                    {t('common.nextPage')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </>
+                    })()
                 )}
             </section>
 

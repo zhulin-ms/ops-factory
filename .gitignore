@@ -58,6 +58,7 @@ gateway/users/
 
 # Gateway runtime
 gateway/data/
+gateway/channels/
 
 # Knowledge service runtime
 knowledge-service/config.yaml
@@ -74,6 +75,7 @@ gateway/agents/*/data/sessions/
 *.bak.*
 
 # Playwright
+/.playwright-cli/
 test/test-results/
 test/playwright-report/
 

@@ -12,6 +12,12 @@ Use the root orchestrator for local development:
 ./scripts/ctl.sh shutdown all
 ```
 
+To set `GATEWAY_API_PASSWORD` through the orchestrator (defaults to empty):
+
+```bash
+./scripts/ctl.sh startup --apipwd mypass
+```
+
 Targeted workflows:
 
 ```bash
@@ -55,9 +61,13 @@ Use Vitest for frontend and integration coverage, Playwright for E2E, Node’s t
   - static boundary/structure tests
   - Playwright or higher-level integration coverage for real page workflows
 - If a test requires extensive request mocking to simulate a full page, it usually belongs in E2E or should be redesigned around a narrower unit seam.
+- Manual verification, Playwright runs, ad hoc debug scripts, and temporary E2E exercises must clean up their process artifacts before ending the task unless the user explicitly asks to keep them.
+- Remove temporary process files and directories such as `output/`, `.playwright-cli/`, throwaway screenshots, scratch logs, and one-off generated fixtures when they were created only for the verification flow.
+- Remove temporary runtime users or sessions created only for testing from `gateway/users/<test-user>/...`; do not leave throwaway `e2e-*`, `debug-*`, `test-*`, or similar runtime directories behind once verification is complete.
+- Do not delete retained real-user runtime data such as long-lived `admin` or explicitly requested preservation targets.
 
 ## Commit & Pull Request Guidelines
 Recent history favors short Conventional Commit-style subjects such as `feat：support reasoning block` and `fix：startup script`. Prefer `feat:`, `fix:`, `test:`, or `docs:` with a focused summary. PRs should describe user-visible impact, list touched services, link related issues, and include screenshots or GIFs for frontend changes. Call out config changes explicitly when `config.yaml` or service startup behavior changes.
 
 ## Collaboration Constraints
-Treat [`docs/architecture/overview.md`](./docs/architecture/overview.md), [`docs/architecture/api-boundaries.md`](./docs/architecture/api-boundaries.md), [`docs/architecture/process-management.md`](./docs/architecture/process-management.md), and [`docs/development/ui-guidelines.md`](./docs/development/ui-guidelines.md) as the source of truth for cross-team work. Do not bypass the gateway from the frontend, do not change auth headers or SSE/event payloads without explicit review, and keep new UI work aligned with the existing route/layout/right-panel model and shared visual primitives. Any new config key must be added to the matching `config.yaml.example` and documented in the relevant development or architecture doc.
+Treat [`docs/architecture/overview.md`](./docs/architecture/overview.md), [`docs/architecture/api-boundaries.md`](./docs/architecture/api-boundaries.md), [`docs/architecture/process-management.md`](./docs/architecture/process-management.md), [`docs/development/ui-guidelines.md`](./docs/development/ui-guidelines.md), and [`docs/development/logging-guidelines.md`](./docs/development/logging-guidelines.md) as the source of truth for cross-team work. Do not bypass the gateway from the frontend, do not change auth headers or SSE/event payloads without explicit review, and keep new UI work aligned with the existing route/layout/right-panel model and shared visual primitives. Any new config key must be added to the matching `config.yaml.example` and documented in the relevant development or architecture doc.

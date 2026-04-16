@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
 import i18n from '../../../i18n'
+import { logError } from '../logging/logger'
 
 interface Props {
     children: ReactNode
@@ -22,7 +23,16 @@ export default class ErrorBoundary extends Component<Props, State> {
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        console.error('React Error Boundary caught an error:', error, errorInfo)
+        logError({
+            category: 'app',
+            name: 'app.crash',
+            result: 'fail',
+            errorCode: 'react_error_boundary',
+            errorMessage: error.message,
+            extra: {
+                componentStack: errorInfo.componentStack,
+            },
+        })
     }
 
     handleRetry = () => {

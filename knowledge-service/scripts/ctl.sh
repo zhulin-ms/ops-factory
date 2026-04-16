@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_DIR="$(dirname "${SCRIPT_DIR}")"
+ROOT_DIR="$(dirname "${SERVICE_DIR}")"
 
 yaml_val() {
     local key="$1" file="${SERVICE_DIR}/config.yaml"
@@ -13,6 +14,11 @@ yaml_val() {
 KNOWLEDGE_PORT="${KNOWLEDGE_PORT:-$(yaml_val server.port)}"
 KNOWLEDGE_PORT="${KNOWLEDGE_PORT:-8092}"
 MVN="${MVN:-mvn}"
+KNOWLEDGE_LOG_LEVEL="${KNOWLEDGE_LOG_LEVEL:-}"
+KNOWLEDGE_LOG_LEVEL_APP="${KNOWLEDGE_LOG_LEVEL_APP:-}"
+KNOWLEDGE_LOG_LEVEL_EMBEDDING="${KNOWLEDGE_LOG_LEVEL_EMBEDDING:-}"
+KNOWLEDGE_LOG_LEVEL_SEARCH="${KNOWLEDGE_LOG_LEVEL_SEARCH:-}"
+KNOWLEDGE_LOG_QUERY_TEXT="${KNOWLEDGE_LOG_QUERY_TEXT:-}"
 
 if ! command -v "${MVN}" &>/dev/null; then
     for candidate in /tmp/apache-maven-3.9.6/bin/mvn /usr/local/bin/mvn; do
@@ -31,15 +37,18 @@ log_ok()    { echo -e "${GREEN}[OK]${NC}    $1"; }
 log_fail()  { echo -e "${RED}[FAIL]${NC}  $1"; }
 
 LOG_DIR="${SERVICE_DIR}/logs"
+PID_FILE="${LOG_DIR}/knowledge-service.pid"
+DAEMON_HELPER="${ROOT_DIR}/scripts/lib/service-daemon.sh"
 
-check_port() { lsof -ti:"$1" >/dev/null 2>&1; }
+# shellcheck source=/dev/null
+source "${DAEMON_HELPER}"
+
+check_port() { daemon_port_has_listener "$1"; }
 
 stop_port() {
     local port=$1 name=$2
-    if lsof -ti:"${port}" >/dev/null 2>&1; then
-        log_info "Stopping ${name} on port ${port}..."
-        kill $(lsof -ti:"${port}") 2>/dev/null || true
-        sleep 1
+    if check_port "${port}"; then
+        daemon_stop_listener_port "${port}" "${name}" || true
     fi
 }
 
@@ -51,19 +60,6 @@ wait_http_ok() {
     done
     log_error "${name} health check failed: ${url}"
     return 1
-}
-
-start_detached() {
-    local log_file="$1"
-    shift
-
-    mkdir -p "${LOG_DIR}"
-    if command -v setsid >/dev/null 2>&1; then
-        nohup setsid "$@" </dev/null >>"${log_file}" 2>&1 &
-    else
-        nohup "$@" </dev/null >>"${log_file}" 2>&1 &
-    fi
-    echo $!
 }
 
 build_service() {
@@ -89,7 +85,22 @@ SERVICE_PID=""
 
 do_startup() {
     local mode="${1:-foreground}"
-    stop_port "${KNOWLEDGE_PORT}" "knowledge-service"
+
+    if [ "${mode}" = "background" ] && daemon_is_running "${PID_FILE}"; then
+        local existing_pid
+        existing_pid="$(daemon_read_pid "${PID_FILE}")"
+        if curl -fsS "http://127.0.0.1:${KNOWLEDGE_PORT}/actuator/health" >/dev/null 2>&1; then
+            log_info "knowledge-service already running (PID: ${existing_pid})"
+            return 0
+        fi
+        log_warn "Managed knowledge-service process exists but health check failed; restarting"
+        daemon_stop "${PID_FILE}" "knowledge-service" 5 || true
+    fi
+
+    if check_port "${KNOWLEDGE_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "knowledge-service port ${KNOWLEDGE_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${KNOWLEDGE_PORT}" "knowledge-service"
+    fi
 
     build_service
     local jar="${SERVICE_DIR}/target/knowledge-service.jar"
@@ -98,32 +109,68 @@ do_startup() {
     log_info "Starting knowledge-service at http://127.0.0.1:${KNOWLEDGE_PORT}"
     cd "${SERVICE_DIR}"
 
+    local java_opts=(
+        "-Dserver.port=${KNOWLEDGE_PORT}"
+    )
+
+    if [ -n "${KNOWLEDGE_LOG_LEVEL}" ]; then
+        java_opts+=("-Dlogging.level.root=${KNOWLEDGE_LOG_LEVEL}")
+    fi
+    if [ -n "${KNOWLEDGE_LOG_LEVEL_APP}" ]; then
+        java_opts+=("-Dlogging.level.com.huawei.opsfactory.knowledge=${KNOWLEDGE_LOG_LEVEL_APP}")
+    fi
+    if [ -n "${KNOWLEDGE_LOG_LEVEL_EMBEDDING}" ]; then
+        java_opts+=("-Dlogging.level.com.huawei.opsfactory.knowledge.service.EmbeddingService=${KNOWLEDGE_LOG_LEVEL_EMBEDDING}")
+    fi
+    if [ -n "${KNOWLEDGE_LOG_LEVEL_SEARCH}" ]; then
+        java_opts+=("-Dlogging.level.com.huawei.opsfactory.knowledge.service.SearchService=${KNOWLEDGE_LOG_LEVEL_SEARCH}")
+    fi
+    if [ -n "${KNOWLEDGE_LOG_QUERY_TEXT}" ]; then
+        java_opts+=("-Dknowledge.logging.include-query-text=${KNOWLEDGE_LOG_QUERY_TEXT}")
+    fi
+
     if [ "${mode}" = "background" ]; then
         local log_file="${LOG_DIR}/knowledge-service.log"
-        SERVICE_PID="$(start_detached "${log_file}" env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java -Dserver.port="${KNOWLEDGE_PORT}" -jar "${jar}")"
+        local console_log_file="${LOG_DIR}/knowledge-service-console.log"
+        java_opts+=("-Dlogging.config=classpath:log4j2-file-only.xml" "-jar" "${jar}")
+        SERVICE_PID="$(daemon_start "${PID_FILE}" "${console_log_file}" env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java "${java_opts[@]}")"
         if ! kill -0 "${SERVICE_PID}" 2>/dev/null; then
             log_error "Failed to start knowledge-service"
             return 1
         fi
-        wait_http_ok "knowledge-service" "http://127.0.0.1:${KNOWLEDGE_PORT}/actuator/health" 40 1
-        log_info "knowledge-service started (PID: ${SERVICE_PID}, log: ${log_file})"
+        if ! wait_http_ok "knowledge-service" "http://127.0.0.1:${KNOWLEDGE_PORT}/actuator/health" 40 1; then
+            daemon_stop "${PID_FILE}" "knowledge-service" 5 || true
+            return 1
+        fi
+        log_info "knowledge-service started (PID: ${SERVICE_PID}, app log: ${log_file}, console log: ${console_log_file})"
     else
-        exec env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java -Dserver.port="${KNOWLEDGE_PORT}" -jar "${jar}"
+        java_opts+=("-jar" "${jar}")
+        exec env CONFIG_PATH="${SERVICE_DIR}/config.yaml" java "${java_opts[@]}"
     fi
 }
 
 do_shutdown() {
-    stop_port "${KNOWLEDGE_PORT}" "knowledge-service"
+    daemon_stop "${PID_FILE}" "knowledge-service" 20 || true
+    if ! daemon_wait_for_port_release "${KNOWLEDGE_PORT}" 20 0.1 && check_port "${KNOWLEDGE_PORT}" && ! daemon_is_running "${PID_FILE}"; then
+        log_warn "knowledge-service port ${KNOWLEDGE_PORT} is occupied without a managed pidfile; using legacy port-based stop"
+        stop_port "${KNOWLEDGE_PORT}" "knowledge-service"
+    fi
+    rm -f "${PID_FILE}" 2>/dev/null || true
 }
 
 do_status() {
-    if check_port "${KNOWLEDGE_PORT}"; then
+    if daemon_is_running "${PID_FILE}"; then
+        local pid
+        pid="$(daemon_read_pid "${PID_FILE}")"
         if curl -fsS "http://127.0.0.1:${KNOWLEDGE_PORT}/actuator/health" >/dev/null 2>&1; then
-            log_ok "knowledge-service running (http://localhost:${KNOWLEDGE_PORT})"
+            log_ok "knowledge-service running (http://localhost:${KNOWLEDGE_PORT}, PID: ${pid})"
         else
-            log_warn "knowledge-service port open but health check failed"
+            log_warn "knowledge-service process running (PID: ${pid}) but health check failed"
             return 1
         fi
+    elif check_port "${KNOWLEDGE_PORT}"; then
+        log_warn "knowledge-service port open on ${KNOWLEDGE_PORT} but service is unmanaged (missing/stale pidfile)"
+        return 1
     else
         log_fail "knowledge-service not running on port ${KNOWLEDGE_PORT}"
         return 1

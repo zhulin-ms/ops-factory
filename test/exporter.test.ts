@@ -12,16 +12,13 @@ const PROJECT_ROOT = resolve(import.meta.dirname, '..')
 const EXPORTER_DIR = join(PROJECT_ROOT, 'prometheus-exporter')
 const SECRET_KEY = 'test-exporter-key'
 
-// --- Inline mock that mimics gateway /monitoring/* endpoints ---
+// --- Inline mock that mimics gateway /runtime-source/* endpoints ---
 
 const MOCK_SYSTEM = {
   gateway: { uptimeMs: 123_456, host: '127.0.0.1', port: 3000 },
   agents: { configured: 3 },
   idle: { timeoutMs: 900_000 },
-}
-
-const MOCK_STATUS = {
-  enabled: true,
+  langfuse: { configured: true, host: 'http://langfuse:3000' },
 }
 
 const MOCK_INSTANCES = {
@@ -74,19 +71,14 @@ async function startMockMonitoringGateway(): Promise<MockGateway> {
     // Support both /ops-gateway/* and direct paths for backward compatibility
     const pathname = url.pathname
 
-    if (pathname === '/monitoring/system' || pathname === '/ops-gateway/monitoring/system') {
+    if (pathname === '/runtime-source/system' || pathname === '/ops-gateway/runtime-source/system') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(MOCK_SYSTEM))
       return
     }
-    if (pathname === '/monitoring/instances' || pathname === '/ops-gateway/monitoring/instances') {
+    if (pathname === '/runtime-source/instances' || pathname === '/ops-gateway/runtime-source/instances') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(MOCK_INSTANCES))
-      return
-    }
-    if (pathname === '/monitoring/status' || pathname === '/ops-gateway/monitoring/status') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(MOCK_STATUS))
       return
     }
     if (pathname === '/status' || pathname === '/ops-gateway/status') {

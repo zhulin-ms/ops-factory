@@ -1,0 +1,14 @@
+      "humanConfirmNode": "Human Confirm",
+      "endNode": "End",
+      "transitionConfirm": "Confirm before executing",
+      "transitionConfirmHint": "When enabled, execution pauses and waits for user confirmation before continuing on this branch",
+      "confirmMessage": "Confirm Message",
+      "confirmMessagePlaceholder": "Enter the question to ask the user...",
+
+
+      "humanConfirmNode": "人工确认",
+      "endNode": "终止节点",
+      "transitionConfirm": "人工确认后执行",
+      "transitionConfirmHint": "开启后，匹配此条件分支时会暂停并等待用户确认再继续",
+      "confirmMessage": "确认问题",
+      "confirmMessagePlaceholder": "输入需要向用户确认的问题...",

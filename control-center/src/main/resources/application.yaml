@@ -1,0 +1,19 @@
+server:
+  port: 8094
+
+spring:
+  application:
+    name: control-center
+  config:
+    import: optional:file:./config.yaml
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    com.huawei.opsfactory.controlcenter: INFO

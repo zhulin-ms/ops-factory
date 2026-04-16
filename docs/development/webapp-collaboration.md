@@ -67,7 +67,6 @@
 
 - `app/modules/agents/*`
 - `app/modules/knowledge/*`
-- `app/modules/monitoring/*`
 - `app/modules/history/*`
 
 ## 2. 模块是如何被自动加载的
@@ -238,6 +237,13 @@ cd web-app && npm run build
 - 改成更小粒度的 hook 或工具测试
 - 或者放到 Playwright / 更高层集成测试里
 
+### 5.3 临时验证产物清理
+
+- 前端手工验证、Playwright 调试和页面巡检结束后，默认清理临时过程文件。
+- 不要把本轮验证专用的 `output/`、`.playwright-cli/`、临时截图、临时 markdown 快照或一次性抓取结果留在工作区。
+- 如果前端验证依赖创建临时测试用户、临时 session 或临时 runtime 数据，也要在验证结束后同步清理对应的 `gateway/users/<test-user>/...` 数据。
+- 只有当测试产物本身需要作为正式归档、复现证据或交付物时，才保留并移动到明确位置，例如 `test/report/`。
+
 ## 6. 团队协作时的“改动范围判断”
 
 ### 6.1 低风险改动
@@ -314,3 +320,4 @@ cd web-app && npm run build
 - `check:boundaries` 通过
 - `test:basic` 通过
 - `build` 通过
+- 验证过程中产生的临时过程文件和临时测试用户数据已清理

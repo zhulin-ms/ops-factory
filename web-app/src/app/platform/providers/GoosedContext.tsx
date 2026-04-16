@@ -3,6 +3,7 @@ import { GoosedClient } from '@goosed/sdk'
 import { useUser } from './UserContext'
 import { GATEWAY_URL, GATEWAY_SECRET_KEY } from '../../../config/runtime'
 import { getErrorMessage } from '../../../utils/errorMessages'
+import { trackedFetch } from '../logging/requestClient'
 
 export interface AgentInfo {
     id: string
@@ -54,7 +55,9 @@ export function GoosedProvider({ children }: { children: ReactNode }) {
         try {
             const headers: Record<string, string> = { 'x-secret-key': GATEWAY_SECRET_KEY }
             if (userId) headers['x-user-id'] = userId
-            const res = await fetch(`${GATEWAY_URL}/agents`, {
+            const res = await trackedFetch(`${GATEWAY_URL}/agents`, {
+                category: 'data',
+                name: 'data.load',
                 headers,
                 signal: AbortSignal.timeout(30000),
             })

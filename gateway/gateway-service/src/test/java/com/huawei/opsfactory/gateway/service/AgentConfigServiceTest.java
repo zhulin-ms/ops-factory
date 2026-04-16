@@ -2,6 +2,7 @@ package com.huawei.opsfactory.gateway.service;
 
 import com.huawei.opsfactory.gateway.common.model.AgentRegistryEntry;
 import com.huawei.opsfactory.gateway.config.GatewayProperties;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -27,6 +28,7 @@ public class AgentConfigServiceTest {
     private AgentConfigService service;
     private GatewayProperties properties;
     private Path gatewayRoot;
+    private String previousGatewayConfigPath;
 
     @Before
     public void setUp() throws IOException {
@@ -54,9 +56,20 @@ public class AgentConfigServiceTest {
         GatewayProperties.Paths paths = new GatewayProperties.Paths();
         paths.setProjectRoot(tempFolder.getRoot().getAbsolutePath());
         properties.setPaths(paths);
+        previousGatewayConfigPath = System.getProperty("GATEWAY_CONFIG_PATH");
+        System.setProperty("GATEWAY_CONFIG_PATH", gatewayRoot.resolve("config.yaml").toString());
 
         service = new AgentConfigService(properties);
         service.loadRegistry();
+    }
+
+    @After
+    public void tearDown() {
+        if (previousGatewayConfigPath == null) {
+            System.clearProperty("GATEWAY_CONFIG_PATH");
+        } else {
+            System.setProperty("GATEWAY_CONFIG_PATH", previousGatewayConfigPath);
+        }
     }
 
     @Test
@@ -67,6 +80,40 @@ public class AgentConfigServiceTest {
         assertEquals("Test Agent", registry.get(0).name());
         assertEquals("kb-agent", registry.get(1).id());
         assertEquals("KB Agent", registry.get(1).name());
+    }
+
+    @Test
+    public void testLoadRegistryWhenGatewayConfigPathPointsToGatewayConfig() throws IOException {
+        Path externalRoot = tempFolder.getRoot().toPath().resolve("external-runtime");
+        Path externalGatewayRoot = externalRoot.resolve("gateway");
+        Files.createDirectories(externalGatewayRoot.resolve("agents"));
+        Files.createDirectories(externalGatewayRoot.resolve("users"));
+        Files.writeString(externalGatewayRoot.resolve("config.yaml"),
+                "agents:\n" +
+                        "  - id: external-agent\n" +
+                        "    name: External Agent\n");
+
+        GatewayProperties externalProperties = new GatewayProperties();
+        GatewayProperties.Paths paths = new GatewayProperties.Paths();
+        paths.setProjectRoot("..");
+        externalProperties.setPaths(paths);
+
+        String previous = System.getProperty("GATEWAY_CONFIG_PATH");
+        System.setProperty("GATEWAY_CONFIG_PATH", externalGatewayRoot.resolve("config.yaml").toString());
+        try {
+            AgentConfigService externalService = new AgentConfigService(externalProperties);
+            externalService.loadRegistry();
+
+            assertEquals(1, externalService.getRegistry().size());
+            assertEquals("external-agent", externalService.getRegistry().get(0).id());
+            assertEquals(externalGatewayRoot.normalize(), externalService.getGatewayRoot());
+        } finally {
+            if (previous == null) {
+                System.clearProperty("GATEWAY_CONFIG_PATH");
+            } else {
+                System.setProperty("GATEWAY_CONFIG_PATH", previous);
+            }
+        }
     }
 
     @Test
@@ -413,7 +460,7 @@ public class AgentConfigServiceTest {
     @Test
     public void testListMemoryFiles_withFiles() throws IOException {
         Path memoryDir = gatewayRoot.resolve("agents").resolve("test-agent")
-                .resolve("config").resolve("memory");
+                .resolve("config").resolve("goose").resolve("memory");
         Files.createDirectories(memoryDir);
         Files.writeString(memoryDir.resolve("development.txt"), "# tools\nuse black for formatting");
         Files.writeString(memoryDir.resolve("personal.txt"), "prefer Chinese replies");
@@ -433,7 +480,7 @@ public class AgentConfigServiceTest {
     @Test
     public void testListMemoryFiles_ignoresNonTxt() throws IOException {
         Path memoryDir = gatewayRoot.resolve("agents").resolve("test-agent")
-                .resolve("config").resolve("memory");
+                .resolve("config").resolve("goose").resolve("memory");
         Files.createDirectories(memoryDir);
         Files.writeString(memoryDir.resolve("valid.txt"), "content");
         Files.writeString(memoryDir.resolve("ignored.md"), "markdown");
@@ -446,7 +493,7 @@ public class AgentConfigServiceTest {
     @Test
     public void testReadMemoryFile_exists() throws IOException {
         Path memoryDir = gatewayRoot.resolve("agents").resolve("test-agent")
-                .resolve("config").resolve("memory");
+                .resolve("config").resolve("goose").resolve("memory");
         Files.createDirectories(memoryDir);
         Files.writeString(memoryDir.resolve("dev.txt"), "hello world");
 
@@ -465,7 +512,7 @@ public class AgentConfigServiceTest {
         service.writeMemoryFile("test-agent", "new-category", "some content");
 
         Path file = gatewayRoot.resolve("agents").resolve("test-agent")
-                .resolve("config").resolve("memory").resolve("new-category.txt");
+                .resolve("config").resolve("goose").resolve("memory").resolve("new-category.txt");
         assertTrue(Files.exists(file));
         assertEquals("some content", Files.readString(file));
     }
@@ -487,7 +534,7 @@ public class AgentConfigServiceTest {
     @Test
     public void testDeleteMemoryFile_success() throws IOException {
         Path memoryDir = gatewayRoot.resolve("agents").resolve("test-agent")
-                .resolve("config").resolve("memory");
+                .resolve("config").resolve("goose").resolve("memory");
         Files.createDirectories(memoryDir);
         Files.writeString(memoryDir.resolve("toDelete.txt"), "bye");
 

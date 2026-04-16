@@ -2,6 +2,10 @@ package com.huawei.opsfactory.gateway.config;
 
 import org.junit.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -47,6 +51,15 @@ public class GatewayPropertiesTest {
     }
 
     @Test
+    public void testLoggingDefaults() {
+        GatewayProperties.Logging logging = new GatewayProperties.Logging();
+        assertTrue(logging.isAccessLogEnabled());
+        assertFalse(logging.isIncludeUpstreamErrorBody());
+        assertFalse(logging.isIncludeSseChunkPreview());
+        assertEquals(160, logging.getSseChunkPreviewMaxChars());
+    }
+
+    @Test
     public void testSetters() {
         GatewayProperties props = new GatewayProperties();
         props.setSecretKey("new-key");
@@ -56,6 +69,20 @@ public class GatewayPropertiesTest {
         assertEquals("new-key", props.getSecretKey());
         assertEquals("http://localhost:8080", props.getCorsOrigin());
         assertEquals("/usr/bin/goosed", props.getGoosedBin());
+    }
+
+    @Test
+    public void testLoggingSetters() {
+        GatewayProperties.Logging logging = new GatewayProperties.Logging();
+        logging.setAccessLogEnabled(false);
+        logging.setIncludeUpstreamErrorBody(true);
+        logging.setIncludeSseChunkPreview(true);
+        logging.setSseChunkPreviewMaxChars(80);
+
+        assertFalse(logging.isAccessLogEnabled());
+        assertTrue(logging.isIncludeUpstreamErrorBody());
+        assertTrue(logging.isIncludeSseChunkPreview());
+        assertEquals(80, logging.getSseChunkPreviewMaxChars());
     }
 
     @Test
@@ -93,5 +120,31 @@ public class GatewayPropertiesTest {
         GatewayProperties props = new GatewayProperties();
         props.setGooseTls(false);
         assertEquals("http", props.gooseScheme());
+    }
+
+    @Test
+    public void testResolvesPathsRelativeToGatewayConfigPath() throws IOException {
+        Path tempRoot = Files.createTempDirectory("gateway-props");
+        Path gatewayRoot = tempRoot.resolve("gateway");
+        Files.createDirectories(gatewayRoot);
+        Files.writeString(gatewayRoot.resolve("config.yaml"), "server:\n  port: 3000\n");
+
+        String previous = System.getProperty("GATEWAY_CONFIG_PATH");
+        System.setProperty("GATEWAY_CONFIG_PATH", gatewayRoot.resolve("config.yaml").toString());
+        try {
+            GatewayProperties props = new GatewayProperties();
+            GatewayProperties.Paths paths = new GatewayProperties.Paths();
+            paths.setProjectRoot("..");
+            props.setPaths(paths);
+
+            assertEquals(tempRoot.normalize(), props.getProjectRootPath());
+            assertEquals(gatewayRoot.normalize(), props.getGatewayRootPath());
+        } finally {
+            if (previous == null) {
+                System.clearProperty("GATEWAY_CONFIG_PATH");
+            } else {
+                System.setProperty("GATEWAY_CONFIG_PATH", previous);
+            }
+        }
     }
 }

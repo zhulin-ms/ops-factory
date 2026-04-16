@@ -10,11 +10,15 @@ The extension is registered in:
 
 Extension name: `knowledge-service`
 
+The default knowledge source is configured in:
+
+- `extensions.knowledge-service.x-opsfactory.knowledgeScope.sourceId`
+
 ## Tools
 
 | Tool | Usage |
 |------|-------|
-| `search` | Search chunk candidates from the configured knowledge sources. Uses the configured default `sourceId` when `sourceIds` is omitted. |
+| `search` | Search chunk candidates from the configured knowledge sources. Uses the `config.yaml` knowledge scope when `sourceIds` is omitted. |
 | `fetch` | Fetch full chunk content and optional neighbor chunks for a known `chunkId`. |
 
 ## Environment
@@ -22,7 +26,6 @@ Extension name: `knowledge-service`
 Required secrets in `gateway/agents/qa-agent/config/secrets.yaml`:
 
 - `KNOWLEDGE_SERVICE_URL`
-- `KNOWLEDGE_DEFAULT_SOURCE_ID`
 
 Optional:
 

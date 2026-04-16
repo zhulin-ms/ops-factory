@@ -92,7 +92,7 @@ export default function Agents() {
     }, [agentSkillsMap, agents, searchTerm])
 
     return (
-        <div className="page-container sidebar-top-page resource-page">
+        <div className="page-container sidebar-top-page page-shell-wide">
             <PageHeader
                 title={t('agents.title')}
                 subtitle={t('agents.subtitle')}

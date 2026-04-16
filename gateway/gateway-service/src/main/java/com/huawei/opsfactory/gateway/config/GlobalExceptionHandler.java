@@ -1,7 +1,7 @@
 package com.huawei.opsfactory.gateway.config;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.codec.DecodingException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,10 +17,20 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final Logger log = LogManager.getLogger(GlobalExceptionHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final GatewayProperties properties;
+
+    public GlobalExceptionHandler() {
+        this(new GatewayProperties());
+    }
+
+    public GlobalExceptionHandler(GatewayProperties properties) {
+        this.properties = properties;
+    }
 
     @ExceptionHandler(ServerWebInputException.class)
     public ResponseEntity<Map<String, Object>> handleInputException(ServerWebInputException ex) {
+        log.warn("Request input error: {}", ex.getMessage());
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("success", false);
         if (ex.getCause() instanceof DecodingException) {
@@ -33,6 +43,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
+        log.warn("Request rejected with status={} reason={}", ex.getStatus(), ex.getReason());
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("success", false);
         body.put("error", ex.getReason() != null ? ex.getReason() : ex.getMessage());
@@ -60,9 +71,15 @@ public class GlobalExceptionHandler {
             message = "Agent internal error";
         }
 
-        log.warn("Goosed returned {} for {}: {}", ex.getRawStatusCode(),
-                ex.getRequest() != null ? ex.getRequest().getURI().getPath() : "unknown",
-                ex.getResponseBodyAsString());
+        String path = ex.getRequest() != null ? ex.getRequest().getURI().getPath() : "unknown";
+        String responseBody = ex.getResponseBodyAsString();
+        if (properties.getLogging().isIncludeUpstreamErrorBody()) {
+            log.warn("Goosed returned {} for {} bodyLength={} body={}",
+                ex.getRawStatusCode(), path, responseBody.length(), truncate(responseBody, 500));
+        } else {
+            log.warn("Goosed returned {} for {} bodyLength={}",
+                ex.getRawStatusCode(), path, responseBody.length());
+        }
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("success", false);
@@ -81,5 +98,12 @@ public class GlobalExceptionHandler {
         body.put("success", false);
         body.put("error", "Internal server error");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() > maxLength ? value.substring(0, maxLength) + "..." : value;
     }
 }

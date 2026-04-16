@@ -6,8 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class BusinessIntelligenceRuntimeProperties {
 
     private String corsOrigin = "*";
-    private String baseDir = "./data";
-    private boolean cacheEnabled = true;
+    private Runtime runtime = new Runtime();
+    private Logging logging = new Logging();
 
     public String getCorsOrigin() {
         return corsOrigin;
@@ -17,19 +17,70 @@ public class BusinessIntelligenceRuntimeProperties {
         this.corsOrigin = corsOrigin;
     }
 
+    public Runtime getRuntime() {
+        return runtime;
+    }
+
+    public void setRuntime(Runtime runtime) {
+        this.runtime = runtime;
+    }
+
+    public Logging getLogging() {
+        return logging;
+    }
+
+    public void setLogging(Logging logging) {
+        this.logging = logging;
+    }
+
     public String getBaseDir() {
-        return baseDir;
+        return runtime.getBaseDir();
     }
 
     public void setBaseDir(String baseDir) {
-        this.baseDir = baseDir;
+        runtime.setBaseDir(baseDir);
     }
 
     public boolean isCacheEnabled() {
-        return cacheEnabled;
+        return runtime.isCacheEnabled();
     }
 
     public void setCacheEnabled(boolean cacheEnabled) {
-        this.cacheEnabled = cacheEnabled;
+        runtime.setCacheEnabled(cacheEnabled);
+    }
+
+    public static class Runtime {
+
+        private String baseDir = "./data";
+        private boolean cacheEnabled = true;
+
+        public String getBaseDir() {
+            return baseDir;
+        }
+
+        public void setBaseDir(String baseDir) {
+            this.baseDir = baseDir;
+        }
+
+        public boolean isCacheEnabled() {
+            return cacheEnabled;
+        }
+
+        public void setCacheEnabled(boolean cacheEnabled) {
+            this.cacheEnabled = cacheEnabled;
+        }
+    }
+
+    public static class Logging {
+
+        private boolean accessLogEnabled = true;
+
+        public boolean isAccessLogEnabled() {
+            return accessLogEnabled;
+        }
+
+        public void setAccessLogEnabled(boolean accessLogEnabled) {
+            this.accessLogEnabled = accessLogEnabled;
+        }
     }
 }
