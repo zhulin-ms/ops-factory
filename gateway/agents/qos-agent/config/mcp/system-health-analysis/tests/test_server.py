@@ -52,18 +52,6 @@ class RuntimeConfigTests(unittest.TestCase):
 
 
 class PayloadBuilderTests(unittest.TestCase):
-    def test_subtopography_keeps_related_alarms_as_array(self) -> None:
-        payload = server.build_subtopography_payload(
-            {
-                "envCode": "VRBTL2.TEST",
-                "rootAlarm": {"alarmId": "a-1"},
-                "relatedAlarms": [{"alarmId": "a-2"}],
-            }
-        )
-
-        self.assertEqual(payload["relatedAlarms"], [{"alarmId": "a-2"}])
-        self.assertIsInstance(payload["relatedAlarms"], list)
-
     def test_seconds_timestamp_is_normalized_to_milliseconds(self) -> None:
         payload = server.build_abnormal_data_payload(
             {

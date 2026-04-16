@@ -23,6 +23,10 @@ DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_QOS_BASE_URL = "https://192.168.161.163:38443"
 DEFAULT_QOS_USERNAME = "managementservice"
 LOG_FILE_NAME = "system_health_analysis.log"
+DEFAULT_TIME_PARSE_FORMAT = "%Y/%m/%d %H:%M:%S"
+DEFAULT_TIME_DISPLAY_FORMAT = "YYYY/M/D HH:MM:SS"
+DEFAULT_TIME_EXAMPLE = "2026/4/16 20:00:00"
+TIME_PARSE_FORMAT_ENV = "QOS_TIME_PARSE_FORMAT"
 
 
 class ToolExecutionError(Exception):
@@ -74,6 +78,7 @@ class RuntimeConfig:
     qos_password: str
     verify_tls: bool
     timeout_seconds: int
+    time_parse_format: str
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -83,12 +88,14 @@ class RuntimeConfig:
         qos_password = os.environ.get("QOS_PASSWORD") or os.environ.get("GATEWAY_API_PASSWORD") or ""
         verify_tls = parse_bool(os.environ.get("QOS_VERIFY_TLS"), default=False)
         timeout_seconds = parse_int(os.environ.get("QOS_TIMEOUT_SECONDS"), DEFAULT_TIMEOUT_SECONDS)
+        time_parse_format = os.environ.get(TIME_PARSE_FORMAT_ENV) or DEFAULT_TIME_PARSE_FORMAT
         return cls(
             qos_base_url=qos_base_url,
             qos_username=qos_username,
             qos_password=qos_password,
             verify_tls=verify_tls,
             timeout_seconds=timeout_seconds,
+            time_parse_format=time_parse_format,
         )
 
     def masked_dict(self) -> Dict[str, Any]:
@@ -98,6 +105,7 @@ class RuntimeConfig:
             "qos_password_set": bool(self.qos_password),
             "verify_tls": self.verify_tls,
             "timeout_seconds": self.timeout_seconds,
+            "time_parse_format": self.time_parse_format,
         }
 
 
@@ -138,34 +146,34 @@ def normalize_timestamp_ms(value: Any, name: str) -> int:
     return normalized
 
 
+def normalize_datetime_string_ms(value: Any, name: str, time_parse_format: str) -> int:
+    text = require_non_empty_string(value, name)
+    try:
+        parsed = datetime.strptime(text, time_parse_format)
+    except ValueError as exc:
+        raise ToolExecutionError(
+            f"{name} must be a datetime string in format {DEFAULT_TIME_DISPLAY_FORMAT} (e.g. {DEFAULT_TIME_EXAMPLE})"
+        ) from exc
+    tzinfo = datetime.now().astimezone().tzinfo or timezone.utc
+    return normalize_timestamp_ms(int(parsed.replace(tzinfo=tzinfo).timestamp() * 1000), name)
+
+
+def normalize_time_ms(value: Any, name: str, time_parse_format: str) -> int:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return normalize_timestamp_ms(value, name)
+    return normalize_datetime_string_ms(value, name, time_parse_format)
+
+
 def require_non_empty_string(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ToolExecutionError(f"{name} must be a non-empty string")
     return value.strip()
 
 
-def build_subtopography_payload(args: Dict[str, Any]) -> Dict[str, Any]:
+def build_health_score_payload(args: Dict[str, Any], config: RuntimeConfig) -> Dict[str, Any]:
     env_code = require_non_empty_string(args.get("envCode"), "envCode")
-    root_alarm = args.get("rootAlarm")
-    if not isinstance(root_alarm, dict) or not root_alarm:
-        raise ToolExecutionError("rootAlarm must be a non-empty object")
-
-    payload: Dict[str, Any] = {
-        "envCode": env_code,
-        "rootAlarm": root_alarm,
-    }
-    related_alarms = args.get("relatedAlarms")
-    if related_alarms is not None:
-        if not isinstance(related_alarms, list):
-            raise ToolExecutionError("relatedAlarms must be an array when provided")
-        payload["relatedAlarms"] = related_alarms
-    return payload
-
-
-def build_health_score_payload(args: Dict[str, Any]) -> Dict[str, Any]:
-    env_code = require_non_empty_string(args.get("envCode"), "envCode")
-    start_time_ms = normalize_timestamp_ms(args.get("startTime"), "startTime")
-    end_time_ms = normalize_timestamp_ms(args.get("endTime"), "endTime")
+    start_time_ms = normalize_time_ms(args.get("startTime"), "startTime", config.time_parse_format)
+    end_time_ms = normalize_time_ms(args.get("endTime"), "endTime", config.time_parse_format)
     if end_time_ms <= start_time_ms:
         raise ToolExecutionError(
             f"endTime must be greater than startTime: startTime={start_time_ms} endTime={end_time_ms}"
@@ -181,10 +189,10 @@ def build_health_score_payload(args: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-def build_abnormal_data_payload(args: Dict[str, Any]) -> Dict[str, Any]:
+def build_abnormal_data_payload(args: Dict[str, Any], config: RuntimeConfig) -> Dict[str, Any]:
     env_code = require_non_empty_string(args.get("envCode"), "envCode")
-    start_time_ms = normalize_timestamp_ms(args.get("startTime"), "startTime")
-    end_time_ms = normalize_timestamp_ms(args.get("endTime"), "endTime")
+    start_time_ms = normalize_time_ms(args.get("startTime"), "startTime", config.time_parse_format)
+    end_time_ms = normalize_time_ms(args.get("endTime"), "endTime", config.time_parse_format)
     if end_time_ms <= start_time_ms:
         raise ToolExecutionError(
             f"endTime must be greater than startTime: startTime={start_time_ms} endTime={end_time_ms}"
@@ -208,8 +216,20 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "envCode": {"type": "string", "description": "环境编码"},
-                "startTime": {"type": "number", "description": "开始时间（毫秒时间戳）"},
-                "endTime": {"type": "number", "description": "结束时间（毫秒时间戳）"},
+                "startTime": {
+                    "type": ["string", "number"],
+                    "description": (
+                        f"开始时间（字符串默认格式：{DEFAULT_TIME_DISPLAY_FORMAT}，例如 {DEFAULT_TIME_EXAMPLE}；"
+                        f"可通过环境变量 {TIME_PARSE_FORMAT_ENV} 覆盖解析格式；也支持传入秒/毫秒时间戳）"
+                    ),
+                },
+                "endTime": {
+                    "type": ["string", "number"],
+                    "description": (
+                        f"结束时间（字符串默认格式：{DEFAULT_TIME_DISPLAY_FORMAT}，例如 {DEFAULT_TIME_EXAMPLE}；"
+                        f"可通过环境变量 {TIME_PARSE_FORMAT_ENV} 覆盖解析格式；也支持传入秒/毫秒时间戳）"
+                    ),
+                },
                 "mode": {"type": "string", "description": "监控模式（默认 real）"},
             },
             "required": ["envCode", "startTime", "endTime"],
@@ -222,8 +242,20 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "envCode": {"type": "string", "description": "环境编码"},
-                "startTime": {"type": "number", "description": "开始时间（毫秒时间戳）"},
-                "endTime": {"type": "number", "description": "结束时间（毫秒时间戳）"},
+                "startTime": {
+                    "type": ["string", "number"],
+                    "description": (
+                        f"开始时间（字符串默认格式：{DEFAULT_TIME_DISPLAY_FORMAT}，例如 {DEFAULT_TIME_EXAMPLE}；"
+                        f"可通过环境变量 {TIME_PARSE_FORMAT_ENV} 覆盖解析格式；也支持传入秒/毫秒时间戳）"
+                    ),
+                },
+                "endTime": {
+                    "type": ["string", "number"],
+                    "description": (
+                        f"结束时间（字符串默认格式：{DEFAULT_TIME_DISPLAY_FORMAT}，例如 {DEFAULT_TIME_EXAMPLE}；"
+                        f"可通过环境变量 {TIME_PARSE_FORMAT_ENV} 覆盖解析格式；也支持传入秒/毫秒时间戳）"
+                    ),
+                },
             },
             "required": ["envCode", "startTime", "endTime"],
         },
@@ -237,19 +269,6 @@ TOOLS = [
                 "envCode": {"type": "string", "description": "环境编码"},
             },
             "required": ["envCode"],
-        },
-    },
-    {
-        "name": "get_subtopography",
-        "description": "基于根因告警与相关告警查询子拓扑",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "envCode": {"type": "string", "description": "环境编码"},
-                "rootAlarm": {"type": "object", "description": "根因告警对象（JSON）"},
-                "relatedAlarms": {"type": "array", "items": {"type": "object"}, "description": "相关告警数组（JSON，可选）"},
-            },
-            "required": ["envCode", "rootAlarm"],
         },
     },
 ]
@@ -358,13 +377,15 @@ def qos_post(path: str, body: Dict[str, Any], config: RuntimeConfig) -> Any:
 
 def dispatch_tool(name: str, args: Dict[str, Any], config: RuntimeConfig) -> Any:
     if name == "get_health_score":
-        return qos_post("/itom/machine/qos/getDiagnoseHealthScore", build_health_score_payload(args), config)
+        return qos_post("/itom/machine/qos/getDiagnoseHealthScore", build_health_score_payload(args, config), config)
     if name == "get_abnormal_data":
-        return qos_post("/itom/machine/qos/getDiagnoseAbnormalData", build_abnormal_data_payload(args), config)
+        return qos_post(
+            "/itom/machine/qos/getDiagnoseAbnormalData",
+            build_abnormal_data_payload(args, config),
+            config,
+        )
     if name == "get_topography":
         return qos_post("/itom/machine/diagnosis/getTopology", build_topography_payload(args), config)
-    if name == "get_subtopography":
-        return qos_post("/itom/machine/diagnosis/getSubTopology", build_subtopography_payload(args), config)
     raise KeyError(name)
 
 
@@ -408,7 +429,7 @@ def handle_request(message: Dict[str, Any], config: RuntimeConfig) -> Optional[D
                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
                 "instructions": (
                     "Use the QoS health tools to query health score, abnormal data, topology, "
-                    "and sub-topology. TLS certificate verification is disabled by default."
+                    "and topology. TLS certificate verification is disabled by default."
                 ),
             },
         )
