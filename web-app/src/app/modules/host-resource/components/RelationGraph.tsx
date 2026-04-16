@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
-import { useTranslation } from 'react-i18next'
+
 import type { GraphData, GraphNode } from '../../../../types/host'
 
 const BS_NODE_COLOR = '#6366f1'    // indigo
@@ -135,7 +135,7 @@ function computeLayerPositions(
 }
 
 export default function RelationGraph({ data, focusedHostId, hopFocusId, onNodeClick, onNodeDoubleClick, onBackgroundClick }: Props) {
-    const { t } = useTranslation()
+
     const [fullscreen, setFullscreen] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
     const [dims, setDims] = useState({ w: 800, h: 300 })
@@ -251,7 +251,7 @@ export default function RelationGraph({ data, focusedHostId, hopFocusId, onNodeC
                         color: BS_EDGE_COLOR,
                     } : {}),
                 },
-                label: { show: !focusedHostId || isDownstream, formatter: e.description ? t(`hostResource.${e.description}`) : '', fontSize: 10 },
+                label: { show: !focusedHostId || isDownstream, formatter: e.description || '', fontSize: 10 },
                 symbol: ['none', 'arrow'] as [string, string],
                 symbolSize: [4, 8],
             }

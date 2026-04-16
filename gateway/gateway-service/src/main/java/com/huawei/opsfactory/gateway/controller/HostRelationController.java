@@ -33,10 +33,12 @@ public class HostRelationController {
             @RequestParam(value = "hostId", required = false) String hostId,
             @RequestParam(value = "groupId", required = false) String groupId,
             @RequestParam(value = "clusterId", required = false) String clusterId,
+            @RequestParam(value = "sourceType", required = false) String sourceType,
+            @RequestParam(value = "sourceId", required = false) String sourceId,
             ServerWebExchange exchange) {
         UserContextFilter.requireAdmin(exchange);
         return Mono.fromCallable(() -> {
-            List<Map<String, Object>> relations = hostRelationService.listRelations(hostId, groupId, clusterId);
+            List<Map<String, Object>> relations = hostRelationService.listRelations(hostId, groupId, clusterId, sourceType, sourceId);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("relations", relations);
             return result;

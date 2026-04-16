@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSops } from '../hooks/useSops'
 import { useCommandWhitelist } from '../hooks/useCommandWhitelist'
+import { useClusters } from '../hooks/useClusters'
 import { useToast } from '../../../platform/providers/ToastContext'
 import { useUser } from '../../../platform/providers/UserContext'
 import { GATEWAY_URL, gatewayHeaders } from '../../../../config/runtime'
 import DetailDialog from '../../../platform/ui/primitives/DetailDialog'
 import type { Sop, SopNode, SopCreateRequest } from '../../../../types/sop'
+import type { Cluster } from '../../../../types/host'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -269,10 +271,12 @@ function TransitionEditor({
 
 function SopFormModal({
     sop,
+    clusters,
     onClose,
     onSave,
 }: {
     sop: Sop | null
+    clusters: Cluster[]
     onClose: () => void
     onSave: (data: SopCreateRequest) => Promise<void>
 }) {
@@ -506,16 +510,20 @@ function SopFormModal({
                         </div>
                     </div>
                     <div className="form-group sop-workflow-compact-field">
-                        <label className="form-label">{t('remoteDiagnosis.sops.sopTags')}</label>
-                        <input
+                        <label className="form-label">{t('remoteDiagnosis.sops.sopHostTags')}</label>
+                        <select
                             className="form-input"
-                            placeholder="tag1, tag2"
-                            value={sopTags.join(', ')}
+                            value={sopTags[0] ?? ''}
                             onChange={e => {
-                                const tags = e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                                setSopTags(tags)
+                                const val = e.target.value
+                                setSopTags(val ? [val] : [])
                             }}
-                        />
+                        >
+                            <option value="">{t('hostResource.selectClusterType')}</option>
+                            {clusters.map(c => (
+                                <option key={c.id} value={c.name}>{c.name}</option>
+                            ))}
+                        </select>
                     </div>
                     <div className="form-group">
                         <label className="form-label">{t('remoteDiagnosis.sops.stepsDescription')}</label>
@@ -782,7 +790,7 @@ function SopExpandableRow({ sop, onEdit, onDelete, onToggleEnabled }: {
                                     {sop.tags && sop.tags.length > 0 && (
                                         <div style={{ marginBottom: 'var(--spacing-3)' }}>
                                             <span className="sop-workflow-node-label">
-                                                {t('remoteDiagnosis.sops.sopTags')}:
+                                                {t('remoteDiagnosis.sops.sopHostTags')}:
                                             </span>
                                             <div className="sop-workflow-host-tags" style={{ marginTop: 4 }}>
                                                 {sop.tags.map(tag => (
@@ -922,6 +930,7 @@ function SopExpandableRow({ sop, onEdit, onDelete, onToggleEnabled }: {
 export function SopsTab() {
     const { t } = useTranslation()
     const { sops, isLoading, error, fetchSops, createSop, updateSop, deleteSop } = useSops()
+    const { clusters, fetchAllClusters } = useClusters()
     const { showToast } = useToast()
     const { userId } = useUser()
 
@@ -929,11 +938,14 @@ export function SopsTab() {
     const [currentPage, setCurrentPage] = useState(1)
     const [editingSop, setEditingSop] = useState<Sop | null>(null)
     const [showAddModal, setShowAddModal] = useState(false)
-    const fileInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         fetchSops()
     }, [fetchSops])
+
+    useEffect(() => {
+        fetchAllClusters()
+    }, [fetchAllClusters])
 
     const handleSaveSop = useCallback(
         async (data: SopCreateRequest) => {
@@ -996,51 +1008,6 @@ export function SopsTab() {
         [userId, fetchSops, showToast, t],
     )
 
-    const handleExport = useCallback(() => {
-        if (sops.length === 0) {
-            showToast('error', t('remoteDiagnosis.sops.noSops'))
-            return
-        }
-        try {
-            const blob = new Blob([JSON.stringify(sops, null, 2)], { type: 'application/json' })
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.style.display = 'none'
-            a.href = url
-            a.download = 'sops-export.json'
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            setTimeout(() => URL.revokeObjectURL(url), 1000)
-        } catch (err) {
-            showToast('error', err instanceof Error ? err.message : 'Export failed')
-        }
-    }, [sops, showToast, t])
-
-    const handleImport = useCallback(
-        (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0]
-            if (!file) return
-            const reader = new FileReader()
-            reader.onload = async (event) => {
-                try {
-                    const data = JSON.parse(event.target?.result as string)
-                    const items = Array.isArray(data) ? data : [data]
-                    for (const item of items) {
-                        await createSop(item as SopCreateRequest)
-                    }
-                    showToast('success', t('remoteDiagnosis.sops.importSuccess'))
-                    await fetchSops()
-                } catch (err) {
-                    showToast('error', err instanceof Error ? err.message : 'Import failed')
-                }
-            }
-            reader.readAsText(file)
-            e.target.value = ''
-        },
-        [createSop, fetchSops, showToast, t],
-    )
-
     return (
         <>
             <section className="knowledge-section-card sop-workflow-section-card">
@@ -1052,26 +1019,6 @@ export function SopsTab() {
                         </p>
                     </div>
                     <div className="knowledge-doc-toolbar-actions sop-workflow-toolbar-actions">
-                        <button
-                            className="btn btn-secondary"
-                            onClick={handleExport}
-                            disabled={sops.length === 0}
-                        >
-                            {t('remoteDiagnosis.sops.exportJson')}
-                        </button>
-                        <button
-                            className="btn btn-secondary"
-                            onClick={() => fileInputRef.current?.click()}
-                        >
-                            {t('remoteDiagnosis.sops.importJson')}
-                        </button>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".json"
-                            style={{ display: 'none' }}
-                            onChange={handleImport}
-                        />
                         <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
                             {t('remoteDiagnosis.sops.addSop')}
                         </button>
@@ -1176,6 +1123,7 @@ export function SopsTab() {
             {(showAddModal || editingSop) && (
                 <SopFormModal
                     sop={editingSop}
+                    clusters={clusters}
                     onClose={() => {
                         setShowAddModal(false)
                         setEditingSop(null)
@@ -1184,17 +1132,5 @@ export function SopsTab() {
                 />
             )}
         </>
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Sops Page (backward compatible wrapper)
-// ---------------------------------------------------------------------------
-
-export default function Sops() {
-    return (
-        <div className="page-container sidebar-top-page">
-            <SopsTab />
-        </div>
     )
 }

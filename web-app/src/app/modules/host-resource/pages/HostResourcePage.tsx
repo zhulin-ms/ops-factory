@@ -8,12 +8,16 @@ import { useHostRelations } from '../hooks/useHostRelations'
 import { useBusinessServices } from '../hooks/useBusinessServices'
 import { useClusterTypes } from '../hooks/useClusterTypes'
 import { useBusinessTypes } from '../hooks/useBusinessTypes'
+import { useCommandWhitelist } from '../hooks/useCommandWhitelist'
+import { useSops } from '../hooks/useSops'
 import ResourceTree, { type TreeNode, type TreeNodeType } from '../components/ResourceTree'
 import ResourceFormModal from '../components/ResourceFormModal'
 import HostCard from '../components/HostCard'
 import RelationGraph from '../components/RelationGraph'
 import ClusterTypeTab from '../components/ClusterTypeTab'
 import BusinessTypeTab from '../components/BusinessTypeTab'
+import { SopsTab } from '../components/SopsTab'
+import { WhitelistTab } from '../components/WhitelistTab'
 import type { HostGroup, Cluster, Host, HostCreateRequest, BusinessService } from '../../../../types/host'
 import '../styles/host-resource.css'
 
@@ -29,7 +33,7 @@ type EditingItem =
     | { type: 'host'; data: Host }
     | null
 
-type TabKey = 'overview' | 'cluster-types' | 'business-types'
+type TabKey = 'overview' | 'cluster-types' | 'business-types' | 'sop-management' | 'whitelist'
 
 const PAGE_SIZE = 6
 
@@ -43,16 +47,20 @@ export default function HostResourcePage() {
     const [editingItem, setEditingItem] = useState<EditingItem>(null)
     const [currentPage, setCurrentPage] = useState(1)
     const [importing, setImporting] = useState(false)
+    const [testingId, setTestingId] = useState<string | null>(null)
+    const [testResults, setTestResults] = useState<Record<string, { ok: boolean; msg: string }>>({})
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Data hooks
     const { groups, fetchGroups, createGroup, updateGroup, deleteGroup } = useHostGroups()
     const { clusters, fetchAllClusters, createCluster, updateCluster, deleteCluster } = useClusters()
-    const { hosts, allHosts, fetchHosts, fetchAllHosts, createHost, updateHost, deleteHost, discoverPlan, discoverExecute } = useHostResource()
+    const { hosts, allHosts, fetchHosts, fetchAllHosts, createHost, updateHost, deleteHost, testConnection, discoverPlan, discoverExecute } = useHostResource()
     const { graphData, relations: hostRelations, fetchGraph, fetchRelations: fetchHostRelations, createRelation, updateRelation, deleteRelation } = useHostRelations()
     const { businessServices, fetchBusinessServices, createBusinessService, updateBusinessService, deleteBusinessService } = useBusinessServices()
     const clusterTypesHook = useClusterTypes()
     const businessTypesHook = useBusinessTypes()
+    const { commands: whitelistCommands, addCommand: addWhitelistCommand } = useCommandWhitelist()
+    const sopsHook = useSops()
 
     // Load all data on mount
     useEffect(() => { fetchGroups() }, [fetchGroups])
@@ -291,6 +299,30 @@ export default function HostResourcePage() {
         }
     }, [deleteHost, focusedHostId, t])
 
+    const handleTestHost = useCallback(async (host: Host) => {
+        setTestingId(host.id)
+        setTestResults(prev => {
+            const next = { ...prev }
+            delete next[host.id]
+            return next
+        })
+        try {
+            const result = await testConnection(host.id)
+            if (result?.success) {
+                const msg = t('remoteDiagnosis.hosts.testSuccess', { latency: `${result.latency ?? ''}ms` })
+                setTestResults(prev => ({ ...prev, [host.id]: { ok: true, msg } }))
+            } else {
+                const msg = t('remoteDiagnosis.hosts.testFailed', { error: result?.message || 'Unknown' })
+                setTestResults(prev => ({ ...prev, [host.id]: { ok: false, msg } }))
+            }
+        } catch (err) {
+            const msg = t('remoteDiagnosis.hosts.testFailed', { error: err instanceof Error ? err.message : 'Unknown' })
+            setTestResults(prev => ({ ...prev, [host.id]: { ok: false, msg } }))
+        } finally {
+            setTestingId(null)
+        }
+    }, [testConnection, t])
+
     const handleHostCardClick = useCallback((host: Host) => {
         setFocusedHostId(prev => prev === host.id ? null : host.id)
     }, [])
@@ -305,7 +337,7 @@ export default function HostResourcePage() {
 
     const handleExport = useCallback(() => {
         const data = {
-            version: 3,
+            version: 5,
             exportedAt: new Date().toISOString(),
             clusterTypes: clusterTypesHook.clusterTypes.map(ct => ({
                 name: ct.name, code: ct.code, description: ct.description,
@@ -322,6 +354,13 @@ export default function HostResourcePage() {
             hosts: allHosts.map(({ id, name, hostname, ip, port, os, location, username, authType, business, clusterId, purpose, tags, description, customAttributes }) =>
                 ({ id, name, hostname, ip, port, os, location, username, authType, business, clusterId, purpose, tags, description, customAttributes })),
             relations: hostRelations.map(({ id, sourceHostId, targetHostId, description }) => ({ id, sourceHostId, targetHostId, description })),
+            commandWhitelist: whitelistCommands.map(({ pattern, description, enabled }) => ({ pattern, description, enabled })),
+            sops: sopsHook.sops.map(s => ({
+                name: s.name, description: s.description, version: s.version,
+                triggerCondition: s.triggerCondition, enabled: s.enabled,
+                mode: s.mode, nodes: s.nodes, stepsDescription: s.stepsDescription,
+                tags: s.tags,
+            })),
         }
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
         const url = URL.createObjectURL(blob)
@@ -330,7 +369,7 @@ export default function HostResourcePage() {
         a.download = `ops-resources-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`
         a.click()
         URL.revokeObjectURL(url)
-    }, [groups, clusters, businessServices, allHosts, hostRelations, clusterTypesHook.clusterTypes, businessTypesHook.businessTypes])
+    }, [groups, clusters, businessServices, allHosts, hostRelations, clusterTypesHook.clusterTypes, businessTypesHook.businessTypes, whitelistCommands, sopsHook.sops])
 
     const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -339,7 +378,7 @@ export default function HostResourcePage() {
         try {
             const text = await file.text()
             const data = JSON.parse(text)
-            if ((!data.version || data.version < 1 || data.version > 3) || !data.groups || !data.clusters || !data.hosts) {
+            if ((!data.version || data.version < 1 || data.version > 5) || !data.groups || !data.clusters || !data.hosts) {
                 alert(t('hostResource.invalidFile'))
                 return
             }
@@ -423,20 +462,40 @@ export default function HostResourcePage() {
                 }
             }
 
+            // 6. Command whitelist (v4+)
+            let wlCount = 0
+            for (const cmd of (data.commandWhitelist || [])) {
+                try {
+                    await addWhitelistCommand(cmd)
+                    wlCount++
+                } catch { /* skip duplicate or failed */ }
+            }
+
+            // 7. SOPs (v5+)
+            let sopCount = 0
+            if (data.sops) {
+                for (const sop of data.sops) {
+                    try {
+                        await sopsHook.createSop(sop)
+                        sopCount++
+                    } catch { /* skip duplicate or failed */ }
+                }
+            }
+
             alert(t('hostResource.importSuccess', {
                 groups: groupIdMap.size, clusters: clusterIdMap.size,
-                hosts: hostIdMap.size, relations: relCount,
+                hosts: hostIdMap.size, relations: relCount, sops: sopCount,
             }))
 
             // Refresh all data
-            await Promise.all([fetchGroups(), fetchAllClusters(), fetchAllHosts(), fetchHostRelations(), fetchGraph(), fetchBusinessServices()])
+            await Promise.all([fetchGroups(), fetchAllClusters(), fetchAllHosts(), fetchHostRelations(), fetchGraph(), fetchBusinessServices(), sopsHook.fetchSops()])
         } catch (err) {
             alert(t('hostResource.importFailed', { error: err instanceof Error ? err.message : String(err) }))
         } finally {
             setImporting(false)
             if (fileInputRef.current) fileInputRef.current.value = ''
         }
-    }, [t, createGroup, createCluster, createHost, createRelation, createBusinessService, clusterTypesHook.createClusterType, businessTypesHook.createBusinessType, fetchGroups, fetchAllClusters, fetchAllHosts, fetchHostRelations, fetchGraph, fetchBusinessServices])
+    }, [t, createGroup, createCluster, createHost, createRelation, createBusinessService, addWhitelistCommand, clusterTypesHook.createClusterType, businessTypesHook.createBusinessType, sopsHook.createSop, sopsHook.fetchSops, fetchGroups, fetchAllClusters, fetchAllHosts, fetchHostRelations, fetchGraph, fetchBusinessServices])
 
     const openCreateModal = useCallback(() => {
         setEditingItem(null)
@@ -452,15 +511,22 @@ export default function HostResourcePage() {
         { key: 'overview', label: t('hostResource.tabOverview') },
         { key: 'cluster-types', label: t('hostResource.tabClusterTypes') },
         { key: 'business-types', label: t('hostResource.tabBusinessTypes') },
+        { key: 'sop-management', label: t('hostResource.tabSopManagement') },
+        { key: 'whitelist', label: t('hostResource.tabWhitelist') },
     ]
 
     return (
-        <div className="page-container page-shell-fluid host-resource-page">
+        <div className="page-container sidebar-top-page host-resource-page">
             <PageHeader
-                title={t('hostResource.title')}
+                title={t('sidebar.hostResource')}
                 action={
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2, 8px)' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={handleExport} disabled={importing || allHosts.length === 0}>
+                        {activeTab === 'overview' && (
+                            <button className="btn btn-primary btn-sm" onClick={openCreateModal}>
+                                + {t('hostResource.createResource')}
+                            </button>
+                        )}
+                        <button className="btn btn-secondary btn-sm" onClick={handleExport} disabled={importing}>
                             {t('hostResource.export')}
                         </button>
                         <button className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
@@ -471,26 +537,18 @@ export default function HostResourcePage() {
                 }
             />
 
-            {/* Tab bar with create action */}
-            <div className="hr-tabs">
-                <div className="hr-tabs-left">
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.key}
-                            className={`hr-tab ${activeTab === tab.key ? 'hr-tab-active' : ''}`}
-                            onClick={() => setActiveTab(tab.key)}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
-                <div className="hr-tabs-actions">
-                    {activeTab === 'overview' && (
-                        <button className="btn btn-primary btn-sm" onClick={openCreateModal}>
-                            + {t('hostResource.createResource')}
-                        </button>
-                    )}
-                </div>
+            {/* Tab Navigation */}
+            <div className="config-tabs">
+                {tabs.map(tab => (
+                    <button
+                        key={tab.key}
+                        type="button"
+                        className={`config-tab ${activeTab === tab.key ? 'config-tab-active' : ''}`}
+                        onClick={() => setActiveTab(tab.key)}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
             </div>
 
             {/* Tab content */}
@@ -523,9 +581,12 @@ export default function HostResourcePage() {
                                                 host={host}
                                                 cluster={host.clusterId ? clusterMap.get(host.clusterId) : undefined}
                                                 selected={focusedHostId === host.id}
+                                                testing={testingId === host.id}
+                                                testResult={testResults[host.id] ?? null}
                                                 onClick={() => handleHostCardClick(host)}
                                                 onEdit={() => openEditModal({ type: 'host', data: host })}
                                                 onDelete={() => handleDeleteHost(host)}
+                                                onTest={() => handleTestHost(host)}
                                             />
                                         ))}
                                     </div>
@@ -603,6 +664,10 @@ export default function HostResourcePage() {
                 />
             )}
 
+            {activeTab === 'sop-management' && <SopsTab />}
+
+            {activeTab === 'whitelist' && <WhitelistTab />}
+
             {/* Create/Edit Modal */}
             {showModal && (
                 <ResourceFormModal
@@ -617,6 +682,7 @@ export default function HostResourcePage() {
                     fetchHostRelations={fetchHostRelations}
                     clusterTypes={clusterTypesHook.clusterTypes}
                     businessTypes={businessTypesHook.businessTypes}
+                    businessServices={businessServices}
                     onClose={() => { setShowModal(false); setEditingItem(null) }}
                     onSaveGroup={async (data) => {
                         if (editingItem?.type === 'group') {

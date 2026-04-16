@@ -37,9 +37,7 @@ public class SopServiceTest {
 
         sopsDir = Path.of(tempFolder.getRoot().getAbsolutePath())
                 .toAbsolutePath().normalize().resolve("gateway")
-                .resolve("agents").resolve("qos-agent")
-                .resolve("config").resolve("skills")
-                .resolve("sop-diagnosis-execution").resolve("sops");
+                .resolve("data").resolve("sops");
     }
 
     // ── listSops ─────────────────────────────────────────────────

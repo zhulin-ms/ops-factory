@@ -148,7 +148,7 @@ extensions:
     cmd: node
     args:
     - config/mcp/system-health-analysis/dist/index.js
-    envs:
+    envs: {}
     env_keys:
     - QOS_BASE_URL
     - QOS_USERNAME

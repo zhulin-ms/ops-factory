@@ -46,6 +46,7 @@ public class HostService {
     private HostRelationService hostRelationService;
     private HostGroupService hostGroupService;
     private ClusterService clusterService;
+    private BusinessServiceService businessServiceService;
 
     public HostService(GatewayProperties properties) {
         this.properties = properties;
@@ -55,6 +56,12 @@ public class HostService {
     @org.springframework.beans.factory.annotation.Autowired
     public void setHostRelationService(HostRelationService hostRelationService) {
         this.hostRelationService = hostRelationService;
+    }
+
+    @Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setBusinessServiceService(BusinessServiceService businessServiceService) {
+        this.businessServiceService = businessServiceService;
     }
 
     @Lazy
@@ -333,6 +340,11 @@ public class HostService {
         // Cascade delete relations first
         if (hostRelationService != null) {
             hostRelationService.deleteRelationsByHost(id);
+        }
+
+        // Remove host from all business services' hostIds
+        if (businessServiceService != null) {
+            businessServiceService.removeHostFromAllBusinessServices(id);
         }
 
         Path file = hostsDir.resolve(id + ".json");

@@ -139,7 +139,6 @@ python -m playwright install chromium
 │       └── skills/
 │           └── sop-diagnosis-execution/
 │               ├── SKILL.md
-│               ├── sops/            ← SOP JSON 定义文件
 │               └── references/
 └── output/                          ← 诊断报告和截图输出目录
 ```

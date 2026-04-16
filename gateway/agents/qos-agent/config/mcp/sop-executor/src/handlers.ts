@@ -561,10 +561,12 @@ export async function handleGetHostNeighbors(hostId: string): Promise<string> {
   // Trim nodes to essential fields and remove redundant 'direction' from each neighbor
   const trimNeighbors = (arr: Record<string, unknown>[]) =>
     (arr ?? []).map((n: Record<string, unknown>) => {
-      const node = n.node as Record<string, unknown> | undefined
+      const node = (n.host ?? n.node) as Record<string, unknown> | undefined
       return {
         ...(node ? { node: pick(node, HOST_NODE_KEYS) } : {}),
-        ...(n.relationType != null ? { relationType: n.relationType } : {}),
+        ...((n.relationDescription ?? n.relationType) != null
+          ? { relationDescription: n.relationDescription ?? n.relationType }
+          : {}),
       }
     })
   const upstream = trimNeighbors(data.upstream as Record<string, unknown>[] ?? [])

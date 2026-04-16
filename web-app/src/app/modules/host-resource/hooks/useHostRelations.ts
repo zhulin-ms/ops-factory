@@ -11,12 +11,14 @@ export function useHostRelations() {
     const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] })
     const [loading, setLoading] = useState(false)
 
-    const fetchRelations = useCallback(async (groupId?: string, hostId?: string) => {
+    const fetchRelations = useCallback(async (groupId?: string, hostId?: string, sourceType?: string, sourceId?: string) => {
         setLoading(true)
         try {
             const params = new URLSearchParams()
             if (hostId) params.set('hostId', hostId)
             else if (groupId) params.set('groupId', groupId)
+            if (sourceType) params.set('sourceType', sourceType)
+            if (sourceId) params.set('sourceId', sourceId)
             const qs = params.toString()
             const res = await fetch(`${apiBase()}${qs ? '?' + qs : ''}`, { headers: gatewayHeaders(userId) })
             const data = await res.json()

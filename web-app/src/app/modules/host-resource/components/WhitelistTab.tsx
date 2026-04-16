@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCommandWhitelist } from '../hooks/useCommandWhitelist'
 import { useToast } from '../../../platform/providers/ToastContext'
@@ -227,7 +227,6 @@ export function WhitelistTab() {
     const [currentPage, setCurrentPage] = useState(1)
     const [editingCommand, setEditingCommand] = useState<WhitelistCommand | null>(null)
     const [showAddModal, setShowAddModal] = useState(false)
-    const fileInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         fetchCommands()
@@ -288,52 +287,6 @@ export function WhitelistTab() {
         [deleteCommand, fetchCommands, showToast, t],
     )
 
-    const handleExport = useCallback(() => {
-        const blob = new Blob([JSON.stringify(commands, null, 2)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'command-whitelist-export.json'
-        a.click()
-        URL.revokeObjectURL(url)
-        showToast('success', t('remoteDiagnosis.whitelist.exportSuccess'))
-    }, [commands, showToast, t])
-
-    const handleImport = useCallback(
-        (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0]
-            if (!file) return
-            const reader = new FileReader()
-            reader.onload = async (event) => {
-                try {
-                    const data = JSON.parse(event.target?.result as string)
-                    const items: WhitelistCommand[] = Array.isArray(data) ? data : [data]
-                    let imported = 0
-                    let duplicates = 0
-                    for (const item of items) {
-                        try {
-                            await createCommand(item as WhitelistCommand)
-                            imported++
-                        } catch {
-                            duplicates++
-                        }
-                    }
-                    if (duplicates > 0) {
-                        showToast('error', t('remoteDiagnosis.whitelist.importDuplicate', { imported, duplicates }))
-                    } else {
-                        showToast('success', t('remoteDiagnosis.whitelist.importSuccess'))
-                    }
-                    await fetchCommands()
-                } catch (err) {
-                    showToast('error', err instanceof Error ? err.message : 'Import failed')
-                }
-            }
-            reader.readAsText(file)
-            e.target.value = ''
-        },
-        [createCommand, fetchCommands, showToast, t],
-    )
-
     return (
         <>
             <section className="knowledge-section-card sop-workflow-section-card">
@@ -347,26 +300,6 @@ export function WhitelistTab() {
                         </p>
                     </div>
                     <div className="knowledge-doc-toolbar-actions sop-workflow-toolbar-actions">
-                        <button
-                            className="btn btn-secondary"
-                            onClick={handleExport}
-                            disabled={commands.length === 0}
-                        >
-                            {t('remoteDiagnosis.whitelist.exportJson')}
-                        </button>
-                        <button
-                            className="btn btn-secondary"
-                            onClick={() => fileInputRef.current?.click()}
-                        >
-                            {t('remoteDiagnosis.whitelist.importJson')}
-                        </button>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".json"
-                            style={{ display: 'none' }}
-                            onChange={handleImport}
-                        />
                         <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
                             {t('remoteDiagnosis.whitelist.addCommand')}
                         </button>
@@ -505,17 +438,5 @@ export function WhitelistTab() {
                 />
             )}
         </>
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Whitelist Page (backward compatible wrapper)
-// ---------------------------------------------------------------------------
-
-export default function Whitelist() {
-    return (
-        <div className="page-container sidebar-top-page">
-            <WhitelistTab />
-        </div>
     )
 }

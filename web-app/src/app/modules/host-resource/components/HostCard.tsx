@@ -19,12 +19,15 @@ type Props = {
     host: Host
     cluster?: Cluster
     selected?: boolean
+    testing?: boolean
+    testResult?: { ok: boolean; msg: string } | null
     onClick: () => void
     onEdit: () => void
     onDelete: () => void
+    onTest?: () => void
 }
 
-export default function HostCard({ host, cluster, selected, onClick, onEdit, onDelete }: Props) {
+export default function HostCard({ host, cluster, selected, testing, testResult, onClick, onEdit, onDelete, onTest }: Props) {
     const { t } = useTranslation()
 
     return (
@@ -45,6 +48,11 @@ export default function HostCard({ host, cluster, selected, onClick, onEdit, onD
                 <div className="hr-host-card-meta-field">
                     <span className="hr-host-card-meta-label">{t('hostResource.ipPort')}</span>
                     <span className="hr-host-card-meta-value hr-host-card-mono">{host.ip}:{host.port}</span>
+                    {testResult && (
+                        <span className={`hr-test-badge ${testResult.ok ? 'hr-test-ok' : 'hr-test-fail'}`}>
+                            {testResult.ok ? 'OK' : 'FAIL'}
+                        </span>
+                    )}
                 </div>
                 {host.os && (
                     <div className="hr-host-card-meta-field">
@@ -79,6 +87,11 @@ export default function HostCard({ host, cluster, selected, onClick, onEdit, onD
             </div>
 
             <div className="hr-host-card-footer" onClick={e => e.stopPropagation()}>
+                {onTest && (
+                    <button className="btn btn-subtle btn-sm" onClick={onTest} disabled={testing}>
+                        {testing ? t('remoteDiagnosis.hosts.testing') : t('remoteDiagnosis.hosts.testConnection')}
+                    </button>
+                )}
                 <button className="btn btn-subtle btn-sm" onClick={onEdit}>
                     {t('common.edit')}
                 </button>

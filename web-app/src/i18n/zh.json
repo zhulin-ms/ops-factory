@@ -1543,13 +1543,15 @@
     "export": "导出",
     "import": "导入",
     "importing": "导入中... ({current}/{total})",
-    "importSuccess": "导入完成：{groups} 个环境组，{clusters} 个集群，{hosts} 台主机，{relations} 条关系",
+    "importSuccess": "导入完成：{groups} 个环境组，{clusters} 个集群，{hosts} 台主机，{relations} 条关系，{sops} 个SOP",
     "importFailed": "导入失败：{error}",
     "invalidFile": "文件格式无效",
     "noDataToExport": "暂无数据可导出",
     "tabOverview": "总览",
     "tabClusterTypes": "集群类型",
     "tabBusinessTypes": "典型业务类型",
+    "tabSopManagement": "SOP 管理",
+    "tabWhitelist": "白名单命令",
     "createClusterType": "新建集群类型",
     "createBusinessType": "新建业务类型",
     "editClusterType": "编辑集群类型",
@@ -1567,6 +1569,11 @@
     "entryResources": "入口资源",
     "entryResourcesHint": "选择该分组下的主机资源作为业务入口",
     "confirmDeleteClusterType": "确定删除此集群类型？",
-    "confirmDeleteBusinessType": "确定删除此业务类型？"
+    "confirmDeleteBusinessType": "确定删除此业务类型？",
+    "sourceType": "源类型",
+    "sourceTypeHost": "主机",
+    "sourceTypeBusinessService": "业务服务",
+    "sourceBusinessService": "源业务服务",
+    "selectBusinessService": "选择业务服务"
   }
 }

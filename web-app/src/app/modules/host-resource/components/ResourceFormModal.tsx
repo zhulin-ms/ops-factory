@@ -21,9 +21,10 @@ type Props = {
     defaultGroupId?: string
     defaultClusterId?: string
     hostRelations: HostRelation[]
-    fetchHostRelations: (groupId: string | undefined, hostId: string) => Promise<void>
+    fetchHostRelations: (groupId: string | undefined, hostId?: string, sourceType?: string, sourceId?: string) => Promise<void>
     clusterTypes: ClusterType[]
     businessTypes: BusinessType[]
+    businessServices: BusinessService[]
     onClose: () => void
     onSaveGroup: (data: Partial<HostGroup>) => Promise<void>
     onSaveCluster: (data: Partial<Cluster>) => Promise<void>
@@ -41,7 +42,7 @@ export default function ResourceFormModal({
     groups, clusters, hosts,
     defaultGroupId, defaultClusterId,
     hostRelations, fetchHostRelations,
-    clusterTypes, businessTypes,
+    clusterTypes, businessTypes, businessServices,
     onClose,
     onSaveGroup, onSaveCluster, onSaveBusinessService, onSaveHost, onSaveRelation, onUpdateRelation, onDeleteRelation,
     discoverPlan, discoverExecute,
@@ -70,7 +71,6 @@ export default function ResourceFormModal({
     const [bsName, setBsName] = useState(editingItem?.type === 'business-service' ? editingItem.data.name : '')
     const [bsCode, setBsCode] = useState(editingItem?.type === 'business-service' ? editingItem.data.code : '')
     const [bsGroupId, setBsGroupId] = useState(editingItem?.type === 'business-service' ? (editingItem.data.groupId ?? '') : (defaultGroupId ?? ''))
-    const [bsClusterIds, setBsClusterIds] = useState<string[]>(editingItem?.type === 'business-service' ? (editingItem.data.hostIds ?? []) : [])
     const [bsSelectedBusinessTypeId, setBsSelectedBusinessTypeId] = useState<string>(
         editingItem?.type === 'business-service' ? (editingItem.data.businessTypeId ?? '') : ''
     )
@@ -100,6 +100,11 @@ export default function ResourceFormModal({
     const [sourceHostId, setSourceHostId] = useState('')
     const [targetHostId, setTargetHostId] = useState('')
     const [relationDescription, setRelationDescription] = useState('')
+    const [sourceType, setSourceType] = useState<'host' | 'business-service'>('host')
+
+    // ── BS edit topology area: new relation ──
+    const [bsNewRelTargetId, setBsNewRelTargetId] = useState('')
+    const [bsNewRelDesc, setBsNewRelDesc] = useState('')
 
     // ── Host-edit relation section ──
     const [newRelTargetId, setNewRelTargetId] = useState('')
@@ -122,6 +127,15 @@ export default function ResourceFormModal({
             setNewRelTargetId('')
             setNewRelDesc('')
             setEditingRelId(null)
+        }
+    }, [editingItem, fetchHostRelations])
+
+    // Fetch relations for the business service being edited
+    useEffect(() => {
+        if (editingItem?.type === 'business-service') {
+            fetchHostRelations(undefined, undefined, 'business-service', editingItem.data.id)
+            setBsNewRelTargetId('')
+            setBsNewRelDesc('')
         }
     }, [editingItem, fetchHostRelations])
 
@@ -231,29 +245,51 @@ export default function ResourceFormModal({
     }, [discoveryResult, selectedAttributes, hostCustomAttributes])
 
     const handleAddRelation = useCallback(async () => {
-        if (!editingItem || editingItem.type !== 'host') return
-        if (!newRelTargetId) return
-        setError(null)
-        try {
-            await onSaveRelation({
-                sourceHostId: editingItem.data.id,
-                targetHostId: newRelTargetId,
-                description: newRelDesc.trim(),
-            })
-            setNewRelTargetId('')
-            setNewRelDesc('')
-            await fetchHostRelations(undefined, editingItem.data.id)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed')
+        if (!editingItem) return
+        if (editingItem.type === 'host') {
+            if (!newRelTargetId) return
+            setError(null)
+            try {
+                await onSaveRelation({
+                    sourceHostId: editingItem.data.id,
+                    targetHostId: newRelTargetId,
+                    description: newRelDesc.trim(),
+                })
+                setNewRelTargetId('')
+                setNewRelDesc('')
+                await fetchHostRelations(undefined, editingItem.data.id)
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed')
+            }
+        } else if (editingItem.type === 'business-service') {
+            if (!bsNewRelTargetId) return
+            setError(null)
+            try {
+                await onSaveRelation({
+                    sourceHostId: editingItem.data.id,
+                    targetHostId: bsNewRelTargetId,
+                    description: bsNewRelDesc.trim(),
+                    sourceType: 'business-service',
+                })
+                setBsNewRelTargetId('')
+                setBsNewRelDesc('')
+                await fetchHostRelations(undefined, undefined, 'business-service', editingItem.data.id)
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed')
+            }
         }
-    }, [editingItem, newRelTargetId, newRelDesc, onSaveRelation, fetchHostRelations])
+    }, [editingItem, newRelTargetId, newRelDesc, bsNewRelTargetId, bsNewRelDesc, onSaveRelation, fetchHostRelations])
 
     const handleDeleteRelation = useCallback(async (relId: string) => {
-        if (!editingItem || editingItem.type !== 'host') return
+        if (!editingItem) return
         setError(null)
         try {
             await onDeleteRelation(relId)
-            await fetchHostRelations(undefined, editingItem.data.id)
+            if (editingItem.type === 'host') {
+                await fetchHostRelations(undefined, editingItem.data.id)
+            } else if (editingItem.type === 'business-service') {
+                await fetchHostRelations(undefined, undefined, 'business-service', editingItem.data.id)
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed')
         }
@@ -270,6 +306,8 @@ export default function ResourceFormModal({
             setEditingRelId(null)
             if (editingItem?.type === 'host') {
                 await fetchHostRelations(undefined, editingItem.data.id)
+            } else if (editingItem?.type === 'business-service') {
+                await fetchHostRelations(undefined, undefined, 'business-service', editingItem.data.id)
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed')
@@ -313,12 +351,18 @@ export default function ResourceFormModal({
                 })
             } else if (selectedType === 'business-service') {
                 if (!bsName.trim()) { setError(t('hostResource.nameRequired')); setSaving(false); return }
+                // Derive hostIds from current BS relations when editing
+                const currentHostIds = editingItem?.type === 'business-service'
+                    ? hostRelations
+                        .filter(r => (r.sourceType || 'host') === 'business-service')
+                        .map(r => r.targetHostId)
+                    : []
                 await onSaveBusinessService({
                     name: bsName.trim(),
                     code: bsCode.trim(),
                     groupId: bsGroupId || null,
                     businessTypeId: bsSelectedBusinessTypeId || null,
-                    hostIds: bsClusterIds,
+                    hostIds: currentHostIds,
                     tags: bsTags.split(',').map(s => s.trim()).filter(Boolean),
                     priority: bsPriority.trim(),
                     description: bsDescription.trim(),
@@ -337,8 +381,8 @@ export default function ResourceFormModal({
                 await onSaveHost(payload as unknown as HostCreateRequest)
             } else if (selectedType === 'relation') {
                 if (!sourceHostId || !targetHostId) { setError(t('hostResource.selectBothHosts')); setSaving(false); return }
-                if (sourceHostId === targetHostId) { setError(t('hostResource.sameHostError')); setSaving(false); return }
-                await onSaveRelation({ sourceHostId, targetHostId, description: relationDescription.trim() })
+                if (sourceHostId === targetHostId && sourceType === 'host') { setError(t('hostResource.sameHostError')); setSaving(false); return }
+                await onSaveRelation({ sourceHostId, targetHostId, description: relationDescription.trim(), sourceType })
             }
             onClose()
         } catch (err) {
@@ -349,8 +393,9 @@ export default function ResourceFormModal({
     }, [selectedType, groupName, groupParentId, groupDescription, clusterName, clusterType, clusterPurpose,
         clusterGroupId, clusterDescription, hostName, hostname, hostIp, hostPort, hostOs, hostLocation,
         hostUsername, hostAuthType, hostCredential, hostClusterId, hostPurpose, hostBusiness,
-        hostDescription, hostCustomAttributes, sourceHostId, targetHostId, relationDescription,
-        bsName, bsCode, bsGroupId, bsSelectedBusinessTypeId, bsClusterIds, bsTags, bsPriority, bsDescription,
+        hostDescription, hostCustomAttributes, sourceHostId, targetHostId, relationDescription, sourceType,
+        bsName, bsCode, bsGroupId, bsSelectedBusinessTypeId, bsTags, bsPriority, bsDescription,
+        hostRelations,
         onSaveGroup, onSaveCluster, onSaveBusinessService, onSaveHost, onSaveRelation, onClose, t, editingItem])
 
     const canSave = () => {
@@ -562,61 +607,79 @@ export default function ResourceFormModal({
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="form-group">
-                                        <label className="form-label">{t('hostResource.entryResources')}</label>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary, #64748b)', marginBottom: 4 }}>
-                                            {t('hostResource.entryResourcesHint')}
-                                        </div>
-                                        <div style={{ maxHeight: 150, overflow: 'auto', border: '1px solid var(--border-default, #d1d5db)', borderRadius: 4, padding: 4 }}>
-                                            {hosts.filter(h => {
-                                                // Always show already-selected hosts
-                                                if (bsClusterIds.includes(h.id)) return true
-                                                if (!bsGroupId) return true
-                                                // Show hosts from clusters in the same group or sibling groups (same parent)
-                                                const hostCluster = clusters.find(c => c.id === h.clusterId)
-                                                if (!hostCluster?.groupId) return false
-                                                if (hostCluster.groupId === bsGroupId) return true
-                                                const bsGroup = groups.find(g => g.id === bsGroupId)
-                                                if (bsGroup?.parentId) {
-                                                    const hostGroup = groups.find(g => g.id === hostCluster.groupId)
-                                                    return hostGroup?.parentId === bsGroup.parentId
-                                                }
-                                                return false
-                                            }).map(h => (
-                                                <label key={h.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', cursor: 'pointer' }}>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={bsClusterIds.includes(h.id)}
-                                                        onChange={e => {
-                                                            if (e.target.checked) {
-                                                                setBsClusterIds(prev => [...prev, h.id])
-                                                            } else {
-                                                                setBsClusterIds(prev => prev.filter(id => id !== h.id))
-                                                            }
-                                                        }}
-                                                    />
-                                                    <span>{h.name} ({h.ip})</span>
-                                                </label>
-                                            ))}
-                                            {hosts.filter(h => {
-                                                if (bsClusterIds.includes(h.id)) return true
-                                                if (!bsGroupId) return true
-                                                const hostCluster = clusters.find(c => c.id === h.clusterId)
-                                                if (!hostCluster?.groupId) return false
-                                                if (hostCluster.groupId === bsGroupId) return true
-                                                const bsGroup = groups.find(g => g.id === bsGroupId)
-                                                if (bsGroup?.parentId) {
-                                                    const hostGroup = groups.find(g => g.id === hostCluster.groupId)
-                                                    return hostGroup?.parentId === bsGroup.parentId
-                                                }
-                                                return false
-                                            }).length === 0 && (
-                                                <span style={{ color: 'var(--text-secondary, #6b7280)', fontSize: 12 }}>
-                                                    {t('hostResource.noHosts')}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                                    {/* ── Topology Relations (edit mode only) ── */}
+                                    {editingItem?.type === 'business-service' && (
+                                        <>
+                                            <h4 className="hr-section-label">{t('hostResource.topology')}</h4>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                {hostRelations.filter(r => (r.sourceType || 'host') === 'business-service').length === 0 && (
+                                                    <div style={{ color: 'var(--text-secondary, #64748b)', fontSize: '0.8125rem' }}>
+                                                        {t('hostResource.noSourceRelations')}
+                                                    </div>
+                                                )}
+                                                {hostRelations.filter(r => (r.sourceType || 'host') === 'business-service').map(rel => (
+                                                    <div key={rel.id} style={{
+                                                        display: 'flex', alignItems: 'center', gap: 6,
+                                                        padding: '4px 8px', border: '1px solid var(--border-color, #e2e8f0)',
+                                                        borderRadius: 4, fontSize: '0.8125rem',
+                                                    }}>
+                                                        {editingRelId === rel.id ? (
+                                                            <>
+                                                                <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>→</span>
+                                                                <select className="form-input" style={{ flex: 1, fontSize: '0.75rem', padding: '2px 4px' }}
+                                                                    value={editRelTargetId} onChange={e => setEditRelTargetId(e.target.value)}>
+                                                                    {hosts.filter(h => h.id !== editingItem?.data?.id).map(h => (
+                                                                        <option key={h.id} value={h.id}>{h.name} ({h.ip})</option>
+                                                                    ))}
+                                                                </select>
+                                                                <input className="form-input" style={{ flex: 1, fontSize: '0.75rem', padding: '2px 4px' }}
+                                                                    value={editRelDesc} onChange={e => setEditRelDesc(e.target.value)} />
+                                                                <button className="btn btn-primary btn-sm" style={{ padding: '1px 6px' }}
+                                                                    onClick={handleSaveRelationEdit}>✓</button>
+                                                                <button className="btn btn-secondary btn-sm" style={{ padding: '1px 6px' }}
+                                                                    onClick={() => setEditingRelId(null)}>✕</button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>→</span>
+                                                                <span style={{ flex: 1 }}>{getHostName(rel.targetHostId)}</span>
+                                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{rel.description}</span>
+                                                                <button className="hr-tree-node-action" title={t('common.edit')}
+                                                                    onClick={() => { setEditingRelId(rel.id); setEditRelTargetId(rel.targetHostId); setEditRelDesc(rel.description) }}>
+                                                                    ✎
+                                                                </button>
+                                                                <button className="hr-tree-node-action hr-tree-node-action-danger" title={t('common.delete')}
+                                                                    onClick={() => handleDeleteRelation(rel.id)}>
+                                                                    ✕
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                ))}
+
+                                                {/* Add new relation */}
+                                                <div style={{
+                                                    display: 'flex', alignItems: 'center', gap: 6,
+                                                    padding: '4px 8px', background: 'var(--surface-background, #f8fafc)',
+                                                    borderRadius: 4, border: '1px dashed var(--border-color, #e2e8f0)',
+                                                }}>
+                                                    <span style={{ color: 'var(--text-secondary)', flexShrink: 0, fontSize: '0.8125rem' }}>→</span>
+                                                    <select className="form-input" style={{ flex: 1, fontSize: '0.75rem', padding: '2px 4px' }}
+                                                        value={bsNewRelTargetId} onChange={e => setBsNewRelTargetId(e.target.value)}>
+                                                        <option value="">{t('hostResource.selectHost')}</option>
+                                                        {hosts.map(h => (
+                                                            <option key={h.id} value={h.id}>{h.name} ({h.ip})</option>
+                                                        ))}
+                                                    </select>
+                                                    <input className="form-input" style={{ flex: 1, fontSize: '0.75rem', padding: '2px 4px' }}
+                                                        placeholder={t('hostResource.relationDesc')}
+                                                        value={bsNewRelDesc} onChange={e => setBsNewRelDesc(e.target.value)} />
+                                                    <button className="btn btn-primary btn-sm" style={{ padding: '1px 8px' }}
+                                                        disabled={!bsNewRelTargetId} onClick={handleAddRelation}>+</button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                     <div className="form-group">
                                         <label className="form-label">{t('hostResource.bsTags')}</label>
                                         <input className="form-input" value={bsTags} onChange={e => setBsTags(e.target.value)} placeholder="Comma-separated tags" />
@@ -957,13 +1020,33 @@ export default function ResourceFormModal({
                             {selectedType === 'relation' && (
                                 <>
                                     <div className="form-group">
-                                        <label className="form-label">{t('hostResource.sourceHost')}</label>
-                                        <select className="form-input" value={sourceHostId} onChange={e => setSourceHostId(e.target.value)}>
-                                            <option value="">{t('hostResource.selectHost')}</option>
-                                            {hosts.map(h => (
-                                                <option key={h.id} value={h.id}>{h.name} ({h.ip})</option>
-                                            ))}
+                                        <label className="form-label">{t('hostResource.sourceType')}</label>
+                                        <select className="form-input" value={sourceType} onChange={e => { setSourceType(e.target.value as 'host' | 'business-service'); setSourceHostId('') }}>
+                                            <option value="host">{t('hostResource.sourceTypeHost')}</option>
+                                            <option value="business-service">{t('hostResource.sourceTypeBusinessService')}</option>
                                         </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">
+                                            {sourceType === 'business-service'
+                                                ? t('hostResource.sourceBusinessService')
+                                                : t('hostResource.sourceHost')}
+                                        </label>
+                                        {sourceType === 'business-service' ? (
+                                            <select className="form-input" value={sourceHostId} onChange={e => setSourceHostId(e.target.value)}>
+                                                <option value="">{t('hostResource.selectBusinessService')}</option>
+                                                {businessServices.map(bs => (
+                                                    <option key={bs.id} value={bs.id}>{bs.name}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <select className="form-input" value={sourceHostId} onChange={e => setSourceHostId(e.target.value)}>
+                                                <option value="">{t('hostResource.selectHost')}</option>
+                                                {hosts.map(h => (
+                                                    <option key={h.id} value={h.id}>{h.name} ({h.ip})</option>
+                                                ))}
+                                            </select>
+                                        )}
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">{t('hostResource.targetHost')}</label>
