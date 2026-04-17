@@ -8,6 +8,7 @@ interface SessionListProps {
     sessions: SessionWithAgent[]
     isLoading?: boolean
     onResume: (session: SessionWithAgent) => void
+    onRename: (session: SessionWithAgent) => void
     onDelete: (session: SessionWithAgent) => void
     deletingSessionKeys?: Set<string>
     getSessionKey?: (session: SessionWithAgent) => string
@@ -18,6 +19,7 @@ export default function SessionList({
     sessions,
     isLoading = false,
     onResume,
+    onRename,
     onDelete,
     deletingSessionKeys,
     getSessionKey,
@@ -86,6 +88,7 @@ export default function SessionList({
                     key={`${session.agentId || 'unknown'}:${session.id}`}
                     session={session}
                     onResume={onResume}
+                    onRename={onRename}
                     onDelete={onDelete}
                     isDeleting={deletingSessionKeys?.has(getSessionKey ? getSessionKey(session) : session.id)}
                     onMarkUnread={onMarkUnread}

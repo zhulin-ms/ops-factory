@@ -14,6 +14,7 @@ import ListToolbar from '../../../platform/ui/list/ListToolbar'
 import ListWorkbench from '../../../platform/ui/list/ListWorkbench'
 import { buildChatSessionState } from '../../../platform/chat/chatRouteState'
 import { isScheduledSession } from '../../../../config/runtime'
+import RenameSessionDialog from '../components/RenameSessionDialog'
 import SessionList, { type SessionWithAgent } from '../components/SessionList'
 import '../styles/history.css'
 
@@ -40,6 +41,8 @@ export default function HistoryPage() {
     const [searchTerm, setSearchTerm] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [deletingSessionKeys, setDeletingSessionKeys] = useState<Set<string>>(new Set())
+    const [renamingSession, setRenamingSession] = useState<SessionWithAgent | null>(null)
+    const [isRenaming, setIsRenaming] = useState(false)
     const [currentPage, setCurrentPage] = useState(1)
     const [pageSize, setPageSize] = useState(20)
     const historyFilter = parseHistoryFilter(searchParams.get('type'))
@@ -84,7 +87,7 @@ export default function HistoryPage() {
                     }
                 }
 
-                allSessions.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+                allSessions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                 if (!cancelled) {
                     setSessions(allSessions)
                 }
@@ -151,6 +154,37 @@ export default function HistoryPage() {
         if (!agentId) return
         markSessionUnread(agentId, session.id)
     }
+
+    const handleRenameSession = useCallback((session: SessionWithAgent) => {
+        setRenamingSession(session)
+    }, [])
+
+    const handleRenameSave = useCallback(async (nextTitle: string) => {
+        if (!renamingSession) return
+
+        const resolvedAgentId = renamingSession.agentId || agents[0]?.id || ''
+        if (!resolvedAgentId) {
+            showToast('error', t('history.renameSessionFailed'))
+            return
+        }
+
+        setIsRenaming(true)
+        try {
+            await getClient(resolvedAgentId).updateSessionName(renamingSession.id, nextTitle)
+            setSessions((prev) => prev.map((session) => (
+                session.id === renamingSession.id && session.agentId === renamingSession.agentId
+                    ? { ...session, name: nextTitle }
+                    : session
+            )))
+            setRenamingSession(null)
+            showToast('success', t('history.renameSessionSuccess'))
+        } catch (err) {
+            console.error('Failed to rename session:', err)
+            showToast('error', t('history.renameSessionFailed'))
+        } finally {
+            setIsRenaming(false)
+        }
+    }, [agents, getClient, renamingSession, showToast, t])
 
     const handleDeleteSession = async (session: SessionWithAgent) => {
         const resolvedAgentId = session.agentId || agents[0]?.id
@@ -283,6 +317,7 @@ export default function HistoryPage() {
                         sessions={paginatedSessions}
                         isLoading={isLoading}
                         onResume={handleResumeSession}
+                        onRename={handleRenameSession}
                         onDelete={handleDeleteSession}
                         deletingSessionKeys={deletingSessionKeys}
                         getSessionKey={getSessionKey}
@@ -290,6 +325,18 @@ export default function HistoryPage() {
                     />
                 )}
             </ListWorkbench>
+
+            {renamingSession && (
+                <RenameSessionDialog
+                    initialTitle={renamingSession.name || ''}
+                    isSaving={isRenaming}
+                    onClose={() => {
+                        if (isRenaming) return
+                        setRenamingSession(null)
+                    }}
+                    onSave={handleRenameSave}
+                />
+            )}
         </div>
     )
 }

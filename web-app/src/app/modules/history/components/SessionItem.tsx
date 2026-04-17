@@ -9,14 +9,20 @@ export type SessionWithAgent = Session & { agentId?: string }
 interface SessionItemProps {
     session: SessionWithAgent
     onResume: (session: SessionWithAgent) => void
+    onRename: (session: SessionWithAgent) => void
     onDelete: (session: SessionWithAgent) => void
     isDeleting?: boolean
     onMarkUnread?: (session: SessionWithAgent) => void
 }
 
-export default function SessionItem({ session, onResume, onDelete, isDeleting = false, onMarkUnread }: SessionItemProps) {
+function truncateSessionId(sessionId: string, edgeLength = 6): string {
+    if (sessionId.length <= edgeLength * 2 + 3) return sessionId
+    return `${sessionId.slice(0, edgeLength)}...${sessionId.slice(-edgeLength)}`
+}
+
+export default function SessionItem({ session, onResume, onRename, onDelete, isDeleting = false, onMarkUnread }: SessionItemProps) {
     const { t } = useTranslation()
-    const formattedDate = new Date(session.updated_at || session.created_at).toLocaleDateString(undefined, {
+    const formattedDate = new Date(session.created_at).toLocaleDateString(undefined, {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -28,6 +34,12 @@ export default function SessionItem({ session, onResume, onDelete, isDeleting = 
         e.preventDefault()
         e.stopPropagation()
         onDelete(session)
+    }
+
+    const handleRenameClick = (e: MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onRename(session)
     }
 
     return (
@@ -53,11 +65,26 @@ export default function SessionItem({ session, onResume, onDelete, isDeleting = 
                         {session.total_tokens !== undefined && session.total_tokens !== null && (
                             <span>{session.total_tokens.toLocaleString()} {t('common.tokens')}</span>
                         )}
+                        <span className="session-meta-id" title={`${t('history.sessionIdLabel')}: ${session.id}`}>
+                            · {truncateSessionId(session.id)}
+                        </span>
                     </div>
                 </div>
             </div>
 
             <div className="session-actions">
+                <button
+                    type="button"
+                    className="session-action-btn"
+                    onClick={handleRenameClick}
+                    title={t('history.renameSession')}
+                    aria-label={t('history.renameSession')}
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                </button>
                 {onMarkUnread && sessionType === 'scheduled' && (
                     <button
                         type="button"
