@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+    extractFetchedDocuments,
+    extractSourceDocuments,
     mergeCitationMetadata,
     parseCitations,
     replaceCitationsWithPlaceholders,
@@ -128,5 +130,108 @@ describe('citationParser', () => {
     it('strips citation markers from text', () => {
         const text = '结论{{cite:1|标题|chk_1|src_1|3|证据|}}。'
         expect(stripCitations(text)).toBe('结论。')
+    })
+
+    it('extracts citation metadata from historical messages even when tool responses are sorted before tool requests', () => {
+        const messages = [
+            {
+                content: [
+                    {
+                        type: 'toolResponse',
+                        id: 'call_fetch',
+                        toolResult: {
+                            status: 'success',
+                            value: {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify({
+                                        chunkId: 'chk_001',
+                                        documentId: 'doc_001',
+                                        sourceId: 'src_001',
+                                        title: '部署方案',
+                                        text: '完整证据正文',
+                                        pageFrom: 6,
+                                        pageTo: 7,
+                                    }),
+                                }],
+                            },
+                        },
+                    },
+                    {
+                        type: 'toolResponse',
+                        id: 'call_search',
+                        toolResult: {
+                            status: 'success',
+                            value: {
+                                content: [{
+                                    type: 'text',
+                                    text: JSON.stringify({
+                                        hits: [{
+                                            chunkId: 'chk_001',
+                                            documentId: 'doc_001',
+                                            sourceId: 'src_001',
+                                            title: '部署方案',
+                                            snippet: '命中的摘要',
+                                            pageFrom: 6,
+                                            pageTo: 7,
+                                        }],
+                                    }),
+                                }],
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                content: [
+                    {
+                        type: 'toolRequest',
+                        id: 'call_search',
+                        toolCall: {
+                            value: {
+                                name: 'knowledge-service__search',
+                                arguments: { query: '部署方案' },
+                            },
+                        },
+                    },
+                    {
+                        type: 'toolRequest',
+                        id: 'call_fetch',
+                        toolCall: {
+                            value: {
+                                name: 'knowledge-service__fetch',
+                                arguments: { chunkId: 'chk_001' },
+                            },
+                        },
+                    },
+                ],
+            },
+        ]
+
+        expect(extractSourceDocuments(messages)).toEqual([
+            {
+                index: 1,
+                title: '部署方案',
+                documentId: 'doc_001',
+                chunkId: 'chk_001',
+                sourceId: 'src_001',
+                pageLabel: '6-7',
+                snippet: '完整证据正文',
+                url: null,
+            },
+        ])
+
+        expect(extractFetchedDocuments(messages)).toEqual([
+            {
+                index: 1,
+                title: '部署方案',
+                documentId: 'doc_001',
+                chunkId: 'chk_001',
+                sourceId: 'src_001',
+                pageLabel: '6-7',
+                snippet: '完整证据正文',
+                url: null,
+            },
+        ])
     })
 })

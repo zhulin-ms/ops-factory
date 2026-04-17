@@ -196,61 +196,77 @@ function unwrapToolResult(value: unknown): unknown {
     return value
 }
 
-export function extractSourceDocuments(messages: { content: MessageContentItem[] }[]): Citation[] {
+function collectToolNames(messages: { content: MessageContentItem[] }[]): Map<string, string> {
     const toolNames = new Map<string, string>()
+
+    for (const msg of messages) {
+        for (const content of msg.content) {
+            if (content.type !== 'toolRequest' || !content.id) {
+                continue
+            }
+
+            const name = content.toolCall?.value?.name || ''
+            if (name) {
+                toolNames.set(content.id, name)
+            }
+        }
+    }
+
+    return toolNames
+}
+
+export function extractSourceDocuments(messages: { content: MessageContentItem[] }[]): Citation[] {
+    const toolNames = collectToolNames(messages)
     const searchHits = new Map<string, Citation>()
     const fetchHits = new Map<string, Citation>()
 
     for (const msg of messages) {
         for (const content of msg.content) {
-            if (content.type === 'toolRequest' && content.id) {
-                const name = content.toolCall?.value?.name || ''
-                toolNames.set(content.id, name)
+            if (content.type !== 'toolResponse' || !content.id) {
+                continue
             }
 
-            if (content.type === 'toolResponse' && content.id) {
-                const name = toolNames.get(content.id) || ''
-                const value = content.toolResult?.status === 'success' ? content.toolResult.value : null
-                if (!value) continue
+            const name = toolNames.get(content.id) || ''
+            const value = content.toolResult?.status === 'success' ? content.toolResult.value : null
+            if (!value) continue
 
-                const data = unwrapToolResult(value) as Record<string, unknown>
+            const data = unwrapToolResult(value) as Record<string, unknown>
 
-                if (/search/i.test(name)) {
-                    const hits = Array.isArray(data?.hits) ? data.hits : []
-                    for (const hit of hits) {
-                        const record = hit as Record<string, unknown>
-                        const chunkId = typeof record.chunkId === 'string' ? record.chunkId : null
-                        if (!chunkId) continue
-
-                        searchHits.set(chunkId, {
-                            index: 0,
-                            title: typeof record.title === 'string' && record.title.trim() ? record.title : chunkId,
-                            documentId: typeof record.documentId === 'string' ? record.documentId : null,
-                            chunkId,
-                            sourceId: typeof record.sourceId === 'string' ? record.sourceId : null,
-                            pageLabel: buildPageLabel(record.pageFrom, record.pageTo),
-                            snippet: typeof record.snippet === 'string' ? record.snippet : null,
-                            url: null,
-                        })
-                    }
-                }
-
-                if (/fetch/i.test(name) && !/search/i.test(name)) {
-                    const chunkId = typeof data?.chunkId === 'string' ? data.chunkId : null
+            if (/search/i.test(name)) {
+                const hits = Array.isArray(data?.hits) ? data.hits : []
+                for (const hit of hits) {
+                    const record = hit as Record<string, unknown>
+                    const chunkId = typeof record.chunkId === 'string' ? record.chunkId : null
                     if (!chunkId) continue
 
-                    const text = typeof data?.text === 'string' ? data.text : ''
-                    fetchHits.set(chunkId, {
+                    searchHits.set(chunkId, {
                         index: 0,
-                        title: typeof data?.title === 'string' && data.title.trim() ? data.title : chunkId,
-                        documentId: typeof data?.documentId === 'string' ? data.documentId : null,
+                        title: typeof record.title === 'string' && record.title.trim() ? record.title : chunkId,
+                        documentId: typeof record.documentId === 'string' ? record.documentId : null,
                         chunkId,
-                        sourceId: typeof data?.sourceId === 'string' ? data.sourceId : null,
-                        pageLabel: buildPageLabel(data?.pageFrom, data?.pageTo),
-                        snippet: text ? text.slice(0, 180).trim() : null,
+                        sourceId: typeof record.sourceId === 'string' ? record.sourceId : null,
+                        pageLabel: buildPageLabel(record.pageFrom, record.pageTo),
+                        snippet: typeof record.snippet === 'string' ? record.snippet : null,
                         url: null,
                     })
                 }
+            }
+
+            if (/fetch/i.test(name) && !/search/i.test(name)) {
+                const chunkId = typeof data?.chunkId === 'string' ? data.chunkId : null
+                if (!chunkId) continue
+
+                const text = typeof data?.text === 'string' ? data.text : ''
+                fetchHits.set(chunkId, {
+                    index: 0,
+                    title: typeof data?.title === 'string' && data.title.trim() ? data.title : chunkId,
+                    documentId: typeof data?.documentId === 'string' ? data.documentId : null,
+                    chunkId,
+                    sourceId: typeof data?.sourceId === 'string' ? data.sourceId : null,
+                    pageLabel: buildPageLabel(data?.pageFrom, data?.pageTo),
+                    snippet: text ? text.slice(0, 180).trim() : null,
+                    url: null,
+                })
             }
         }
     }
@@ -275,16 +291,11 @@ export function extractSourceDocuments(messages: { content: MessageContentItem[]
 }
 
 export function extractFetchedDocuments(messages: { content: MessageContentItem[] }[]): Citation[] {
-    const toolNames = new Map<string, string>()
+    const toolNames = collectToolNames(messages)
     const fetchHits = new Map<string, Citation>()
 
     for (const msg of messages) {
         for (const content of msg.content) {
-            if (content.type === 'toolRequest' && content.id) {
-                const name = content.toolCall?.value?.name || ''
-                toolNames.set(content.id, name)
-            }
-
             if (content.type !== 'toolResponse' || !content.id) {
                 continue
             }
